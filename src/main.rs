@@ -2,11 +2,17 @@
 //!
 //! A CodeQL competitor written in Rust with custom query language (KQL)
 
+mod discovery;
+mod parallel;
+
 use anyhow::Result;
 use clap::{Parser as ClapParser, Subcommand};
 use std::path::{Path, PathBuf};
 use tracing::{info, Level};
 use tracing_subscriber;
+
+use discovery::FileDiscovery;
+use parallel::ParallelAnalyzer;
 
 use kodecd_analyzer::{CallGraphBuilder, CfgBuilder, InterproceduralTaintAnalysis, SymbolTableBuilder};
 use kodecd_parser::{Language, LanguageConfig};
@@ -222,6 +228,19 @@ fn analyze_file(
 }
 
 fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>) -> Result<i32> {
+    // Check if path is a file or directory
+    if path.is_file() {
+        // Single file analysis (original behavior)
+        scan_single_file(path, format_str, output)
+    } else if path.is_dir() {
+        // Multi-file analysis (new behavior)
+        scan_directory(path, format_str, output)
+    } else {
+        anyhow::bail!("Path is neither a file nor directory: {}", path.display());
+    }
+}
+
+fn scan_single_file(path: &PathBuf, format_str: &str, output: Option<&Path>) -> Result<i32> {
     let lang = Language::from_path(path)?;
     let config = LanguageConfig::new(lang);
     let parser = kodecd_parser::Parser::new(config, path);
@@ -277,6 +296,68 @@ fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>) ->
     if let Some(output_path) = output {
         let mut file = std::fs::File::create(output_path)?;
         Reporter::write_report(&report, format, &mut file)?;
+    } else {
+        let mut stdout = std::io::stdout();
+        Reporter::write_report(&report, format, &mut stdout)?;
+    }
+
+    // Return exit code: 0 if no findings, 1 if findings found
+    if has_findings {
+        Ok(1)
+    } else {
+        Ok(0)
+    }
+}
+
+fn scan_directory(path: &PathBuf, format_str: &str, output: Option<&Path>) -> Result<i32> {
+    info!("Starting multi-file analysis on directory: {}", path.display());
+
+    // Discover all source files
+    let discovery = FileDiscovery::with_default_config();
+    let source_files = discovery.discover(path)?;
+
+    if source_files.is_empty() {
+        info!("No source files found in directory");
+        return Ok(0);
+    }
+
+    info!("Found {} source files to analyze", source_files.len());
+
+    // Prepare queries with categorization
+    let queries: Vec<(String, kodecd_query::Query)> = StandardLibrary::owasp_queries()
+        .into_iter()
+        .map(|(name, query)| (name.to_string(), query))
+        .collect();
+
+    // Run parallel analysis
+    let analyzer = ParallelAnalyzer::new(true); // Enable progress bar
+    let results = analyzer.analyze_files(source_files, &queries)?;
+
+    // Get statistics
+    let stats = ParallelAnalyzer::get_statistics(&results);
+    info!(
+        "Analysis complete: {}/{} files successful, {} total findings",
+        stats.successful_files, stats.total_files, stats.total_findings
+    );
+
+    // Aggregate all findings
+    let mut all_findings = ParallelAnalyzer::aggregate_findings(&results);
+
+    // Apply categorization and severity
+    for finding in &mut all_findings {
+        finding.category = categorize_rule(&finding.rule_id);
+        finding.severity = determine_severity(&finding.rule_id);
+    }
+
+    // Generate report
+    let has_findings = !all_findings.is_empty();
+    let report = Report::new(all_findings);
+    let format = parse_format(format_str);
+
+    if let Some(output_path) = output {
+        let mut file = std::fs::File::create(output_path)?;
+        Reporter::write_report(&report, format, &mut file)?;
+        info!("Report written to: {}", output_path.display());
     } else {
         let mut stdout = std::io::stdout();
         Reporter::write_report(&report, format, &mut stdout)?;

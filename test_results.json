@@ -1,0 +1,172 @@
+{
+  "findings": [
+    {
+      "file_path": "test_project/lib/utils.ts",
+      "line": 5,
+      "column": 5,
+      "message": "Potential XSS vulnerability - dangerous HTML manipulation",
+      "severity": "High",
+      "code_snippet": "document.getElementById('output').innerHTML",
+      "category": "injection",
+      "rule_id": "xss"
+    },
+    {
+      "file_path": "test_project/lib/utils.ts",
+      "line": 10,
+      "column": 16,
+      "message": "Potential path traversal - file operation may access arbitrary files",
+      "severity": "High",
+      "code_snippet": "require('fs')",
+      "category": "path-traversal",
+      "rule_id": "path-traversal"
+    },
+    {
+      "file_path": "test_project/lib/utils.ts",
+      "line": 11,
+      "column": 12,
+      "message": "Potential path traversal - file operation may access arbitrary files",
+      "severity": "High",
+      "code_snippet": "fs.readFile(`./uploads/${userPath}`, 'utf8')",
+      "category": "path-traversal",
+      "rule_id": "path-traversal"
+    },
+    {
+      "file_path": "test_project/lib/utils.ts",
+      "line": 16,
+      "column": 5,
+      "message": "Unvalidated redirect - user-controlled redirect can lead to phishing",
+      "severity": "High",
+      "code_snippet": "response.redirect(targetUrl)",
+      "category": "injection",
+      "rule_id": "unsafe-redirect"
+    },
+    {
+      "file_path": "test_project/src/api.ts",
+      "line": 5,
+      "column": 12,
+      "message": "Potential SSRF - HTTP request with user-controlled URL can access internal resources",
+      "severity": "High",
+      "code_snippet": "fetch(url).then(res => res.json())",
+      "category": "ssrf",
+      "rule_id": "ssrf"
+    },
+    {
+      "file_path": "test_project/src/api.ts",
+      "line": 5,
+      "column": 12,
+      "message": "Potential SSRF - HTTP request with user-controlled URL can access internal resources",
+      "severity": "High",
+      "code_snippet": "fetch(url)",
+      "category": "ssrf",
+      "rule_id": "ssrf"
+    },
+    {
+      "file_path": "test_project/src/api.ts",
+      "line": 10,
+      "column": 22,
+      "message": "Potential path traversal - file operation may access arbitrary files",
+      "severity": "High",
+      "code_snippet": "require('child_process')",
+      "category": "path-traversal",
+      "rule_id": "path-traversal"
+    },
+    {
+      "file_path": "test_project/src/api.ts",
+      "line": 11,
+      "column": 5,
+      "message": "Potential command injection vulnerability",
+      "severity": "Critical",
+      "code_snippet": "exec(`cat ${filename}`, (error, stdout) => {",
+      "category": "injection",
+      "rule_id": "command-injection"
+    },
+    {
+      "file_path": "test_project/src/api.ts",
+      "line": 18,
+      "column": 17,
+      "message": "Potential path traversal - file operation may access arbitrary files",
+      "severity": "High",
+      "code_snippet": "require('ejs')",
+      "category": "path-traversal",
+      "rule_id": "path-traversal"
+    },
+    {
+      "file_path": "test_project/src/api.ts",
+      "line": 19,
+      "column": 12,
+      "message": "Potential template injection - user input in templates can lead to RCE",
+      "severity": "High",
+      "code_snippet": "ejs.render(userTemplate, { data: 'value' })",
+      "category": "injection",
+      "rule_id": "server-side-template-injection"
+    },
+    {
+      "file_path": "test_project/src/auth.ts",
+      "line": 3,
+      "column": 7,
+      "message": "Potential hardcoded secret - sensitive data should not be in source code",
+      "severity": "Medium",
+      "code_snippet": "API_KEY = \"sk-prod-12345-secret-key\"",
+      "category": "secrets",
+      "rule_id": "hardcoded-secrets"
+    },
+    {
+      "file_path": "test_project/src/auth.ts",
+      "line": 4,
+      "column": 7,
+      "message": "Potential hardcoded secret - sensitive data should not be in source code",
+      "severity": "Medium",
+      "code_snippet": "DB_PASSWORD = \"admin123\"",
+      "category": "secrets",
+      "rule_id": "hardcoded-secrets"
+    },
+    {
+      "file_path": "test_project/src/auth.ts",
+      "line": 12,
+      "column": 20,
+      "message": "Potential path traversal - file operation may access arbitrary files",
+      "severity": "High",
+      "code_snippet": "require('crypto')",
+      "category": "path-traversal",
+      "rule_id": "path-traversal"
+    },
+    {
+      "file_path": "test_project/src/auth.ts",
+      "line": 13,
+      "column": 12,
+      "message": "Weak cryptography - using deprecated or weak cryptographic algorithms",
+      "severity": "Medium",
+      "code_snippet": "crypto.createHash('md5').update(password).digest('hex')",
+      "category": "cryptography",
+      "rule_id": "weak-crypto"
+    },
+    {
+      "file_path": "test_project/src/auth.ts",
+      "line": 13,
+      "column": 12,
+      "message": "Weak cryptography - using deprecated or weak cryptographic algorithms",
+      "severity": "Medium",
+      "code_snippet": "crypto.createHash('md5').update(password)",
+      "category": "cryptography",
+      "rule_id": "weak-crypto"
+    },
+    {
+      "file_path": "test_project/src/auth.ts",
+      "line": 13,
+      "column": 12,
+      "message": "Weak cryptography - using deprecated or weak cryptographic algorithms",
+      "severity": "Medium",
+      "code_snippet": "crypto.createHash('md5')",
+      "category": "cryptography",
+      "rule_id": "weak-crypto"
+    }
+  ],
+  "summary": {
+    "total_files": 0,
+    "total_findings": 16,
+    "critical": 1,
+    "high": 10,
+    "medium": 5,
+    "low": 0
+  }
+}
