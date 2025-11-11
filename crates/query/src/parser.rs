@@ -111,6 +111,7 @@ fn entity_type(input: &str) -> IResult<&str, EntityType> {
         value(EntityType::Literal, tag_no_case("Literal")),
         value(EntityType::BinaryExpression, tag_no_case("BinaryExpression")),
         value(EntityType::CallExpression, tag_no_case("CallExpression")),
+        value(EntityType::MemberExpression, tag_no_case("MemberExpression")),
         value(EntityType::AnyNode, tag_no_case("AnyNode")),
     ))(input)
 }
