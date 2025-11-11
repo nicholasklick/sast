@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use tracing::{info, Level};
 use tracing_subscriber;
 
-use kodecd_analyzer::{CallGraphBuilder, CfgBuilder, SymbolTableBuilder, TaintAnalysis};
+use kodecd_analyzer::{CallGraphBuilder, CfgBuilder, InterproceduralTaintAnalysis, SymbolTableBuilder};
 use kodecd_parser::{Language, LanguageConfig};
 use kodecd_query::{QueryExecutor, QueryParser, StandardLibrary};
 use kodecd_reporter::{Report, ReportFormat, Reporter};
@@ -173,12 +173,14 @@ fn analyze_file(
 
     info!("Built CFG with {} nodes", cfg.graph.node_count());
 
-    // Run taint analysis
-    let taint_analysis = TaintAnalysis::new()
+    // Run interprocedural taint analysis
+    let mut interprocedural_analysis = InterproceduralTaintAnalysis::new()
         .with_default_sources()
         .with_default_sinks()
         .with_default_sanitizers();
-    let taint_results = taint_analysis.analyze(&cfg);
+    let taint_results = interprocedural_analysis.analyze(&ast, &call_graph);
+
+    info!("Interprocedural analysis found {} vulnerabilities", taint_results.vulnerabilities.len());
 
     // Parse or use default query
     let query = if let Some(query_path) = query_file {
@@ -233,12 +235,14 @@ fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>) ->
     let cfg_builder = CfgBuilder::new();
     let cfg = cfg_builder.build(&ast);
 
-    // Run taint analysis (optional, can be None for queries that don't need it)
-    let taint_analysis = TaintAnalysis::new()
+    // Run interprocedural taint analysis
+    let mut interprocedural_analysis = InterproceduralTaintAnalysis::new()
         .with_default_sources()
         .with_default_sinks()
         .with_default_sanitizers();
-    let taint_results = taint_analysis.analyze(&cfg);
+    let taint_results = interprocedural_analysis.analyze(&ast, &call_graph);
+
+    info!("Interprocedural analysis found {} vulnerabilities", taint_results.vulnerabilities.len());
 
     // Run all built-in queries
     let mut all_findings = Vec::new();
