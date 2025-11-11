@@ -1,6 +1,6 @@
 //! Taint analysis for tracking data flow from sources to sinks
 
-use crate::cfg::{CfgGraphIndex, ControlFlowGraph};
+use crate::cfg::{CfgGraphIndex, CfgNode, CfgNodeKind, ControlFlowGraph};
 use crate::dataflow::{DataFlowAnalysis, DataFlowDirection, DataFlowResult, TransferFunction};
 use kodecd_parser::ast::NodeId;
 use serde::{Deserialize, Serialize};
@@ -97,12 +97,17 @@ impl TaintAnalysis {
     pub fn analyze(&self, cfg: &ControlFlowGraph) -> TaintAnalysisResult {
         // Clone the data to avoid lifetime issues
         let sources = self.sources.clone();
-        let sinks = self.sinks.clone();
         let sanitizers = self.sanitizers.clone();
+
+        // We need to clone the CFG for the transfer function
+        // This is not ideal, but necessary given the current architecture
+        // In production, we'd refactor to use references with proper lifetimes
+        let cfg_for_transfer = clone_cfg(cfg);
 
         let transfer = OwnedTaintTransferFunction {
             sources,
             sanitizers,
+            cfg: cfg_for_transfer,
         };
 
         let analysis = DataFlowAnalysis::new(
@@ -238,17 +243,204 @@ impl Default for TaintAnalysis {
 struct OwnedTaintTransferFunction {
     sources: Vec<TaintSource>,
     sanitizers: HashSet<String>,
+    cfg: ControlFlowGraph,
+}
+
+impl OwnedTaintTransferFunction {
+    /// Check if a name matches any taint source (case-insensitive)
+    fn is_source(&self, name: &str) -> Option<TaintSourceKind> {
+        let name_lower = name.to_lowercase();
+        for source in &self.sources {
+            let source_lower = source.name.to_lowercase();
+            // Check if the name contains the source name (case-insensitive)
+            if name_lower.contains(&source_lower) {
+                return Some(source.kind.clone());
+            }
+        }
+        None
+    }
+
+    /// Check if a name is a sanitizer function (case-insensitive)
+    fn is_sanitizer(&self, name: &str) -> bool {
+        let name_lower = name.to_lowercase();
+        self.sanitizers.iter().any(|san| name_lower.contains(&san.to_lowercase()))
+    }
+
+    /// Extract variable name from an assignment or call
+    fn extract_assigned_variable(&self, node: &CfgNode) -> Option<String> {
+        // Parse the label to extract the assigned variable
+        // For assignments like "x = ...", we want to extract "x"
+        let label = &node.label;
+
+        if label.contains('=') && !label.contains("==") {
+            // Assignment: "var = expr" or "AssignmentExpression"
+            if let Some(var_part) = label.split('=').next() {
+                let var_name = var_part.trim().to_string();
+                if !var_name.is_empty() && var_name != "AssignmentExpression" {
+                    return Some(var_name);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Extract the callee name from a function call
+    fn extract_callee(&self, node: &CfgNode) -> Option<String> {
+        if node.kind == CfgNodeKind::FunctionCall {
+            // Label format: "call: functionName"
+            if let Some(name) = node.label.strip_prefix("call: ") {
+                return Some(name.to_string());
+            }
+        }
+        None
+    }
+
+    /// Extract variables referenced in an expression
+    fn extract_referenced_variables(&self, node: &CfgNode) -> Vec<String> {
+        let mut vars = Vec::new();
+        let label = &node.label;
+
+        // Simple heuristic: extract words that look like identifiers
+        // In a full implementation, we'd parse the AST properly
+        for word in label.split(|c: char| !c.is_alphanumeric() && c != '_') {
+            if !word.is_empty()
+                && !word.chars().next().unwrap().is_numeric()
+                && word != "call"
+                && word != "return"
+                && word != "if"
+                && word != "while"
+                && word != "for"
+            {
+                vars.push(word.to_string());
+            }
+        }
+
+        vars
+    }
 }
 
 impl TransferFunction<TaintValue> for OwnedTaintTransferFunction {
-    fn transfer(&self, _node: CfgGraphIndex, input: &HashSet<TaintValue>) -> HashSet<TaintValue> {
+    fn transfer(&self, node_idx: CfgGraphIndex, input: &HashSet<TaintValue>) -> HashSet<TaintValue> {
         let mut output = input.clone();
 
-        // For now, just pass through the taint values
-        // In a full implementation, we would check the CFG node
-        // and add new taints or sanitize existing ones
+        // Get the CFG node
+        let node = match self.cfg.get_node(node_idx) {
+            Some(n) => n,
+            None => return output,
+        };
 
-        output
+        match node.kind {
+            CfgNodeKind::Entry | CfgNodeKind::Exit => {
+                // No changes for entry/exit
+                output
+            }
+
+            CfgNodeKind::FunctionCall => {
+                // Check if this is a taint source
+                if let Some(callee) = self.extract_callee(node) {
+                    if let Some(source_kind) = self.is_source(&callee) {
+                        // Generate new taint for the result of this call
+                        // The result is typically assigned to a variable
+                        // For now, we use the callee name as the variable name
+                        output.insert(TaintValue::new(callee.clone(), source_kind));
+                    } else if self.is_sanitizer(&callee) {
+                        // Sanitizer function: remove taint from all variables passed as arguments
+                        let referenced_vars = self.extract_referenced_variables(node);
+
+                        // Mark tainted values as sanitized instead of removing them
+                        let mut sanitized_output = HashSet::new();
+                        for mut taint in output.drain() {
+                            if referenced_vars.contains(&taint.variable) {
+                                taint.sanitize();
+                            }
+                            sanitized_output.insert(taint);
+                        }
+                        return sanitized_output;
+                    }
+                }
+                output
+            }
+
+            CfgNodeKind::Statement | CfgNodeKind::Expression => {
+                let label = &node.label;
+
+                // Check for assignment: x = y
+                if let Some(lhs) = self.extract_assigned_variable(node) {
+                    let referenced_vars = self.extract_referenced_variables(node);
+
+                    // Check if RHS contains any taint sources
+                    let mut has_source_on_rhs = false;
+                    let mut source_kind = None;
+
+                    for var in &referenced_vars {
+                        if let Some(kind) = self.is_source(var) {
+                            has_source_on_rhs = true;
+                            source_kind = Some(kind);
+                            break;
+                        }
+                    }
+
+                    if has_source_on_rhs {
+                        // Generate new taint
+                        if let Some(kind) = source_kind {
+                            output.insert(TaintValue::new(lhs.clone(), kind));
+                        }
+                    } else {
+                        // Propagate taint from RHS to LHS
+                        let mut propagated_taint = false;
+
+                        for taint in input {
+                            if referenced_vars.contains(&taint.variable) {
+                                // Create new taint for LHS variable
+                                output.insert(TaintValue {
+                                    variable: lhs.clone(),
+                                    source: taint.source.clone(),
+                                    sanitized: taint.sanitized,
+                                });
+                                propagated_taint = true;
+                            }
+                        }
+
+                        // Kill old taint for the LHS variable (it's being reassigned)
+                        if !propagated_taint {
+                            output.retain(|t| t.variable != lhs);
+                        }
+                    }
+                }
+                // For VariableDeclaration, check if it's initialized with a source
+                else if label.contains("VariableDeclaration") {
+                    let vars = self.extract_referenced_variables(node);
+                    for var in &vars {
+                        if let Some(kind) = self.is_source(var) {
+                            // Generate taint for the declared variable
+                            // Assume the first identifier is the variable being declared
+                            if let Some(declared_var) = vars.first() {
+                                output.insert(TaintValue::new(declared_var.clone(), kind));
+                            }
+                        }
+                    }
+                }
+
+                output
+            }
+
+            CfgNodeKind::Branch => {
+                // For branches, just propagate taint through
+                output
+            }
+
+            CfgNodeKind::Loop => {
+                // For loops, propagate taint through
+                // In a more sophisticated analysis, we'd handle fixpoint iteration
+                output
+            }
+
+            CfgNodeKind::Return => {
+                // Return statements propagate taint
+                output
+            }
+        }
     }
 
     fn initial_state(&self) -> HashSet<TaintValue> {
@@ -285,5 +477,293 @@ impl Severity {
             Severity::Medium => "Medium",
             Severity::Low => "Low",
         }
+    }
+}
+
+/// Helper function to clone a CFG
+/// This is a workaround for lifetime issues with the transfer function
+fn clone_cfg(cfg: &ControlFlowGraph) -> ControlFlowGraph {
+    use petgraph::graph::DiGraph;
+    use petgraph::visit::EdgeRef;
+
+    let mut new_cfg = ControlFlowGraph {
+        graph: DiGraph::new(),
+        entry: cfg.entry,
+        exit: cfg.exit,
+        node_map: cfg.node_map.clone(),
+    };
+
+    // Clone nodes
+    let mut node_mapping = std::collections::HashMap::new();
+    for node_idx in cfg.graph.node_indices() {
+        if let Some(node) = cfg.graph.node_weight(node_idx) {
+            let new_idx = new_cfg.graph.add_node(node.clone());
+            node_mapping.insert(node_idx, new_idx);
+        }
+    }
+
+    // Update entry and exit indices
+    new_cfg.entry = *node_mapping.get(&cfg.entry).unwrap();
+    new_cfg.exit = *node_mapping.get(&cfg.exit).unwrap();
+
+    // Clone edges
+    for edge in cfg.graph.edge_references() {
+        let source = *node_mapping.get(&edge.source()).unwrap();
+        let target = *node_mapping.get(&edge.target()).unwrap();
+        new_cfg.graph.add_edge(source, target, edge.weight().clone());
+    }
+
+    new_cfg
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cfg::{CfgEdge, CfgEdgeKind, CfgNode, CfgNodeKind};
+
+    #[test]
+    fn test_taint_source_detection() {
+        let mut taint = TaintAnalysis::new();
+        taint.add_source(TaintSource {
+            name: "input".to_string(),
+            kind: TaintSourceKind::UserInput,
+            node_id: 1,
+        });
+
+        let sources = vec![TaintSource {
+            name: "input".to_string(),
+            kind: TaintSourceKind::UserInput,
+            node_id: 1,
+        }];
+
+        let transfer = OwnedTaintTransferFunction {
+            sources,
+            sanitizers: HashSet::new(),
+            cfg: ControlFlowGraph::new(),
+        };
+
+        // Exact match
+        assert!(transfer.is_source("input").is_some());
+        // Contains match (name contains source)
+        assert!(transfer.is_source("getUserInput").is_some());
+        // No match
+        assert!(transfer.is_source("safeFunction").is_none());
+    }
+
+    #[test]
+    fn test_sanitizer_detection() {
+        let sanitizers = vec!["escape", "sanitize"]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        let transfer = OwnedTaintTransferFunction {
+            sources: Vec::new(),
+            sanitizers,
+            cfg: ControlFlowGraph::new(),
+        };
+
+        assert!(transfer.is_sanitizer("escape"));
+        assert!(transfer.is_sanitizer("escapeHtml"));
+        assert!(transfer.is_sanitizer("sanitize"));
+        assert!(!transfer.is_sanitizer("execute"));
+    }
+
+    #[test]
+    fn test_taint_propagation_through_assignment() {
+        let mut cfg = ControlFlowGraph::new();
+
+        // Create a simple CFG: x = userInput
+        let assign_node = CfgNode {
+            id: 2,
+            ast_node_id: 2,
+            kind: CfgNodeKind::Statement,
+            label: "x = userInput".to_string(),
+        };
+        let assign_idx = cfg.add_node(assign_node);
+
+        cfg.add_edge(
+            cfg.entry,
+            assign_idx,
+            CfgEdge {
+                label: None,
+                kind: CfgEdgeKind::Normal,
+            },
+        );
+
+        cfg.add_edge(
+            assign_idx,
+            cfg.exit,
+            CfgEdge {
+                label: None,
+                kind: CfgEdgeKind::Normal,
+            },
+        );
+
+        let sources = vec![TaintSource {
+            name: "userInput".to_string(),
+            kind: TaintSourceKind::UserInput,
+            node_id: 2,
+        }];
+
+        let transfer = OwnedTaintTransferFunction {
+            sources,
+            sanitizers: HashSet::new(),
+            cfg: clone_cfg(&cfg),
+        };
+
+        // Test: empty input should generate taint for x
+        let input = HashSet::new();
+        let output = transfer.transfer(assign_idx, &input);
+
+        // Should have taint for 'x'
+        assert!(output.iter().any(|t| t.variable == "x"));
+    }
+
+    #[test]
+    fn test_taint_killing_through_sanitizer() {
+        let mut cfg = ControlFlowGraph::new();
+
+        // Create CFG: result = escape(taintedVar)
+        // The label should include the variable being sanitized
+        let call_node = CfgNode {
+            id: 2,
+            ast_node_id: 2,
+            kind: CfgNodeKind::FunctionCall,
+            label: "call: escape(taintedVar)".to_string(),
+        };
+        let call_idx = cfg.add_node(call_node);
+
+        cfg.add_edge(
+            cfg.entry,
+            call_idx,
+            CfgEdge {
+                label: None,
+                kind: CfgEdgeKind::Normal,
+            },
+        );
+
+        let mut sanitizers = HashSet::new();
+        sanitizers.insert("escape".to_string());
+
+        let transfer = OwnedTaintTransferFunction {
+            sources: Vec::new(),
+            sanitizers,
+            cfg: clone_cfg(&cfg),
+        };
+
+        // Input: taintedVar is tainted
+        let mut input = HashSet::new();
+        input.insert(TaintValue::new(
+            "taintedVar".to_string(),
+            TaintSourceKind::UserInput,
+        ));
+
+        let output = transfer.transfer(call_idx, &input);
+
+        // The taintedVar should now be marked as sanitized
+        let tainted_var = output.iter().find(|t| t.variable == "taintedVar");
+        assert!(tainted_var.is_some());
+        assert!(tainted_var.unwrap().sanitized);
+    }
+
+    #[test]
+    fn test_severity_calculation() {
+        let taint = TaintAnalysis::new();
+
+        // Critical: SQL injection from user input
+        assert_eq!(
+            taint.calculate_severity(&TaintSinkKind::SqlQuery, &TaintSourceKind::UserInput),
+            Severity::Critical
+        );
+
+        // Critical: Command injection from user input
+        assert_eq!(
+            taint.calculate_severity(
+                &TaintSinkKind::CommandExecution,
+                &TaintSourceKind::UserInput
+            ),
+            Severity::Critical
+        );
+
+        // High: Code eval
+        assert_eq!(
+            taint.calculate_severity(&TaintSinkKind::CodeEval, &TaintSourceKind::UserInput),
+            Severity::High
+        );
+
+        // Low: Log output
+        assert_eq!(
+            taint.calculate_severity(&TaintSinkKind::LogOutput, &TaintSourceKind::UserInput),
+            Severity::Low
+        );
+    }
+
+    #[test]
+    fn test_default_sources_and_sinks() {
+        let taint = TaintAnalysis::new()
+            .with_default_sources()
+            .with_default_sinks()
+            .with_default_sanitizers();
+
+        assert!(!taint.sources.is_empty());
+        assert!(!taint.sinks.is_empty());
+        assert!(!taint.sanitizers.is_empty());
+    }
+
+    #[test]
+    fn test_extract_assigned_variable() {
+        let transfer = OwnedTaintTransferFunction {
+            sources: Vec::new(),
+            sanitizers: HashSet::new(),
+            cfg: ControlFlowGraph::new(),
+        };
+
+        let node1 = CfgNode {
+            id: 1,
+            ast_node_id: 1,
+            kind: CfgNodeKind::Statement,
+            label: "x = 5".to_string(),
+        };
+        assert_eq!(transfer.extract_assigned_variable(&node1), Some("x".to_string()));
+
+        let node2 = CfgNode {
+            id: 2,
+            ast_node_id: 2,
+            kind: CfgNodeKind::Statement,
+            label: "result = userInput()".to_string(),
+        };
+        assert_eq!(
+            transfer.extract_assigned_variable(&node2),
+            Some("result".to_string())
+        );
+
+        let node3 = CfgNode {
+            id: 3,
+            ast_node_id: 3,
+            kind: CfgNodeKind::Statement,
+            label: "x == 5".to_string(),
+        };
+        assert_eq!(transfer.extract_assigned_variable(&node3), None);
+    }
+
+    #[test]
+    fn test_extract_callee() {
+        let transfer = OwnedTaintTransferFunction {
+            sources: Vec::new(),
+            sanitizers: HashSet::new(),
+            cfg: ControlFlowGraph::new(),
+        };
+
+        let node = CfgNode {
+            id: 1,
+            ast_node_id: 1,
+            kind: CfgNodeKind::FunctionCall,
+            label: "call: getUserInput".to_string(),
+        };
+        assert_eq!(
+            transfer.extract_callee(&node),
+            Some("getUserInput".to_string())
+        );
     }
 }
