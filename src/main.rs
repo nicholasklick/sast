@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use tracing::{info, Level};
 use tracing_subscriber;
 
-use kodecd_analyzer::{CfgBuilder, TaintAnalysis};
+use kodecd_analyzer::{CfgBuilder, SymbolTableBuilder, TaintAnalysis};
 use kodecd_parser::{Language, LanguageConfig};
 use kodecd_query::{QueryExecutor, QueryParser, StandardLibrary};
 use kodecd_reporter::{Report, ReportFormat, Reporter};
@@ -154,6 +154,12 @@ fn analyze_file(
 
     info!("Parsed AST with {} nodes", ast.children.len());
 
+    // Build symbol table
+    let symbol_table_builder = SymbolTableBuilder::new();
+    let symbol_table = symbol_table_builder.build(&ast);
+
+    info!("Built symbol table with {} scopes", symbol_table.scope_count());
+
     // Build control flow graph
     let cfg_builder = CfgBuilder::new();
     let cfg = cfg_builder.build(&ast);
@@ -203,6 +209,12 @@ fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>) ->
     let config = LanguageConfig::new(lang);
     let parser = kodecd_parser::Parser::new(config, path);
     let ast = parser.parse_file()?;
+
+    // Build symbol table
+    let symbol_table_builder = SymbolTableBuilder::new();
+    let symbol_table = symbol_table_builder.build(&ast);
+
+    info!("Built symbol table with {} scopes", symbol_table.scope_count());
 
     let cfg_builder = CfgBuilder::new();
     let cfg = cfg_builder.build(&ast);
