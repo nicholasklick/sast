@@ -21,6 +21,8 @@ pub struct Finding {
     pub message: String,
     pub severity: String,
     pub code_snippet: String,
+    pub category: String,  // e.g., "injection", "crypto", "secrets"
+    pub rule_id: String,   // e.g., "sql-injection", "weak-crypto"
 }
 
 /// Evaluation context for a query
@@ -128,6 +130,8 @@ impl QueryExecutor {
                     message,
                     severity: "Medium".to_string(),
                     code_snippet: node.text.lines().next().unwrap_or("").to_string(),
+                    category: "security".to_string(),
+                    rule_id: "unknown".to_string(),
                 });
             }
         }

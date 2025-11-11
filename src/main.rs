@@ -90,7 +90,7 @@ fn main() -> Result<()> {
 
     tracing_subscriber::fmt().with_max_level(level).init();
 
-    match cli.command {
+    let exit_code = match cli.command {
         Commands::Analyze {
             path,
             format,
@@ -99,25 +99,27 @@ fn main() -> Result<()> {
             query,
         } => {
             info!("Analyzing: {}", path.display());
-            analyze_file(&path, &format, output.as_deref(), language, query)?;
+            analyze_file(&path, &format, output.as_deref(), language, query)?
         }
 
         Commands::Scan { path, format, output } => {
             info!("Scanning with built-in queries: {}", path.display());
-            scan_with_builtin(&path, &format, output.as_deref())?;
+            scan_with_builtin(&path, &format, output.as_deref())?
         }
 
         Commands::ListQueries => {
             list_queries();
+            0
         }
 
         Commands::ValidateQuery { query } => {
             info!("Validating query: {}", query.display());
             validate_query(&query)?;
+            0
         }
-    }
+    };
 
-    Ok(())
+    std::process::exit(exit_code);
 }
 
 fn analyze_file(
@@ -126,7 +128,7 @@ fn analyze_file(
     output: Option<&Path>,
     language: Option<String>,
     query_file: Option<PathBuf>,
-) -> Result<()> {
+) -> Result<i32> {
     // Detect or use specified language
     let lang = if let Some(lang_str) = language {
         match lang_str.to_lowercase().as_str() {
@@ -197,6 +199,7 @@ fn analyze_file(
     info!("Found {} potential issues", result.findings.len());
 
     // Generate report
+    let has_findings = !result.findings.is_empty();
     let report = Report::new(result.findings);
     let format = parse_format(format_str);
 
@@ -210,10 +213,15 @@ fn analyze_file(
         Reporter::write_report(&report, format, &mut stdout)?;
     }
 
-    Ok(())
+    // Return exit code: 0 if no findings, 1 if findings found
+    if has_findings {
+        Ok(1)
+    } else {
+        Ok(0)
+    }
 }
 
-fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>) -> Result<()> {
+fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>) -> Result<i32> {
     let lang = Language::from_path(path)?;
     let config = LanguageConfig::new(lang);
     let parser = kodecd_parser::Parser::new(config, path);
@@ -250,11 +258,19 @@ fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>) ->
     for (name, query) in StandardLibrary::owasp_queries() {
         info!("Running query: {}", name);
         let result = QueryExecutor::execute(&query, &ast, &cfg, Some(&taint_results));
-        all_findings.extend(result.findings);
+
+        // Update findings with proper rule_id and category
+        for mut finding in result.findings {
+            finding.rule_id = name.to_string();
+            finding.category = categorize_rule(name);
+            finding.severity = determine_severity(name);
+            all_findings.push(finding);
+        }
     }
 
     info!("Total findings: {}", all_findings.len());
 
+    let has_findings = !all_findings.is_empty();
     let report = Report::new(all_findings);
     let format = parse_format(format_str);
 
@@ -266,7 +282,12 @@ fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>) ->
         Reporter::write_report(&report, format, &mut stdout)?;
     }
 
-    Ok(())
+    // Return exit code: 0 if no findings, 1 if findings found
+    if has_findings {
+        Ok(1)
+    } else {
+        Ok(0)
+    }
 }
 
 fn list_queries() {
@@ -298,5 +319,29 @@ fn parse_format(format_str: &str) -> ReportFormat {
         "json" => ReportFormat::Json,
         "text" => ReportFormat::Text,
         _ => ReportFormat::Text,
+    }
+}
+
+fn categorize_rule(rule_id: &str) -> String {
+    match rule_id {
+        "sql-injection" | "command-injection" | "ldap-injection" => "injection".to_string(),
+        "xss" | "unsafe-redirect" | "server-side-template-injection" => "injection".to_string(),
+        "path-traversal" => "path-traversal".to_string(),
+        "hardcoded-secrets" => "secrets".to_string(),
+        "insecure-deserialization" => "deserialization".to_string(),
+        "xxe" => "xxe".to_string(),
+        "ssrf" => "ssrf".to_string(),
+        "weak-crypto" => "cryptography".to_string(),
+        _ => "security".to_string(),
+    }
+}
+
+fn determine_severity(rule_id: &str) -> String {
+    match rule_id {
+        "sql-injection" | "command-injection" | "insecure-deserialization" => "Critical".to_string(),
+        "xss" | "xxe" | "ssrf" | "server-side-template-injection" => "High".to_string(),
+        "path-traversal" | "ldap-injection" | "unsafe-redirect" => "High".to_string(),
+        "hardcoded-secrets" | "weak-crypto" => "Medium".to_string(),
+        _ => "Medium".to_string(),
     }
 }
