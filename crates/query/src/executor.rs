@@ -151,6 +151,7 @@ impl QueryExecutor {
             (EntityType::Assignment, AstNodeKind::AssignmentExpression { .. }) => true,
             (EntityType::BinaryExpression, AstNodeKind::BinaryExpression { .. }) => true,
             (EntityType::Literal, AstNodeKind::Literal { .. }) => true,
+            (EntityType::MemberExpression, AstNodeKind::MemberExpression { .. }) => true,
             (EntityType::AnyNode, _) => true,
             _ => false,
         }
@@ -339,14 +340,29 @@ impl QueryExecutor {
 
     fn extract_kind_property(node: &AstNode, property: &str) -> Value {
         match (&node.kind, property) {
+            (AstNodeKind::CallExpression { callee, .. }, "callee") => {
+                Value::String(callee.clone())
+            }
             (AstNodeKind::CallExpression { arguments_count, .. }, "argumentsCount") => {
                 Value::Number(*arguments_count as i64)
+            }
+            (AstNodeKind::FunctionDeclaration { name, .. }, "name") => {
+                Value::String(name.clone())
             }
             (AstNodeKind::FunctionDeclaration { parameters, .. }, "parameterCount") => {
                 Value::Number(parameters.len() as i64)
             }
+            (AstNodeKind::VariableDeclaration { name, .. }, "name") => {
+                Value::String(name.clone())
+            }
             (AstNodeKind::BinaryExpression { operator }, "operator") => {
                 Value::String(operator.clone())
+            }
+            (AstNodeKind::MemberExpression { property, .. }, "property") => {
+                Value::String(property.clone())
+            }
+            (AstNodeKind::MemberExpression { object, .. }, "object") => {
+                Value::String(object.clone())
             }
             (AstNodeKind::Literal { value }, "value") => match value {
                 LiteralValue::String(s) => Value::String(s.clone()),

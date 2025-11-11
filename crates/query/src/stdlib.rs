@@ -55,15 +55,18 @@ impl StandardLibrary {
 
     pub fn xss_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::MethodCall, "mc".to_string()),
-            Some(WhereClause::new(vec![Predicate::MethodName {
-                variable: "mc".to_string(),
-                operator: ComparisonOp::Equal,
-                value: "innerHTML".to_string(),
+            FromClause::new(EntityType::MemberExpression, "member".to_string()),
+            Some(WhereClause::new(vec![Predicate::Comparison {
+                left: Expression::PropertyAccess {
+                    object: Box::new(Expression::Variable("member".to_string())),
+                    property: "property".to_string(),
+                },
+                operator: ComparisonOp::Matches,
+                right: Expression::String("(?i)(innerHTML|outerHTML|insertAdjacentHTML)".to_string()),
             }])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "mc".to_string(),
-                message: "Potential XSS vulnerability".to_string(),
+                variable: "member".to_string(),
+                message: "Potential XSS vulnerability - dangerous HTML manipulation".to_string(),
             }]),
         )
     }
@@ -184,7 +187,7 @@ impl StandardLibrary {
                         property: "callee".to_string(),
                     },
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(md5|sha1|des|rc4|ecb|cbc|DES|MD5|SHA1)".to_string()),
+                    right: Expression::String("(?i)(createHash|createCipher|md5|sha1|des|rc4|ecb|cbc)".to_string()),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {

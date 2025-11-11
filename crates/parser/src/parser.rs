@@ -122,7 +122,7 @@ impl Parser {
             }
 
             // Variable declarations
-            "variable_declaration" | "let_declaration" | "const_item" => {
+            "variable_declaration" | "let_declaration" | "const_item" | "lexical_declaration" | "variable_declarator" => {
                 self.parse_variable_declaration(node, source)
             }
 
@@ -402,6 +402,11 @@ impl Parser {
     fn extract_callee(&self, node: &Node, source: &str) -> Option<String> {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
+            // Handle member expressions (e.g., crypto.createHash)
+            if child.kind() == "member_expression" || child.kind() == "field_expression" {
+                return Some(child.utf8_text(source.as_bytes()).unwrap_or("").to_string());
+            }
+            // Handle simple identifiers
             if child.kind() == "identifier" || child.kind() == "function" {
                 return Some(child.utf8_text(source.as_bytes()).unwrap_or("").to_string());
             }

@@ -25,6 +25,7 @@ pub enum EntityType {
     Literal,
     BinaryExpression,
     CallExpression,
+    MemberExpression,
     AnyNode,
 }
 
@@ -38,6 +39,7 @@ impl EntityType {
             "Literal" => Some(EntityType::Literal),
             "BinaryExpression" => Some(EntityType::BinaryExpression),
             "CallExpression" => Some(EntityType::CallExpression),
+            "MemberExpression" => Some(EntityType::MemberExpression),
             "AnyNode" => Some(EntityType::AnyNode),
             _ => None,
         }
