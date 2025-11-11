@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use tracing::{info, Level};
 use tracing_subscriber;
 
-use kodecd_analyzer::CfgBuilder;
+use kodecd_analyzer::{CfgBuilder, TaintAnalysis};
 use kodecd_parser::{Language, LanguageConfig};
 use kodecd_query::{QueryExecutor, QueryParser, StandardLibrary};
 use kodecd_reporter::{Report, ReportFormat, Reporter};
@@ -160,6 +160,13 @@ fn analyze_file(
 
     info!("Built CFG with {} nodes", cfg.graph.node_count());
 
+    // Run taint analysis
+    let taint_analysis = TaintAnalysis::new()
+        .with_default_sources()
+        .with_default_sinks()
+        .with_default_sanitizers();
+    let taint_results = taint_analysis.analyze(&cfg);
+
     // Parse or use default query
     let query = if let Some(query_path) = query_file {
         let query_source = std::fs::read_to_string(query_path)?;
@@ -170,7 +177,7 @@ fn analyze_file(
     };
 
     // Execute query
-    let result = QueryExecutor::execute(&query, &ast, &cfg);
+    let result = QueryExecutor::execute(&query, &ast, &cfg, Some(&taint_results));
 
     info!("Found {} potential issues", result.findings.len());
 
@@ -200,12 +207,19 @@ fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>) ->
     let cfg_builder = CfgBuilder::new();
     let cfg = cfg_builder.build(&ast);
 
+    // Run taint analysis (optional, can be None for queries that don't need it)
+    let taint_analysis = TaintAnalysis::new()
+        .with_default_sources()
+        .with_default_sinks()
+        .with_default_sanitizers();
+    let taint_results = taint_analysis.analyze(&cfg);
+
     // Run all built-in queries
     let mut all_findings = Vec::new();
 
     for (name, query) in StandardLibrary::owasp_queries() {
         info!("Running query: {}", name);
-        let result = QueryExecutor::execute(&query, &ast, &cfg);
+        let result = QueryExecutor::execute(&query, &ast, &cfg, Some(&taint_results));
         all_findings.extend(result.findings);
     }
 

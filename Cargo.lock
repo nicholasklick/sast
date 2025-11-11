@@ -485,6 +485,7 @@ dependencies = [
  "nom",
  "once_cell",
  "pretty_assertions",
+ "regex",
  "serde",
  "thiserror",
 ]
