@@ -8,6 +8,7 @@ pub mod ast;
 pub mod ast_arena;
 pub mod language;
 pub mod parser;
+pub mod parser_arena;
 pub mod visitor;
 
 pub use ast::{AstNode, AstNodeKind, Location, Span};
@@ -17,6 +18,7 @@ pub use ast_arena::{
 };
 pub use language::{Language, LanguageConfig};
 pub use parser::{ParseError, Parser, ParseResult};
+pub use parser_arena::ParserArena;
 pub use visitor::{AstVisitor, VisitorResult};
 
 /// Re-export tree-sitter for convenience
