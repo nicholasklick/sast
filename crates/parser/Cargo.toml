@@ -1,0 +1,27 @@
+[package]
+name = "kodecd-parser"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Tree-sitter core and language grammars
+tree-sitter = "0.24"
+tree-sitter-rust = "0.23"
+tree-sitter-python = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-java = "0.23"
+tree-sitter-go = "0.23"
+tree-sitter-c = "0.23"
+tree-sitter-cpp = "0.23"
+tree-sitter-c-sharp = "0.23"
+tree-sitter-ruby = "0.23"
+tree-sitter-php = "0.23"
+
+# Utilities
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+walkdir = "2.5"
+
+[dev-dependencies]
+tempfile = "3.13"

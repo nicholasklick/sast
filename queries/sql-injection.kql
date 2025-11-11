@@ -1,0 +1,9 @@
+// SQL Injection Detection Query
+// Detects potential SQL injection vulnerabilities where user input
+// flows into database queries without proper sanitization
+
+from MethodCall mc
+where mc.method_name = "execute"
+  and mc.is_database_call()
+  and mc.argument(0).is_tainted_by_user_input()
+select mc, "SQL injection vulnerability: user input not sanitized"

@@ -1,0 +1,9 @@
+// Cross-Site Scripting (XSS) Detection Query
+// Detects potential XSS vulnerabilities where user input
+// is inserted into HTML without proper encoding
+
+from MethodCall mc
+where mc.method_name = "innerHTML"
+  or mc.method_name = "write"
+  or mc.method_name = "writeln"
+select mc, "Potential XSS vulnerability: unsanitized HTML output"

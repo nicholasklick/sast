@@ -1,0 +1,9 @@
+// Command Injection Detection Query
+// Detects potential command injection where user input
+// is passed to system command execution functions
+
+from CallExpression call
+where call.callee = "exec"
+  or call.callee = "system"
+  or call.callee = "spawn"
+select call, "Potential command injection vulnerability"

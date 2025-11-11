@@ -1,0 +1,20 @@
+[package]
+name = "kodecd-reporter"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+kodecd-parser = { path = "../parser" }
+kodecd-analyzer = { path = "../analyzer" }
+kodecd-query = { path = "../query" }
+
+# SARIF output
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Output formatting
+colored = "2.1"
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3.13"

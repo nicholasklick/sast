@@ -1,0 +1,19 @@
+[package]
+name = "kodecd-analyzer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+kodecd-parser = { path = "../parser" }
+
+# Graph data structures for CFG
+petgraph = "0.6"
+
+# Utilities
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+indexmap = "2.6"
+dashmap = "6.1"
+
+[dev-dependencies]
+criterion = "0.5"
