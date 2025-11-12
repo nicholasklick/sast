@@ -1,0 +1,45 @@
+[package]
+name = "kodecd-sast-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.kodecd-parser]
+path = "../crates/parser"
+
+[dependencies.kodecd-query]
+path = "../crates/query"
+
+[dependencies.kodecd-analyzer]
+path = "../crates/analyzer"
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fuzz_parser"
+path = "fuzz_targets/fuzz_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_query"
+path = "fuzz_targets/fuzz_query.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_taint_analysis"
+path = "fuzz_targets/fuzz_taint_analysis.rs"
+test = false
+doc = false
+bench = false

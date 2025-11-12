@@ -1,6 +1,7 @@
 //! Query execution engine
 
 use crate::ast::*;
+use kodecd_analyzer::call_graph::CallGraph;
 use kodecd_analyzer::cfg::ControlFlowGraph;
 use kodecd_analyzer::taint::TaintAnalysisResult;
 use kodecd_parser::ast::{AstNode, AstNodeKind, LiteralValue};
@@ -31,15 +32,22 @@ struct EvaluationContext<'a> {
     node: &'a AstNode,
     /// Taint analysis results (optional)
     taint_results: Option<&'a TaintAnalysisResult>,
+    /// Call graph (optional, for inter-procedural queries)
+    call_graph: Option<&'a CallGraph>,
     /// Variable bindings (from FROM clause)
     bindings: HashMap<String, &'a AstNode>,
 }
 
 impl<'a> EvaluationContext<'a> {
-    fn new(node: &'a AstNode, taint_results: Option<&'a TaintAnalysisResult>) -> Self {
+    fn new(
+        node: &'a AstNode,
+        taint_results: Option<&'a TaintAnalysisResult>,
+        call_graph: Option<&'a CallGraph>,
+    ) -> Self {
         Self {
             node,
             taint_results,
+            call_graph,
             bindings: HashMap::new(),
         }
     }
@@ -92,10 +100,19 @@ impl QueryExecutor {
         _cfg: &ControlFlowGraph,
         taint_results: Option<&TaintAnalysisResult>,
     ) -> QueryResult {
+        Self::execute_with_call_graph(query, ast, taint_results, None)
+    }
+
+    pub fn execute_with_call_graph(
+        query: &Query,
+        ast: &AstNode,
+        taint_results: Option<&TaintAnalysisResult>,
+        call_graph: Option<&CallGraph>,
+    ) -> QueryResult {
         let mut findings = Vec::new();
 
         // Execute query on the AST
-        Self::execute_on_node(query, ast, &mut findings, taint_results);
+        Self::execute_on_node(query, ast, &mut findings, taint_results, call_graph);
 
         QueryResult { findings }
     }
@@ -105,11 +122,12 @@ impl QueryExecutor {
         node: &AstNode,
         findings: &mut Vec<Finding>,
         taint_results: Option<&TaintAnalysisResult>,
+        call_graph: Option<&CallGraph>,
     ) {
         // Check if node matches the FROM clause
         if Self::matches_entity(&query.from.entity, &node.kind) {
             // Create evaluation context with variable binding
-            let ctx = EvaluationContext::new(node, taint_results)
+            let ctx = EvaluationContext::new(node, taint_results, call_graph)
                 .with_binding(query.from.variable.clone(), node);
 
             // Check WHERE clause if present
@@ -138,7 +156,7 @@ impl QueryExecutor {
 
         // Recurse into children
         for child in &node.children {
-            Self::execute_on_node(query, child, findings, taint_results);
+            Self::execute_on_node(query, child, findings, taint_results, call_graph);
         }
     }
 
@@ -186,10 +204,10 @@ impl QueryExecutor {
             Predicate::FunctionCall {
                 variable,
                 function,
-                arguments: _,
+                arguments,
             } => {
-                // Handle special functions like isTainted()
-                Self::evaluate_function_call(variable, function, ctx)
+                // Handle special functions like isTainted(), calls(), etc.
+                Self::evaluate_function_call_with_args(variable, function, arguments, ctx)
             }
 
             Predicate::MethodName { variable, operator, value } => {
@@ -401,7 +419,47 @@ impl QueryExecutor {
         }
     }
 
+    /// Check if a function calls another function (inter-procedural)
+    fn calls_function(caller: &str, callee: &str, call_graph: Option<&CallGraph>) -> bool {
+        if let Some(cg) = call_graph {
+            cg.get_callees(caller)
+                .iter()
+                .any(|edge| edge.to == callee)
+        } else {
+            false
+        }
+    }
+
+    /// Check if a function is called by another function (inter-procedural)
+    fn called_by_function(callee: &str, caller: &str, call_graph: Option<&CallGraph>) -> bool {
+        if let Some(cg) = call_graph {
+            cg.get_callers(callee)
+                .iter()
+                .any(|c| *c == caller)
+        } else {
+            false
+        }
+    }
+
+    /// Check if a function is reachable from another function (inter-procedural)
+    fn reachable_from(target: &str, source: &str, call_graph: Option<&CallGraph>) -> bool {
+        if let Some(cg) = call_graph {
+            cg.reachable_from(source).contains(target)
+        } else {
+            false
+        }
+    }
+
     fn evaluate_function_call(variable: &str, function: &str, ctx: &EvaluationContext) -> bool {
+        Self::evaluate_function_call_with_args(variable, function, &[], ctx)
+    }
+
+    fn evaluate_function_call_with_args(
+        variable: &str,
+        function: &str,
+        arguments: &[Expression],
+        ctx: &EvaluationContext,
+    ) -> bool {
         match function {
             "isTainted" => {
                 if let Some(taint_results) = ctx.taint_results {
@@ -412,6 +470,52 @@ impl QueryExecutor {
                 } else {
                     false
                 }
+            }
+            "calls" => {
+                // Check if function calls another function
+                // Usage: func.calls("targetFunction")
+                if arguments.is_empty() {
+                    return false;
+                }
+                if let Expression::String(target_func) = &arguments[0] {
+                    // Get the function name from the bound variable
+                    if let Some(node) = ctx.get_binding(variable) {
+                        if let Some(func_name) = Self::extract_name(node) {
+                            return Self::calls_function(&func_name, target_func, ctx.call_graph);
+                        }
+                    }
+                }
+                false
+            }
+            "calledBy" => {
+                // Check if function is called by another function
+                // Usage: func.calledBy("callerFunction")
+                if arguments.is_empty() {
+                    return false;
+                }
+                if let Expression::String(caller_func) = &arguments[0] {
+                    if let Some(node) = ctx.get_binding(variable) {
+                        if let Some(func_name) = Self::extract_name(node) {
+                            return Self::called_by_function(&func_name, caller_func, ctx.call_graph);
+                        }
+                    }
+                }
+                false
+            }
+            "reachableFrom" => {
+                // Check if function is reachable from another function
+                // Usage: func.reachableFrom("entryPoint")
+                if arguments.is_empty() {
+                    return false;
+                }
+                if let Expression::String(source_func) = &arguments[0] {
+                    if let Some(node) = ctx.get_binding(variable) {
+                        if let Some(func_name) = Self::extract_name(node) {
+                            return Self::reachable_from(&func_name, source_func, ctx.call_graph);
+                        }
+                    }
+                }
+                false
             }
             _ => false,
         }
@@ -580,7 +684,7 @@ mod tests {
             "eval(x)",
         );
 
-        let ctx = EvaluationContext::new(&node, None)
+        let ctx = EvaluationContext::new(&node, None, None)
             .with_binding("mc".to_string(), &node);
 
         let expr = Expression::Variable("mc".to_string());
@@ -598,7 +702,7 @@ mod tests {
             "eval(x)",
         );
 
-        let ctx = EvaluationContext::new(&node, None)
+        let ctx = EvaluationContext::new(&node, None, None)
             .with_binding("mc".to_string(), &node);
 
         let expr = Expression::PropertyAccess {
@@ -619,7 +723,7 @@ mod tests {
             "eval(x)",
         );
 
-        let ctx = EvaluationContext::new(&node, None)
+        let ctx = EvaluationContext::new(&node, None, None)
             .with_binding("mc".to_string(), &node);
 
         let predicate = Predicate::Comparison {
@@ -644,7 +748,7 @@ mod tests {
             "eval(x)",
         );
 
-        let ctx = EvaluationContext::new(&node, None)
+        let ctx = EvaluationContext::new(&node, None, None)
             .with_binding("mc".to_string(), &node);
 
         let predicate = Predicate::And {
@@ -679,7 +783,7 @@ mod tests {
             "eval(x)",
         );
 
-        let ctx = EvaluationContext::new(&node, None)
+        let ctx = EvaluationContext::new(&node, None, None)
             .with_binding("mc".to_string(), &node);
 
         let predicate = Predicate::Or {
@@ -714,7 +818,7 @@ mod tests {
             "eval(x)",
         );
 
-        let ctx = EvaluationContext::new(&node, None)
+        let ctx = EvaluationContext::new(&node, None, None)
             .with_binding("mc".to_string(), &node);
 
         let predicate = Predicate::Not {

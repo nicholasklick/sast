@@ -28,3 +28,4 @@ bumpalo = { version = "3.16", features = ["collections"] }
 
 [dev-dependencies]
 tempfile = "3.13"
+proptest = "1.5"

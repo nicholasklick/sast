@@ -129,6 +129,7 @@ impl CallGraph {
     }
 
     /// Perform topological sort to get call order (useful for bottom-up analysis)
+    /// Returns functions in bottom-up order: callees before callers
     /// Returns None if there's a cycle
     pub fn topological_sort(&self) -> Option<Vec<String>> {
         let mut in_degree: HashMap<String, usize> = HashMap::new();
@@ -170,6 +171,8 @@ impl CallGraph {
 
         // If we processed all nodes, no cycle exists
         if result.len() == self.nodes.len() {
+            // Reverse for bottom-up order (callees before callers)
+            result.reverse();
             Some(result)
         } else {
             None // Cycle detected
@@ -510,15 +513,15 @@ mod tests {
         assert!(sorted.is_some());
         let sorted = sorted.unwrap();
 
-        // With our topological sort, nodes with no incoming edges come first
-        // So main (no incoming) comes before foo, foo before bar
+        // Topological sort now returns bottom-up order (callees before callers)
+        // So for main -> foo -> bar, we get [bar, foo, main]
         let bar_pos = sorted.iter().position(|s| s == "bar").unwrap();
         let foo_pos = sorted.iter().position(|s| s == "foo").unwrap();
         let main_pos = sorted.iter().position(|s| s == "main").unwrap();
 
-        // main should be processed before its callees
-        assert!(main_pos < foo_pos);
-        assert!(foo_pos < bar_pos);
+        // Callees should be processed before callers for bottom-up analysis
+        assert!(bar_pos < foo_pos);
+        assert!(foo_pos < main_pos);
     }
 
     #[test]

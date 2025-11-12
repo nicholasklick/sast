@@ -1,1 +1,6 @@
 /target
+
+# Fuzzing artifacts
+/fuzz/target
+/fuzz/corpus
+/fuzz/artifacts
