@@ -29,7 +29,7 @@ fn test_simple_interprocedural_taint() {
 
     let source_call = AstNode::new(
         1,
-        AstNodeKind::CallExpression {
+        AstNodeKind::CallExpression { is_optional_chain: false,
             callee: "getUserInput".to_string(),
             arguments_count: 0,
         },
@@ -50,7 +50,7 @@ fn test_simple_interprocedural_taint() {
         kind: AstNodeKind::FunctionDeclaration {
             name: "getInput".to_string(),
             parameters: vec![],
-            return_type: None,
+            return_type: None, is_async: false, is_generator: false,
         },
         location: test_location(),
         children: vec![return_stmt],
@@ -59,7 +59,7 @@ fn test_simple_interprocedural_taint() {
 
     let get_input_call = AstNode::new(
         4,
-        AstNodeKind::CallExpression {
+        AstNodeKind::CallExpression { is_optional_chain: false,
             callee: "getInput".to_string(),
             arguments_count: 0,
         },
@@ -72,7 +72,7 @@ fn test_simple_interprocedural_taint() {
         kind: AstNodeKind::VariableDeclaration {
             name: "data".to_string(),
             var_type: None,
-            is_const: true,
+            is_const: true, initializer: None,
         },
         location: test_location(),
         children: vec![get_input_call],
@@ -81,7 +81,7 @@ fn test_simple_interprocedural_taint() {
 
     let execute_call = AstNode::new(
         6,
-        AstNodeKind::CallExpression {
+        AstNodeKind::CallExpression { is_optional_chain: false,
             callee: "execute".to_string(),
             arguments_count: 1,
         },
@@ -94,7 +94,7 @@ fn test_simple_interprocedural_taint() {
         kind: AstNodeKind::FunctionDeclaration {
             name: "vulnerable".to_string(),
             parameters: vec![],
-            return_type: None,
+            return_type: None, is_async: false, is_generator: false,
         },
         location: test_location(),
         children: vec![var_decl, execute_call],
@@ -142,7 +142,7 @@ fn test_call_graph_construction() {
     // Simple test: main() calls helper()
     let helper_call = AstNode::new(
         1,
-        AstNodeKind::CallExpression {
+        AstNodeKind::CallExpression { is_optional_chain: false,
             callee: "helper".to_string(),
             arguments_count: 0,
         },
@@ -155,7 +155,7 @@ fn test_call_graph_construction() {
         kind: AstNodeKind::FunctionDeclaration {
             name: "main".to_string(),
             parameters: vec![],
-            return_type: None,
+            return_type: None, is_async: false, is_generator: false,
         },
         location: test_location(),
         children: vec![helper_call],
@@ -167,7 +167,7 @@ fn test_call_graph_construction() {
         AstNodeKind::FunctionDeclaration {
             name: "helper".to_string(),
             parameters: vec![],
-            return_type: None,
+            return_type: None, is_async: false, is_generator: false,
         },
         test_location(),
         "function helper() {}".to_string(),
@@ -197,7 +197,7 @@ fn test_topological_sort_ordering() {
     // Create call chain: main -> foo -> bar
     let bar_call = AstNode::new(
         1,
-        AstNodeKind::CallExpression {
+        AstNodeKind::CallExpression { is_optional_chain: false,
             callee: "bar".to_string(),
             arguments_count: 0,
         },
@@ -210,7 +210,7 @@ fn test_topological_sort_ordering() {
         kind: AstNodeKind::FunctionDeclaration {
             name: "foo".to_string(),
             parameters: vec![],
-            return_type: None,
+            return_type: None, is_async: false, is_generator: false,
         },
         location: test_location(),
         children: vec![bar_call],
@@ -219,7 +219,7 @@ fn test_topological_sort_ordering() {
 
     let foo_call = AstNode::new(
         3,
-        AstNodeKind::CallExpression {
+        AstNodeKind::CallExpression { is_optional_chain: false,
             callee: "foo".to_string(),
             arguments_count: 0,
         },
@@ -232,7 +232,7 @@ fn test_topological_sort_ordering() {
         kind: AstNodeKind::FunctionDeclaration {
             name: "main".to_string(),
             parameters: vec![],
-            return_type: None,
+            return_type: None, is_async: false, is_generator: false,
         },
         location: test_location(),
         children: vec![foo_call],
@@ -244,7 +244,7 @@ fn test_topological_sort_ordering() {
         AstNodeKind::FunctionDeclaration {
             name: "bar".to_string(),
             parameters: vec![],
-            return_type: None,
+            return_type: None, is_async: false, is_generator: false,
         },
         test_location(),
         "function bar() {}".to_string(),
@@ -346,7 +346,7 @@ fn test_method_call_graph() {
     // Test class with methods
     let get_data_call = AstNode::new(
         1,
-        AstNodeKind::CallExpression {
+        AstNodeKind::CallExpression { is_optional_chain: false,
             callee: "getData".to_string(),
             arguments_count: 0,
         },
@@ -361,6 +361,9 @@ fn test_method_call_graph() {
             parameters: vec![],
             return_type: None,
             visibility: kodecd_parser::ast::Visibility::Public,
+            is_static: false,
+            is_async: false,
+            is_abstract: false,
         },
         location: test_location(),
         children: vec![get_data_call],
@@ -374,6 +377,9 @@ fn test_method_call_graph() {
             parameters: vec![],
             return_type: None,
             visibility: kodecd_parser::ast::Visibility::Public,
+            is_static: false,
+            is_async: false,
+            is_abstract: false,
         },
         test_location(),
         "getData() {}".to_string(),
@@ -385,6 +391,7 @@ fn test_method_call_graph() {
             name: "Processor".to_string(),
             extends: None,
             implements: vec![],
+            is_abstract: false,
         },
         location: test_location(),
         children: vec![process_method, get_data_method],
@@ -416,7 +423,7 @@ fn test_reachability_analysis() {
     // Create call chain: main -> foo -> bar, baz (independent)
     let bar_call = AstNode::new(
         1,
-        AstNodeKind::CallExpression {
+        AstNodeKind::CallExpression { is_optional_chain: false,
             callee: "bar".to_string(),
             arguments_count: 0,
         },
@@ -429,7 +436,7 @@ fn test_reachability_analysis() {
         kind: AstNodeKind::FunctionDeclaration {
             name: "foo".to_string(),
             parameters: vec![],
-            return_type: None,
+            return_type: None, is_async: false, is_generator: false,
         },
         location: test_location(),
         children: vec![bar_call],
@@ -438,7 +445,7 @@ fn test_reachability_analysis() {
 
     let foo_call = AstNode::new(
         3,
-        AstNodeKind::CallExpression {
+        AstNodeKind::CallExpression { is_optional_chain: false,
             callee: "foo".to_string(),
             arguments_count: 0,
         },
@@ -451,7 +458,7 @@ fn test_reachability_analysis() {
         kind: AstNodeKind::FunctionDeclaration {
             name: "main".to_string(),
             parameters: vec![],
-            return_type: None,
+            return_type: None, is_async: false, is_generator: false,
         },
         location: test_location(),
         children: vec![foo_call],
@@ -463,7 +470,7 @@ fn test_reachability_analysis() {
         AstNodeKind::FunctionDeclaration {
             name: "bar".to_string(),
             parameters: vec![],
-            return_type: None,
+            return_type: None, is_async: false, is_generator: false,
         },
         test_location(),
         "function bar() {}".to_string(),
@@ -474,7 +481,7 @@ fn test_reachability_analysis() {
         AstNodeKind::FunctionDeclaration {
             name: "baz".to_string(),
             parameters: vec![],
-            return_type: None,
+            return_type: None, is_async: false, is_generator: false,
         },
         test_location(),
         "function baz() {}".to_string(),

@@ -34,6 +34,7 @@ fn test_query_finds_eval_calls() {
         AstNodeKind::CallExpression {
             callee: "eval".to_string(),
             arguments_count: 1,
+            is_optional_chain: false,
         },
         "eval(userInput)",
         vec![],
@@ -68,6 +69,8 @@ fn test_query_with_regex_pattern() {
         AstNodeKind::MemberExpression {
             object: "element".to_string(),
             property: "innerHTML".to_string(),
+            is_computed: false,
+            is_optional: false,
         },
         "element.innerHTML",
         vec![],
@@ -107,6 +110,7 @@ fn test_query_with_contains_operator() {
             name: "apiKey".to_string(),
             var_type: None,
             is_const: true,
+            initializer: None,
         },
         "const apiKey = 'secret'",
         vec![],
@@ -145,6 +149,8 @@ fn test_query_with_and_or_logic() {
             name: "executeQuery".to_string(),
             parameters: vec!["sql".to_string()],
             return_type: None,
+            is_async: false,
+            is_generator: false,
         },
         "function executeQuery(sql) {}",
         vec![],
@@ -184,6 +190,8 @@ fn test_query_with_not_operator() {
             name: "safeFunction".to_string(),
             parameters: vec![],
             return_type: None,
+            is_async: false,
+            is_generator: false,
         },
         "function safeFunction() {}",
         vec![],
@@ -221,6 +229,7 @@ fn test_multiple_queries_on_same_ast() {
         AstNodeKind::CallExpression {
             callee: "eval".to_string(),
             arguments_count: 1,
+            is_optional_chain: false,
         },
         "eval(x)",
         vec![],
@@ -230,6 +239,7 @@ fn test_multiple_queries_on_same_ast() {
         AstNodeKind::CallExpression {
             callee: "exec".to_string(),
             arguments_count: 1,
+            is_optional_chain: false,
         },
         "exec(cmd)",
         vec![],
@@ -304,6 +314,7 @@ fn test_all_comparison_operators() {
         AstNodeKind::CallExpression {
             callee: "getUserInput".to_string(),
             arguments_count: 0,
+            is_optional_chain: false,
         },
         "getUserInput()",
         vec![],

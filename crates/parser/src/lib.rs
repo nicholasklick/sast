@@ -30,13 +30,14 @@
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create parser for TypeScript
-//! let parser = Parser::new(
+//! let mut parser = Parser::new(
 //!     LanguageConfig::new(Language::TypeScript),
 //!     Path::new("app.ts")
 //! );
 //!
-//! // Parse file
-//! let ast = parser.parse_file()?;
+//! // Parse source code
+//! let source = "const x = 10;";
+//! let ast = parser.parse_source(source)?;
 //!
 //! // Traverse AST
 //! for node in &ast.children {
@@ -55,11 +56,14 @@
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create arena and parser
 //! let arena = AstArena::new();
-//! let parser = ParserArena::new(LanguageConfig::new(Language::TypeScript));
+//! let mut parser = ParserArena::new(
+//!     LanguageConfig::new(Language::TypeScript),
+//!     Path::new("app.ts")
+//! );
 //!
 //! // Parse with arena allocation (50-60% less memory)
-//! let source = std::fs::read_to_string("app.ts")?;
-//! let ast = parser.parse_source(&arena, &source)?;
+//! let source = "const x = 10;";
+//! let ast = parser.parse_source(&arena, source)?;
 //!
 //! // Use AST with lifetime tied to arena
 //! println!("Parsed {} nodes", ast.children.len());
@@ -77,18 +81,18 @@
 //! }
 //!
 //! impl AstVisitor for FunctionCounter {
-//!     fn visit(&mut self, node: &AstNode) -> VisitorResult {
+//!     fn visit_enter(&mut self, node: &AstNode) -> VisitorResult {
 //!         use kodecd_parser::AstNodeKind;
 //!         if matches!(node.kind, AstNodeKind::FunctionDeclaration { .. }) {
 //!             self.count += 1;
 //!         }
-//!         VisitorResult::Continue
+//!         Ok(())
 //!     }
 //! }
 //!
 //! # fn example(ast: &kodecd_parser::AstNode) {
 //! let mut counter = FunctionCounter { count: 0 };
-//! counter.visit(ast);
+//! counter.walk(ast).unwrap();
 //! println!("Found {} functions", counter.count);
 //! # }
 //! ```
@@ -137,13 +141,13 @@
 //! # );
 //! match parser.parse_file() {
 //!     Ok(ast) => println!("Parsed successfully"),
-//!     Err(ParseError::FileNotFound(path)) => {
-//!         eprintln!("File not found: {}", path.display());
+//!     Err(ParseError::IoError(e)) => {
+//!         eprintln!("IO error: {}", e);
 //!     }
-//!     Err(ParseError::InvalidSyntax(msg)) => {
-//!         eprintln!("Syntax error: {}", msg);
+//!     Err(ParseError::TreeSitterError(msg)) => {
+//!         eprintln!("Parse error: {}", msg);
 //!     }
-//!     Err(e) => eprintln!("Parse error: {}", e),
+//!     Err(e) => eprintln!("Error: {}", e),
 //! }
 //! # Ok(())
 //! # }

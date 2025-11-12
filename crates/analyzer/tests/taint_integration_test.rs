@@ -13,7 +13,7 @@ fn create_simple_taint_scenario() -> (AstNode, TaintAnalysis) {
     // Create AST: x = userInput(); execute(x);
     let source_call = AstNode {
         id: 1,
-        kind: AstNodeKind::CallExpression {
+        kind: AstNodeKind::CallExpression { is_optional_chain: false,
             callee: "userInput".to_string(),
             arguments_count: 0,
         },
@@ -37,7 +37,7 @@ fn create_simple_taint_scenario() -> (AstNode, TaintAnalysis) {
         kind: AstNodeKind::VariableDeclaration {
             name: "x".to_string(),
             var_type: None,
-            is_const: false,
+            is_const: false, initializer: None,
         },
         location: Location {
             file_path: "test.js".to_string(),
@@ -56,7 +56,7 @@ fn create_simple_taint_scenario() -> (AstNode, TaintAnalysis) {
 
     let sink_call = AstNode {
         id: 3,
-        kind: AstNodeKind::CallExpression {
+        kind: AstNodeKind::CallExpression { is_optional_chain: false,
             callee: "execute".to_string(),
             arguments_count: 1,
         },

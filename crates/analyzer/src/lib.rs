@@ -23,11 +23,12 @@
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Parse source code
-//! let parser = Parser::new(
+//! let mut parser = Parser::new(
 //!     LanguageConfig::new(Language::TypeScript),
 //!     Path::new("app.ts")
 //! );
-//! let ast = parser.parse_file()?;
+//! let source = "const x = getUserInput(); execute(x);";
+//! let ast = parser.parse_source(source)?;
 //!
 //! // Build control flow graph
 //! let cfg = CfgBuilder::new().build(&ast);
@@ -61,11 +62,12 @@
 //! # use std::path::Path;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! # let parser = Parser::new(
+//! # let mut parser = Parser::new(
 //! #     LanguageConfig::new(Language::TypeScript),
 //! #     Path::new("app.ts")
 //! # );
-//! # let ast = parser.parse_file()?;
+//! # let source = "const x = 10;";
+//! # let ast = parser.parse_source(source)?;
 //! // Build call graph
 //! let call_graph = CallGraphBuilder::new().build(&ast);
 //!
@@ -93,11 +95,12 @@
 //! # use std::path::Path;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! # let parser = Parser::new(
+//! # let mut parser = Parser::new(
 //! #     LanguageConfig::new(Language::TypeScript),
 //! #     Path::new("app.ts")
 //! # );
-//! # let ast = parser.parse_file()?;
+//! # let source = "const x = 10;";
+//! # let ast = parser.parse_source(source)?;
 //! let call_graph = CallGraphBuilder::new().build(&ast);
 //!
 //! // Query the graph
