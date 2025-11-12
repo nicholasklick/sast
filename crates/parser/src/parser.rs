@@ -176,13 +176,17 @@ impl Parser {
 
     fn parse_function_declaration(&self, node: &Node, source: &str) -> AstNodeKind {
         let name = self.extract_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-        let parameters = self.extract_parameters(node, source);
+        let parameters = self.extract_parameters_detailed(node, source);
         let return_type = self.extract_return_type(node, source);
+        let is_async = self.is_async_function(node, source);
+        let is_generator = self.is_generator_function(node, source);
 
         AstNodeKind::FunctionDeclaration {
             name,
             parameters,
             return_type,
+            is_async,
+            is_generator,
         }
     }
 
@@ -190,25 +194,33 @@ impl Parser {
         let name = self.extract_name(node, source).unwrap_or_else(|| "Anonymous".to_string());
         let extends = self.extract_extends(node, source);
         let implements = self.extract_implements(node, source);
+        let is_abstract = self.is_abstract_class(node, source);
 
         AstNodeKind::ClassDeclaration {
             name,
             extends,
             implements,
+            is_abstract,
         }
     }
 
     fn parse_method_declaration(&self, node: &Node, source: &str) -> AstNodeKind {
         let name = self.extract_name(node, source).unwrap_or_else(|| "anonymous".to_string());
-        let parameters = self.extract_parameters(node, source);
+        let parameters = self.extract_parameters_detailed(node, source);
         let return_type = self.extract_return_type(node, source);
         let visibility = self.extract_visibility(node, source);
+        let is_static = self.is_static_method(node, source);
+        let is_async = self.is_async_function(node, source);
+        let is_abstract = self.is_abstract_method(node, source);
 
         AstNodeKind::MethodDeclaration {
             name,
             parameters,
             return_type,
             visibility,
+            is_static,
+            is_async,
+            is_abstract,
         }
     }
 
@@ -216,11 +228,13 @@ impl Parser {
         let name = self.extract_name(node, source).unwrap_or_else(|| "unknown".to_string());
         let is_const = node.kind().contains("const");
         let var_type = self.extract_variable_type(node, source);
+        let initializer = self.extract_initializer(node, source);
 
         AstNodeKind::VariableDeclaration {
             name,
             var_type,
             is_const,
+            initializer,
         }
     }
 
@@ -237,10 +251,12 @@ impl Parser {
     fn parse_call_expression(&self, node: &Node, source: &str) -> AstNodeKind {
         let callee = self.extract_callee(node, source).unwrap_or_else(|| "unknown".to_string());
         let arguments_count = self.count_arguments(node);
+        let is_optional_chain = self.is_optional_chain(node, source);
 
         AstNodeKind::CallExpression {
             callee,
             arguments_count,
+            is_optional_chain,
         }
     }
 
@@ -264,9 +280,14 @@ impl Parser {
             }
         }
 
+        let is_computed = node.kind().contains("subscript") || node.kind().contains("computed");
+        let is_optional = self.is_optional_chain(node, source);
+
         AstNodeKind::MemberExpression {
             object,
             property,
+            is_computed,
+            is_optional,
         }
     }
 
@@ -594,6 +615,58 @@ impl Parser {
             },
         }
     }
+
+    // Enhanced helper methods for detailed extraction
+
+    fn extract_parameters_detailed(&self, node: &Node, source: &str) -> Vec<crate::ast::Parameter> {
+        self.extract_parameters(node, source)
+            .into_iter()
+            .map(|name| crate::ast::Parameter {
+                name: name.clone(),
+                param_type: None, // TODO: Extract from tree-sitter
+                default_value: None,
+                is_optional: name.ends_with('?'),
+                is_rest: name.starts_with("..."),
+            })
+            .collect()
+    }
+
+    fn is_async_function(&self, node: &Node, _source: &str) -> bool {
+        node.kind().contains("async") ||
+        node.children(&mut node.walk()).any(|c| c.kind() == "async")
+    }
+
+    fn is_generator_function(&self, node: &Node, _source: &str) -> bool {
+        node.kind().contains("generator") || node.kind().contains("function*")
+    }
+
+    fn is_abstract_class(&self, node: &Node, _source: &str) -> bool {
+        node.children(&mut node.walk()).any(|c| c.kind() == "abstract")
+    }
+
+    fn is_static_method(&self, node: &Node, _source: &str) -> bool {
+        node.children(&mut node.walk()).any(|c| c.kind() == "static")
+    }
+
+    fn is_abstract_method(&self, node: &Node, _source: &str) -> bool {
+        node.children(&mut node.walk()).any(|c| c.kind() == "abstract")
+    }
+
+    fn extract_initializer(&self, node: &Node, source: &str) -> Option<String> {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind().contains("value") || child.kind() == "=" {
+                if let Some(next) = child.next_sibling() {
+                    return Some(next.utf8_text(source.as_bytes()).unwrap_or("").to_string());
+                }
+            }
+        }
+        None
+    }
+
+    fn is_optional_chain(&self, node: &Node, _source: &str) -> bool {
+        node.kind().contains("optional") || node.kind().contains("?.")
+    }
 }
 
 /// Parse a file with automatic language detection
@@ -637,7 +710,7 @@ fn calculate(x: i32, y: i32) -> i32 {
         let func_nodes = ast.find_descendants(|n| matches!(n.kind, AstNodeKind::FunctionDeclaration { .. }));
         assert!(!func_nodes.is_empty());
 
-        if let AstNodeKind::FunctionDeclaration { name, parameters, return_type } = &func_nodes[0].kind {
+        if let AstNodeKind::FunctionDeclaration { name, parameters, return_type, .. } = &func_nodes[0].kind {
             assert_eq!(name, "calculate");
             assert_eq!(parameters.len(), 2);
             assert!(return_type.is_some());
@@ -660,7 +733,7 @@ function greet(name: string): string {
         let func_nodes = ast.find_descendants(|n| matches!(n.kind, AstNodeKind::FunctionDeclaration { .. }));
         assert!(!func_nodes.is_empty());
 
-        if let AstNodeKind::FunctionDeclaration { name, parameters, return_type } = &func_nodes[0].kind {
+        if let AstNodeKind::FunctionDeclaration { name, parameters, return_type, .. } = &func_nodes[0].kind {
             assert_eq!(name, "greet");
             assert_eq!(parameters.len(), 1);
             // Return type extraction depends on tree-sitter parsing
@@ -714,13 +787,13 @@ process(x, y, z);
         assert!(call_nodes.len() >= 2);
 
         // Check eval call
-        if let AstNodeKind::CallExpression { callee, arguments_count } = &call_nodes[0].kind {
+        if let AstNodeKind::CallExpression { callee, arguments_count, .. } = &call_nodes[0].kind {
             assert_eq!(callee, "eval");
             assert_eq!(*arguments_count, 1);
         }
 
         // Check process call
-        if let AstNodeKind::CallExpression { callee, arguments_count } = &call_nodes[1].kind {
+        if let AstNodeKind::CallExpression { callee, arguments_count, .. } = &call_nodes[1].kind {
             assert_eq!(callee, "process");
             assert_eq!(*arguments_count, 3);
         }

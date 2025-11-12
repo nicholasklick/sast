@@ -108,6 +108,45 @@ impl SymbolTable {
     pub fn scopes(&self) -> &[Scope] {
         &self.scopes
     }
+
+    /// Add a reference to a symbol
+    pub fn add_reference(&mut self, name: &str, reference_node_id: NodeId) -> bool {
+        let mut scope_id = self.current_scope;
+        loop {
+            if let Some(symbol) = self.scopes[scope_id].symbols.get_mut(name) {
+                symbol.references.push(reference_node_id);
+                return true;
+            }
+
+            if let Some(parent) = self.scopes[scope_id].parent {
+                scope_id = parent;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    /// Get all references to a symbol
+    pub fn get_references(&self, name: &str) -> Option<&[NodeId]> {
+        self.lookup(name).map(|s| s.references.as_slice())
+    }
+
+    /// Resolve a reference to its defining symbol
+    /// Returns (symbol, scope_id where defined)
+    pub fn resolve_reference(&self, name: &str) -> Option<(&Symbol, usize)> {
+        let mut scope_id = self.current_scope;
+        loop {
+            if let Some(symbol) = self.scopes[scope_id].symbols.get(name) {
+                return Some((symbol, scope_id));
+            }
+
+            if let Some(parent) = self.scopes[scope_id].parent {
+                scope_id = parent;
+            } else {
+                return None;
+            }
+        }
+    }
 }
 
 impl Default for SymbolTable {
@@ -140,6 +179,10 @@ pub struct Symbol {
     pub node_id: NodeId,
     pub span: Span,
     pub type_info: Option<String>,
+    /// Node IDs where this symbol is referenced (not defined)
+    pub references: Vec<NodeId>,
+    /// Scope ID where this symbol is defined
+    pub scope_id: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -175,14 +218,17 @@ impl SymbolTableBuilder {
 
         match &node.kind {
             // Function declarations create a new scope
-            AstNodeKind::FunctionDeclaration { name, parameters, return_type } => {
+            AstNodeKind::FunctionDeclaration { name, parameters, return_type, .. } => {
                 // Define the function in the current scope
+                let scope_id = self.table.current_scope;
                 self.table.define(name.clone(), Symbol {
                     name: name.clone(),
                     kind: SymbolKind::Function,
                     node_id: node.id,
                     span: node.location.span,
                     type_info: return_type.clone(),
+                    references: Vec::new(),
+                    scope_id,
                 });
 
                 // Enter function scope
@@ -190,12 +236,15 @@ impl SymbolTableBuilder {
 
                 // Add parameters to the function scope
                 for param in parameters {
-                    self.table.define(param.clone(), Symbol {
-                        name: param.clone(),
+                    let param_scope_id = self.table.current_scope;
+                    self.table.define(param.name.clone(), Symbol {
+                        name: param.name.clone(),
                         kind: SymbolKind::Parameter,
                         node_id: node.id,
                         span: node.location.span,
-                        type_info: None, // TODO: Extract parameter types
+                        type_info: param.param_type.clone(),
+                        references: Vec::new(),
+                        scope_id: param_scope_id,
                     });
                 }
 
@@ -211,12 +260,15 @@ impl SymbolTableBuilder {
             // Method declarations create a new scope
             AstNodeKind::MethodDeclaration { name, parameters, return_type, .. } => {
                 // Define the method in the current scope
+                let scope_id = self.table.current_scope;
                 self.table.define(name.clone(), Symbol {
                     name: name.clone(),
                     kind: SymbolKind::Method,
                     node_id: node.id,
                     span: node.location.span,
                     type_info: return_type.clone(),
+                    references: Vec::new(),
+                    scope_id,
                 });
 
                 // Enter method scope
@@ -224,12 +276,15 @@ impl SymbolTableBuilder {
 
                 // Add parameters
                 for param in parameters {
-                    self.table.define(param.clone(), Symbol {
-                        name: param.clone(),
+                    let param_scope_id = self.table.current_scope;
+                    self.table.define(param.name.clone(), Symbol {
+                        name: param.name.clone(),
                         kind: SymbolKind::Parameter,
                         node_id: node.id,
                         span: node.location.span,
-                        type_info: None,
+                        type_info: param.param_type.clone(),
+                        references: Vec::new(),
+                        scope_id: param_scope_id,
                     });
                 }
 
@@ -244,12 +299,15 @@ impl SymbolTableBuilder {
             // Class declarations create a new scope
             AstNodeKind::ClassDeclaration { name, .. } => {
                 // Define the class in the current scope
+                let scope_id = self.table.current_scope;
                 self.table.define(name.clone(), Symbol {
                     name: name.clone(),
                     kind: SymbolKind::Class,
                     node_id: node.id,
                     span: node.location.span,
                     type_info: Some(name.clone()),
+                    references: Vec::new(),
+                    scope_id,
                 });
 
                 // Enter class scope
@@ -264,19 +322,22 @@ impl SymbolTableBuilder {
             }
 
             // Variable declarations
-            AstNodeKind::VariableDeclaration { name, var_type, is_const } => {
+            AstNodeKind::VariableDeclaration { name, var_type, is_const, .. } => {
                 let kind = if *is_const {
                     SymbolKind::Constant
                 } else {
                     SymbolKind::Variable
                 };
 
+                let scope_id = self.table.current_scope;
                 self.table.define(name.clone(), Symbol {
                     name: name.clone(),
                     kind,
                     node_id: node.id,
                     span: node.location.span,
                     type_info: var_type.clone(),
+                    references: Vec::new(),
+                    scope_id,
                 });
 
                 // Visit initializer if present
@@ -331,6 +392,25 @@ mod tests {
         }
     }
 
+    fn create_test_symbol(name: &str, kind: SymbolKind, node_id: NodeId, type_info: Option<String>, scope_id: usize) -> Symbol {
+        Symbol {
+            name: name.to_string(),
+            kind,
+            node_id,
+            span: Span {
+                start_line: 1,
+                start_column: 0,
+                end_line: 1,
+                end_column: name.len(),
+                start_byte: 0,
+                end_byte: name.len(),
+            },
+            type_info,
+            references: Vec::new(),
+            scope_id,
+        }
+    }
+
     #[test]
     fn test_basic_symbol_table() {
         let mut table = SymbolTable::new();
@@ -349,6 +429,8 @@ mod tests {
                 end_byte: 1,
             },
             type_info: Some("number".to_string()),
+            references: Vec::new(),
+            scope_id: 0,
         });
 
         // Lookup the variable
@@ -361,39 +443,13 @@ mod tests {
         let mut table = SymbolTable::new();
 
         // Define in global scope
-        table.define("global".to_string(), Symbol {
-            name: "global".to_string(),
-            kind: SymbolKind::Variable,
-            node_id: 1,
-            span: Span {
-                start_line: 1,
-                start_column: 0,
-                end_line: 1,
-                end_column: 6,
-                start_byte: 0,
-                end_byte: 6,
-            },
-            type_info: None,
-        });
+        table.define("global".to_string(), create_test_symbol("global", SymbolKind::Variable, 1, None, 0));
 
         // Enter nested scope
         table.enter_scope();
 
         // Define in nested scope
-        table.define("local".to_string(), Symbol {
-            name: "local".to_string(),
-            kind: SymbolKind::Variable,
-            node_id: 2,
-            span: Span {
-                start_line: 2,
-                start_column: 0,
-                end_line: 2,
-                end_column: 5,
-                start_byte: 10,
-                end_byte: 15,
-            },
-            type_info: None,
-        });
+        table.define("local".to_string(), create_test_symbol("local", SymbolKind::Variable, 2, None, 1));
 
         // Both should be visible in nested scope
         assert!(table.is_defined("global"));
@@ -412,39 +468,13 @@ mod tests {
         let mut table = SymbolTable::new();
 
         // Define in global scope
-        table.define("x".to_string(), Symbol {
-            name: "x".to_string(),
-            kind: SymbolKind::Variable,
-            node_id: 1,
-            span: Span {
-                start_line: 1,
-                start_column: 0,
-                end_line: 1,
-                end_column: 1,
-                start_byte: 0,
-                end_byte: 1,
-            },
-            type_info: Some("string".to_string()),
-        });
+        table.define("x".to_string(), create_test_symbol("x", SymbolKind::Variable, 1, Some("string".to_string()), 0));
 
         // Enter nested scope
         table.enter_scope();
 
         // Shadow with different type
-        table.define("x".to_string(), Symbol {
-            name: "x".to_string(),
-            kind: SymbolKind::Variable,
-            node_id: 2,
-            span: Span {
-                start_line: 2,
-                start_column: 0,
-                end_line: 2,
-                end_column: 1,
-                start_byte: 10,
-                end_byte: 11,
-            },
-            type_info: Some("number".to_string()),
-        });
+        table.define("x".to_string(), create_test_symbol("x", SymbolKind::Variable, 2, Some("number".to_string()), 1));
 
         // Should resolve to the shadowed version
         assert_eq!(table.lookup_type("x"), Some("number".to_string()));
@@ -463,8 +493,25 @@ mod tests {
             1,
             AstNodeKind::FunctionDeclaration {
                 name: "add".to_string(),
-                parameters: vec!["a".to_string(), "b".to_string()],
+                parameters: vec![
+                    kodecd_parser::Parameter {
+                        name: "a".to_string(),
+                        param_type: None,
+                        default_value: None,
+                        is_optional: false,
+                        is_rest: false,
+                    },
+                    kodecd_parser::Parameter {
+                        name: "b".to_string(),
+                        param_type: None,
+                        default_value: None,
+                        is_optional: false,
+                        is_rest: false,
+                    },
+                ],
                 return_type: Some("number".to_string()),
+                is_async: false,
+                is_generator: false,
             },
             create_test_location(),
             "function add(a, b) { ... }".to_string(),
@@ -477,6 +524,7 @@ mod tests {
                 name: "sum".to_string(),
                 var_type: Some("number".to_string()),
                 is_const: false,
+                initializer: None,
             },
             create_test_location(),
             "let sum = a + b".to_string(),
@@ -510,6 +558,7 @@ mod tests {
                 name: "MyClass".to_string(),
                 extends: None,
                 implements: vec![],
+                is_abstract: false,
             },
             create_test_location(),
             "class MyClass { ... }".to_string(),
@@ -522,6 +571,9 @@ mod tests {
                 parameters: vec![],
                 return_type: None,
                 visibility: kodecd_parser::ast::Visibility::Public,
+                is_static: false,
+                is_async: false,
+                is_abstract: false,
             },
             create_test_location(),
             "method() { }".to_string(),
@@ -553,6 +605,7 @@ mod tests {
                 name: "x".to_string(),
                 var_type: None,
                 is_const: false,
+                initializer: Some("1".to_string()),
             },
             create_test_location(),
             "let x = 1".to_string(),
@@ -572,6 +625,7 @@ mod tests {
                 name: "y".to_string(),
                 var_type: None,
                 is_const: false,
+                initializer: None,
             },
             create_test_location(),
             "let y = 2".to_string(),
@@ -591,50 +645,9 @@ mod tests {
         let mut table = SymbolTable::new();
 
         // Add various symbols
-        table.define("func".to_string(), Symbol {
-            name: "func".to_string(),
-            kind: SymbolKind::Function,
-            node_id: 1,
-            span: Span {
-                start_line: 1,
-                start_column: 0,
-                end_line: 1,
-                end_column: 4,
-                start_byte: 0,
-                end_byte: 4,
-            },
-            type_info: None,
-        });
-
-        table.define("var".to_string(), Symbol {
-            name: "var".to_string(),
-            kind: SymbolKind::Variable,
-            node_id: 2,
-            span: Span {
-                start_line: 2,
-                start_column: 0,
-                end_line: 2,
-                end_column: 3,
-                start_byte: 10,
-                end_byte: 13,
-            },
-            type_info: None,
-        });
-
-        table.define("const".to_string(), Symbol {
-            name: "const".to_string(),
-            kind: SymbolKind::Constant,
-            node_id: 3,
-            span: Span {
-                start_line: 3,
-                start_column: 0,
-                end_line: 3,
-                end_column: 5,
-                start_byte: 20,
-                end_byte: 25,
-            },
-            type_info: None,
-        });
+        table.define("func".to_string(), create_test_symbol("func", SymbolKind::Function, 1, None, 0));
+        table.define("var".to_string(), create_test_symbol("var", SymbolKind::Variable, 2, None, 0));
+        table.define("const".to_string(), create_test_symbol("const", SymbolKind::Constant, 3, None, 0));
 
         let functions = table.symbols_of_kind(SymbolKind::Function);
         assert_eq!(functions.len(), 1);
@@ -643,5 +656,94 @@ mod tests {
         let variables = table.symbols_of_kind(SymbolKind::Variable);
         assert_eq!(variables.len(), 1);
         assert_eq!(variables[0].name, "var");
+    }
+
+    #[test]
+    fn test_reference_tracking() {
+        let mut table = SymbolTable::new();
+
+        // Define a variable
+        table.define("x".to_string(), create_test_symbol("x", SymbolKind::Variable, 1, Some("number".to_string()), 0));
+
+        // Add references
+        assert!(table.add_reference("x", 2));
+        assert!(table.add_reference("x", 3));
+        assert!(table.add_reference("x", 4));
+
+        // Check references
+        let refs = table.get_references("x").unwrap();
+        assert_eq!(refs.len(), 3);
+        assert_eq!(refs, &[2, 3, 4]);
+
+        // Try to add reference to undefined variable
+        assert!(!table.add_reference("undefined", 5));
+    }
+
+    #[test]
+    fn test_reference_resolution() {
+        let mut table = SymbolTable::new();
+
+        // Define in outer scope
+        table.define("x".to_string(), create_test_symbol("x", SymbolKind::Variable, 1, Some("string".to_string()), 0));
+
+        // Enter nested scope
+        table.enter_scope();
+
+        // Resolve reference from nested scope
+        let (symbol, scope_id) = table.resolve_reference("x").unwrap();
+        assert_eq!(symbol.name, "x");
+        assert_eq!(symbol.type_info, Some("string".to_string()));
+        assert_eq!(scope_id, 0); // Defined in global scope
+
+        // Define shadowing variable
+        table.define("x".to_string(), create_test_symbol("x", SymbolKind::Variable, 2, Some("number".to_string()), 1));
+
+        // Should now resolve to the shadowing variable
+        let (symbol, scope_id) = table.resolve_reference("x").unwrap();
+        assert_eq!(symbol.type_info, Some("number".to_string()));
+        assert_eq!(scope_id, 1); // Defined in nested scope
+
+        table.exit_scope();
+
+        // Back to outer scope, should resolve to original
+        let (symbol, scope_id) = table.resolve_reference("x").unwrap();
+        assert_eq!(symbol.type_info, Some("string".to_string()));
+        assert_eq!(scope_id, 0);
+    }
+
+    #[test]
+    fn test_cross_scope_references() {
+        let mut table = SymbolTable::new();
+
+        // Define in global scope
+        table.define("global_var".to_string(), create_test_symbol("global_var", SymbolKind::Variable, 1, None, 0));
+
+        // Enter function scope
+        table.enter_scope();
+
+        // Add reference from function scope
+        assert!(table.add_reference("global_var", 10));
+
+        // Enter block scope
+        table.enter_scope();
+
+        // Add reference from block scope
+        assert!(table.add_reference("global_var", 20));
+
+        // Exit to function scope
+        table.exit_scope();
+
+        // Add another reference from function scope
+        assert!(table.add_reference("global_var", 30));
+
+        // Exit to global scope
+        table.exit_scope();
+
+        // Check all references were tracked
+        let refs = table.get_references("global_var").unwrap();
+        assert_eq!(refs.len(), 3);
+        assert!(refs.contains(&10));
+        assert!(refs.contains(&20));
+        assert!(refs.contains(&30));
     }
 }

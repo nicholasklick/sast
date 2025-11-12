@@ -8,6 +8,25 @@ use std::fmt;
 /// Unique identifier for AST nodes
 pub type NodeId = usize;
 
+/// Represents a function/method parameter
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Parameter {
+    pub name: String,
+    pub param_type: Option<String>,
+    pub default_value: Option<String>,
+    pub is_optional: bool,
+    pub is_rest: bool,  // ...args
+}
+
+/// Represents an import specifier (import { X as Y } from 'module')
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportSpecifier {
+    pub imported: String,  // Original name in module
+    pub local: String,     // Local name in current file
+    pub is_namespace: bool, // import * as X
+    pub is_default: bool,   // import X
+}
+
 /// Represents a location in source code
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Location {
@@ -106,27 +125,43 @@ pub enum AstNodeKind {
     // Declarations
     FunctionDeclaration {
         name: String,
-        parameters: Vec<String>,
+        parameters: Vec<Parameter>,
         return_type: Option<String>,
+        is_async: bool,
+        is_generator: bool,
     },
     ClassDeclaration {
         name: String,
         extends: Option<String>,
         implements: Vec<String>,
+        is_abstract: bool,
     },
     MethodDeclaration {
         name: String,
-        parameters: Vec<String>,
+        parameters: Vec<Parameter>,
         return_type: Option<String>,
         visibility: Visibility,
+        is_static: bool,
+        is_async: bool,
+        is_abstract: bool,
     },
     VariableDeclaration {
         name: String,
         var_type: Option<String>,
         is_const: bool,
+        initializer: Option<String>,
     },
     InterfaceDeclaration {
         name: String,
+        extends: Vec<String>,
+    },
+    TypeAlias {
+        name: String,
+        type_definition: String,
+    },
+    EnumDeclaration {
+        name: String,
+        members: Vec<String>,
     },
 
     // Statements
@@ -150,10 +185,13 @@ pub enum AstNodeKind {
     CallExpression {
         callee: String,
         arguments_count: usize,
+        is_optional_chain: bool,  // obj?.method()
     },
     MemberExpression {
         object: String,
         property: String,
+        is_computed: bool,        // obj[prop] vs obj.prop
+        is_optional: bool,        // obj?.prop
     },
     Identifier {
         name: String,
@@ -164,10 +202,39 @@ pub enum AstNodeKind {
     AssignmentExpression {
         operator: String,
     },
+    ArrowFunction {
+        parameters: Vec<Parameter>,
+        return_type: Option<String>,
+        is_async: bool,
+    },
+    ObjectExpression {
+        properties: Vec<String>,
+    },
+    ArrayExpression {
+        elements_count: usize,
+    },
+    AwaitExpression,
+    YieldExpression {
+        is_delegate: bool,  // yield*
+    },
+    TemplateString {
+        has_expressions: bool,
+    },
 
     // Special constructs
-    Import {
+    ImportDeclaration {
         source: String,
+        imported_names: Vec<ImportSpecifier>,
+        is_type_only: bool,
+    },
+    ExportDeclaration {
+        exported_names: Vec<String>,
+        is_default: bool,
+        is_type_only: bool,
+    },
+    Decorator {
+        name: String,
+        arguments: Vec<String>,
     },
     Comment {
         is_multiline: bool,

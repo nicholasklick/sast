@@ -374,8 +374,12 @@ impl InterproceduralTaintAnalysis {
 
     fn extract_parameters(&self, func: &AstNode) -> Vec<String> {
         match &func.kind {
-            AstNodeKind::FunctionDeclaration { parameters, .. } => parameters.clone(),
-            AstNodeKind::MethodDeclaration { parameters, .. } => parameters.clone(),
+            AstNodeKind::FunctionDeclaration { parameters, .. } => {
+                parameters.iter().map(|p| p.name.clone()).collect()
+            }
+            AstNodeKind::MethodDeclaration { parameters, .. } => {
+                parameters.iter().map(|p| p.name.clone()).collect()
+            }
             _ => vec![],
         }
     }
@@ -555,8 +559,25 @@ mod tests {
             1,
             AstNodeKind::FunctionDeclaration {
                 name: "test".to_string(),
-                parameters: vec!["a".to_string(), "b".to_string()],
+                parameters: vec![
+                    kodecd_parser::Parameter {
+                        name: "a".to_string(),
+                        param_type: None,
+                        default_value: None,
+                        is_optional: false,
+                        is_rest: false,
+                    },
+                    kodecd_parser::Parameter {
+                        name: "b".to_string(),
+                        param_type: None,
+                        default_value: None,
+                        is_optional: false,
+                        is_rest: false,
+                    },
+                ],
                 return_type: None,
+                is_async: false,
+                is_generator: false,
             },
             test_location(),
             "fn test(a, b) {}".to_string(),

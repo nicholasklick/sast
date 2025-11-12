@@ -156,7 +156,7 @@ pub mod parser;
 pub mod parser_arena;
 pub mod visitor;
 
-pub use ast::{AstNode, AstNodeKind, Location, Span};
+pub use ast::{AstNode, AstNodeKind, Location, Span, Parameter, ImportSpecifier, LiteralValue, Visibility};
 pub use ast_arena::{
     AstNode as ArenaAstNode, AstNodeKind as ArenaAstNodeKind,
     AstArena, Location as ArenaLocation, Span as ArenaSpan, Visibility as ArenaVisibility

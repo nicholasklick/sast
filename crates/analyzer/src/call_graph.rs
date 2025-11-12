@@ -257,7 +257,7 @@ impl CallGraphBuilder {
                 }
             }
 
-            AstNodeKind::MemberExpression { object, property } => {
+            AstNodeKind::MemberExpression { object, property, .. } => {
                 // Check if this is a method call (has a CallExpression parent or is followed by a call)
                 // For now, treat member expressions as potential method calls
                 self.process_method_call(object, property, node);
@@ -532,6 +532,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "helper".to_string(),
                 arguments_count: 0,
+                is_optional_chain: false,
             },
             test_location(),
             "helper()".to_string(),
@@ -543,6 +544,8 @@ mod tests {
                 name: "main".to_string(),
                 parameters: vec![],
                 return_type: None,
+                is_async: false,
+                is_generator: false,
             },
             location: test_location(),
             children: vec![helper_call],
@@ -555,6 +558,8 @@ mod tests {
                 name: "helper".to_string(),
                 parameters: vec![],
                 return_type: None,
+                is_async: false,
+                is_generator: false,
             },
             test_location(),
             "fn helper() {}".to_string(),
@@ -588,6 +593,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "baz".to_string(),
                 arguments_count: 0,
+                is_optional_chain: false,
             },
             test_location(),
             "baz()".to_string(),
@@ -600,6 +606,9 @@ mod tests {
                 parameters: vec![],
                 return_type: None,
                 visibility: kodecd_parser::ast::Visibility::Public,
+                is_static: false,
+                is_async: false,
+                is_abstract: false,
             },
             location: test_location(),
             children: vec![baz_call],
@@ -612,6 +621,7 @@ mod tests {
                 name: "Foo".to_string(),
                 extends: None,
                 implements: vec![],
+                is_abstract: false,
             },
             location: test_location(),
             children: vec![bar_method],
@@ -624,6 +634,8 @@ mod tests {
                 name: "baz".to_string(),
                 parameters: vec![],
                 return_type: None,
+                is_async: false,
+                is_generator: false,
             },
             test_location(),
             "fn baz() {}".to_string(),
@@ -657,6 +669,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "baz".to_string(),
                 arguments_count: 0,
+                is_optional_chain: false,
             },
             test_location(),
             "baz()".to_string(),
@@ -668,6 +681,8 @@ mod tests {
                 name: "foo".to_string(),
                 parameters: vec![],
                 return_type: None,
+                is_async: false,
+                is_generator: false,
             },
             location: test_location(),
             children: vec![baz_call],
@@ -679,6 +694,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "foo".to_string(),
                 arguments_count: 0,
+                is_optional_chain: false,
             },
             test_location(),
             "foo()".to_string(),
@@ -689,6 +705,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "bar".to_string(),
                 arguments_count: 0,
+                is_optional_chain: false,
             },
             test_location(),
             "bar()".to_string(),
@@ -700,6 +717,8 @@ mod tests {
                 name: "main".to_string(),
                 parameters: vec![],
                 return_type: None,
+                is_async: false,
+                is_generator: false,
             },
             location: test_location(),
             children: vec![foo_call, bar_call],
@@ -712,6 +731,8 @@ mod tests {
                 name: "bar".to_string(),
                 parameters: vec![],
                 return_type: None,
+                is_async: false,
+                is_generator: false,
             },
             test_location(),
             "fn bar() {}".to_string(),
@@ -723,6 +744,8 @@ mod tests {
                 name: "baz".to_string(),
                 parameters: vec![],
                 return_type: None,
+                is_async: false,
+                is_generator: false,
             },
             test_location(),
             "fn baz() {}".to_string(),
