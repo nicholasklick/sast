@@ -95,9 +95,9 @@ else
 fi
 
 # Check documentation
-run_test "KQL documentation exists" "test -f KQL_GUIDE.md"
-run_test "Taint documentation exists" "test -f TAINT_ANALYSIS_GUIDE.md"
-run_test "Arena documentation exists" "test -f ARENA_PARSER_COMPLETE.md"
+run_test "KQL documentation exists" "test -f docs/KQL_GUIDE.md"
+run_test "Taint documentation exists" "test -f docs/TAINT_ANALYSIS_GUIDE.md"
+run_test "Arena documentation exists" "test -f docs/ARENA_PARSER_COMPLETE.md"
 
 echo ""
 echo "5. COMPONENT VERIFICATION"

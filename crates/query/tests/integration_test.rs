@@ -1,7 +1,7 @@
 //! Integration tests for KQL parser and executor
 
 use kodecd_analyzer::cfg::CfgBuilder;
-use kodecd_parser::ast::{AstNode, AstNodeKind, Location, Span};
+use kodecd_parser::ast::{AstNode, AstNodeKind, Location, Parameter, Span};
 use kodecd_parser::{Language, LanguageConfig, Parser};
 use kodecd_query::{QueryExecutor, QueryParser};
 use std::path::Path;
@@ -147,7 +147,13 @@ fn test_query_with_and_or_logic() {
     let func = create_test_node(
         AstNodeKind::FunctionDeclaration {
             name: "executeQuery".to_string(),
-            parameters: vec!["sql".to_string()],
+            parameters: vec![Parameter {
+                name: "sql".to_string(),
+                param_type: None,
+                default_value: None,
+                is_optional: false,
+                is_rest: false,
+            }],
             return_type: None,
             is_async: false,
             is_generator: false,

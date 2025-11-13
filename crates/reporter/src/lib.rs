@@ -16,7 +16,7 @@
 //! ### SARIF Output
 //!
 //! ```rust
-//! use kodecd_reporter::{Reporter, ReportFormat};
+//! use kodecd_reporter::{Reporter, ReportFormat, Report};
 //! use kodecd_query::Finding;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,9 +34,9 @@
 //! ];
 //!
 //! // Generate SARIF report
-//! let reporter = Reporter::new(ReportFormat::Sarif);
-//! let output = reporter.generate(&findings)?;
-//! println!("{}", output);
+//! let report = Report::new(findings);
+//! let mut output = Vec::new();
+//! Reporter::write_report(&report, ReportFormat::Sarif, &mut output)?;
 //! # Ok(())
 //! # }
 //! ```
@@ -53,8 +53,8 @@
 //! let report = Report::new(findings);
 //!
 //! // Generate JSON
-//! let reporter = Reporter::new(ReportFormat::Json);
-//! let output = reporter.generate(&report.findings)?;
+//! let mut output = Vec::new();
+//! Reporter::write_report(&report, ReportFormat::Json, &mut output)?;
 //! # Ok(())
 //! # }
 //! ```
@@ -62,15 +62,15 @@
 //! ### Text Output
 //!
 //! ```rust
-//! use kodecd_reporter::{Reporter, ReportFormat};
+//! use kodecd_reporter::{Reporter, ReportFormat, Report};
 //! # use kodecd_query::Finding;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! # let findings = vec![];
 //! // Human-readable output
-//! let reporter = Reporter::new(ReportFormat::Text);
-//! let output = reporter.generate(&findings)?;
-//! println!("{}", output);
+//! let report = Report::new(findings);
+//! let mut output = Vec::new();
+//! Reporter::write_report(&report, ReportFormat::Text, &mut output)?;
 //! # Ok(())
 //! # }
 //! ```
@@ -155,15 +155,16 @@
 //! ## Error Handling
 //!
 //! ```rust
-//! use kodecd_reporter::{Reporter, ReportFormat, ReportError};
+//! use kodecd_reporter::{Reporter, ReportFormat, ReportError, Report};
 //! # use kodecd_query::Finding;
 //!
 //! # fn example() -> Result<(), ReportError> {
 //! # let findings = vec![];
-//! let reporter = Reporter::new(ReportFormat::Sarif);
+//! let report = Report::new(findings);
+//! let mut output = Vec::new();
 //!
-//! match reporter.generate(&findings) {
-//!     Ok(output) => println!("{}", output),
+//! match Reporter::write_report(&report, ReportFormat::Sarif, &mut output) {
+//!     Ok(_) => println!("Report generated"),
 //!     Err(ReportError::IoError(e)) => {
 //!         eprintln!("I/O error: {}", e);
 //!     }

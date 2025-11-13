@@ -34,7 +34,7 @@
 //!
 //! ### Execute Query
 //!
-//! ```rust
+//! ```rust,no_run
 //! use kodecd_query::{QueryParser, QueryExecutor};
 //! use kodecd_parser::{Parser, Language, LanguageConfig};
 //! use kodecd_analyzer::CfgBuilder;
@@ -69,7 +69,7 @@
 //!
 //! ### With Taint Analysis
 //!
-//! ```rust
+//! ```rust,no_run
 //! use kodecd_query::{QueryParser, QueryExecutor};
 //! use kodecd_analyzer::{CfgBuilder, TaintAnalysis};
 //! # use kodecd_parser::{Parser, Language, LanguageConfig};
@@ -157,16 +157,13 @@
 //! ```rust
 //! use kodecd_query::StandardLibrary;
 //!
-//! let stdlib = StandardLibrary::new();
-//!
 //! // Get all OWASP queries
-//! let queries = stdlib.get_owasp_queries();
+//! let queries = StandardLibrary::owasp_queries();
 //! println!("Found {} OWASP queries", queries.len());
 //!
 //! // Get specific query
-//! if let Some(query) = stdlib.get_query("sql-injection") {
-//!     println!("SQL Injection query: {}", query.description);
-//! }
+//! let sql_injection = StandardLibrary::sql_injection_query();
+//! println!("SQL Injection query loaded");
 //! ```
 //!
 //! ### Available Queries

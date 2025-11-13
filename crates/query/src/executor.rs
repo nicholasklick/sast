@@ -638,6 +638,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "eval".to_string(),
                 arguments_count: 1,
+                is_optional_chain: false,
             },
             "eval(x)",
         );
@@ -648,6 +649,8 @@ mod tests {
                 name: "myFunc".to_string(),
                 parameters: vec![],
                 return_type: None,
+                is_async: false,
+                is_generator: false,
             },
             "function myFunc() {}",
         );
@@ -660,6 +663,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "eval".to_string(),
                 arguments_count: 2,
+                is_optional_chain: false,
             },
             "eval(x, y)",
         );
@@ -680,6 +684,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "eval".to_string(),
                 arguments_count: 1,
+                is_optional_chain: false,
             },
             "eval(x)",
         );
@@ -698,6 +703,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "eval".to_string(),
                 arguments_count: 1,
+                is_optional_chain: false,
             },
             "eval(x)",
         );
@@ -719,6 +725,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "eval".to_string(),
                 arguments_count: 1,
+                is_optional_chain: false,
             },
             "eval(x)",
         );
@@ -744,6 +751,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "eval".to_string(),
                 arguments_count: 1,
+                is_optional_chain: false,
             },
             "eval(x)",
         );
@@ -779,6 +787,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "eval".to_string(),
                 arguments_count: 1,
+                is_optional_chain: false,
             },
             "eval(x)",
         );
@@ -814,6 +823,7 @@ mod tests {
             AstNodeKind::CallExpression {
                 callee: "eval".to_string(),
                 arguments_count: 1,
+                is_optional_chain: false,
             },
             "eval(x)",
         );
@@ -841,7 +851,8 @@ mod tests {
             &EntityType::MethodCall,
             &AstNodeKind::CallExpression {
                 callee: "test".to_string(),
-                arguments_count: 0
+                arguments_count: 0,
+                is_optional_chain: false,
             }
         ));
 
@@ -850,7 +861,9 @@ mod tests {
             &AstNodeKind::FunctionDeclaration {
                 name: "test".to_string(),
                 parameters: vec![],
-                return_type: None
+                return_type: None,
+                is_async: false,
+                is_generator: false,
             }
         ));
 
