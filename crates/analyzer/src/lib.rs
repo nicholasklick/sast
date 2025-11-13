@@ -12,6 +12,7 @@
 //! - **Call Graph**: Function call relationship tracking
 //! - **Symbol Table**: Scope-aware symbol tracking
 //! - **Points-to Analysis**: Determine what memory locations pointers may reference
+//! - **Symbolic Execution**: Path-sensitive analysis with constraint solving
 //!
 //! ## Quick Start
 //!
@@ -156,6 +157,49 @@
 //! # }
 //! ```
 //!
+//! ### Symbolic Execution
+//!
+//! ```rust
+//! use kodecd_analyzer::SymbolicExecutorBuilder;
+//! # use kodecd_parser::{AstNode, AstNodeKind, Location, Span};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! # let program = AstNode {
+//! #     id: 0,
+//! #     kind: AstNodeKind::Program,
+//! #     location: Location {
+//! #         file_path: "test.js".to_string(),
+//! #         span: Span {
+//! #             start_line: 1, start_column: 0,
+//! #             end_line: 1, end_column: 10,
+//! #             start_byte: 0, end_byte: 10,
+//! #         },
+//! #     },
+//! #     children: Vec::new(),
+//! #     text: String::new(),
+//! # };
+//! // Execute program symbolically
+//! let executor = SymbolicExecutorBuilder::new()
+//!     .with_max_depth(50)
+//!     .with_max_paths(100)
+//!     .build();
+//!
+//! let result = executor.execute(&program);
+//!
+//! // Analyze explored paths
+//! println!("Explored {} paths", result.paths.len());
+//! for path in &result.paths {
+//!     println!("Path has {} constraints", path.constraints.len());
+//! }
+//!
+//! // Get statistics
+//! println!("Completed: {}/{} paths",
+//!     result.stats.completed_paths,
+//!     result.stats.total_paths);
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! ## Architecture
 //!
 //! The analyzer is built on several core components:
@@ -198,6 +242,14 @@
 //! - **Constraint-based**: Address-of, copy, load, store constraints
 //! - **Alias Analysis**: Determine if two pointers may point to same location
 //! - **Applications**: Improves taint analysis, call graph refinement
+//!
+//! ### Symbolic Execution
+//!
+//! Explores program paths by treating inputs as symbolic values:
+//! - **Path Exploration**: Systematic exploration of execution paths
+//! - **Constraint Generation**: Tracks path conditions as symbolic constraints
+//! - **Constant Folding**: Simplifies concrete symbolic expressions
+//! - **Applications**: Test generation, bug finding, vulnerability discovery
 //!
 //! ## Default Configurations
 //!
@@ -292,6 +344,7 @@ pub mod symbol_table;
 pub mod call_graph;
 pub mod interprocedural_taint;
 pub mod points_to;
+pub mod symbolic;
 
 pub use cfg::{ControlFlowGraph, CfgNode, CfgEdge, CfgBuilder};
 pub use dataflow::{DataFlowAnalysis, DataFlowDirection, TransferFunction};
@@ -300,3 +353,4 @@ pub use symbol_table::{SymbolTable, SymbolTableBuilder, Symbol, SymbolKind};
 pub use call_graph::{CallGraph, CallGraphBuilder, CallGraphNode, CallEdge, CallableKind};
 pub use interprocedural_taint::{InterproceduralTaintAnalysis, FunctionTaintSummary};
 pub use points_to::{PointsToAnalysis, PointsToAnalysisBuilder, AbstractLocation, PointsToConstraint, PointsToStats};
+pub use symbolic::{SymbolicExecutor, SymbolicExecutorBuilder, SymbolicValue, SymbolicState, ExecutionPath, SymbolicExecutionResult, Constraint, BinaryOperator, UnaryOperator};
