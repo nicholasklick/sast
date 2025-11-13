@@ -25,6 +25,7 @@ pub enum Language {
     CSharp,
     Ruby,
     Php,
+    Swift,
 }
 
 impl Language {
@@ -47,6 +48,7 @@ impl Language {
             "cs" => Ok(Language::CSharp),
             "rb" => Ok(Language::Ruby),
             "php" => Ok(Language::Php),
+            "swift" => Ok(Language::Swift),
             _ => Err(LanguageError::UnsupportedLanguage(extension.to_string())),
         }
     }
@@ -65,6 +67,7 @@ impl Language {
             Language::CSharp => tree_sitter_c_sharp::LANGUAGE.into(),
             Language::Ruby => tree_sitter_ruby::LANGUAGE.into(),
             Language::Php => tree_sitter_php::LANGUAGE_PHP.into(),
+            Language::Swift => tree_sitter_swift::LANGUAGE.into(),
         }
     }
 
@@ -81,6 +84,7 @@ impl Language {
             Language::CSharp => "C#",
             Language::Ruby => "Ruby",
             Language::Php => "PHP",
+            Language::Swift => "Swift",
         }
     }
 
@@ -97,6 +101,7 @@ impl Language {
             Language::CSharp => &["cs"],
             Language::Ruby => &["rb"],
             Language::Php => &["php"],
+            Language::Swift => &["swift"],
         }
     }
 }

@@ -148,6 +148,8 @@ fn analyze_file(
             "typescript" | "ts" => Language::TypeScript,
             "java" => Language::Java,
             "go" => Language::Go,
+            "swift" => Language::Swift,
+            "php" => Language::Php,
             _ => {
                 eprintln!("Unsupported language: {}", lang_str);
                 std::process::exit(1);
