@@ -16,7 +16,7 @@ use parallel::ParallelAnalyzer;
 
 use kodecd_analyzer::{CallGraphBuilder, CfgBuilder, InterproceduralTaintAnalysis, SymbolTableBuilder};
 use kodecd_parser::{Language, LanguageConfig};
-use kodecd_query::{QueryExecutor, QueryParser, StandardLibrary};
+use kodecd_query::{QueryExecutor, QueryParser, ExtendedStandardLibrary, QuerySuite};
 use kodecd_reporter::{Report, ReportFormat, Reporter};
 
 #[derive(ClapParser)]
@@ -71,6 +71,10 @@ enum Commands {
         /// Output file (defaults to stdout)
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Query suite (default, extended, quality)
+        #[arg(short = 's', long, default_value = "default")]
+        suite: String,
     },
 
     /// Show available built-in queries
@@ -108,9 +112,9 @@ fn main() -> Result<()> {
             analyze_file(&path, &format, output.as_deref(), language, query)?
         }
 
-        Commands::Scan { path, format, output } => {
+        Commands::Scan { path, format, output, suite } => {
             info!("Scanning with built-in queries: {}", path.display());
-            scan_with_builtin(&path, &format, output.as_deref())?
+            scan_with_builtin(&path, &format, output.as_deref(), &suite)?
         }
 
         Commands::ListQueries => {
@@ -195,8 +199,13 @@ fn analyze_file(
         let query_source = std::fs::read_to_string(query_path)?;
         QueryParser::parse(&query_source)?
     } else {
-        // Use a default query
-        StandardLibrary::sql_injection_query()
+        // Use a default SQL injection query from extended library
+        let library = ExtendedStandardLibrary::new();
+        if let Some((query, _)) = library.get("js/sql-injection") {
+            query.clone()
+        } else {
+            anyhow::bail!("Default query not found");
+        }
     };
 
     // Execute query
@@ -227,20 +236,23 @@ fn analyze_file(
     }
 }
 
-fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>) -> Result<i32> {
+fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>, suite_str: &str) -> Result<i32> {
+    // Parse query suite
+    let suite = parse_suite(suite_str);
+
     // Check if path is a file or directory
     if path.is_file() {
         // Single file analysis (original behavior)
-        scan_single_file(path, format_str, output)
+        scan_single_file(path, format_str, output, suite)
     } else if path.is_dir() {
         // Multi-file analysis (new behavior)
-        scan_directory(path, format_str, output)
+        scan_directory(path, format_str, output, suite)
     } else {
         anyhow::bail!("Path is neither a file nor directory: {}", path.display());
     }
 }
 
-fn scan_single_file(path: &PathBuf, format_str: &str, output: Option<&Path>) -> Result<i32> {
+fn scan_single_file(path: &PathBuf, format_str: &str, output: Option<&Path>, suite: QuerySuite) -> Result<i32> {
     let lang = Language::from_path(path)?;
     let config = LanguageConfig::new(lang);
     let parser = kodecd_parser::Parser::new(config, path);
@@ -271,18 +283,22 @@ fn scan_single_file(path: &PathBuf, format_str: &str, output: Option<&Path>) -> 
 
     info!("Interprocedural analysis found {} vulnerabilities", taint_results.vulnerabilities.len());
 
-    // Run all built-in queries
+    // Run all built-in queries from the extended library
+    let library = ExtendedStandardLibrary::new();
+    let queries = library.get_suite(suite);
     let mut all_findings = Vec::new();
 
-    for (name, query) in StandardLibrary::owasp_queries() {
-        info!("Running query: {}", name);
+    info!("Running {} queries from {} suite", queries.len(), suite_name(suite));
+
+    for (query_id, query, metadata) in queries {
+        info!("Running query: {} - {}", query_id, metadata.name);
         let result = QueryExecutor::execute(&query, &ast, &cfg, Some(&taint_results));
 
-        // Update findings with proper rule_id and category
+        // Update findings with metadata
         for mut finding in result.findings {
-            finding.rule_id = name.to_string();
-            finding.category = categorize_rule(name);
-            finding.severity = determine_severity(name);
+            finding.rule_id = query_id.to_string();
+            finding.category = metadata.category.as_str().to_string();
+            finding.severity = metadata.severity.as_str().to_string();
             all_findings.push(finding);
         }
     }
@@ -309,7 +325,7 @@ fn scan_single_file(path: &PathBuf, format_str: &str, output: Option<&Path>) -> 
     }
 }
 
-fn scan_directory(path: &PathBuf, format_str: &str, output: Option<&Path>) -> Result<i32> {
+fn scan_directory(path: &PathBuf, format_str: &str, output: Option<&Path>, suite: QuerySuite) -> Result<i32> {
     info!("Starting multi-file analysis on directory: {}", path.display());
 
     // Discover all source files
@@ -323,10 +339,16 @@ fn scan_directory(path: &PathBuf, format_str: &str, output: Option<&Path>) -> Re
 
     info!("Found {} source files to analyze", source_files.len());
 
+    // Get queries from extended library
+    let library = ExtendedStandardLibrary::new();
+    let suite_queries = library.get_suite(suite);
+
+    info!("Using {} queries from {} suite", suite_queries.len(), suite_name(suite));
+
     // Prepare queries with categorization
-    let queries: Vec<(String, kodecd_query::Query)> = StandardLibrary::owasp_queries()
+    let queries: Vec<(String, kodecd_query::Query)> = suite_queries
         .into_iter()
-        .map(|(name, query)| (name.to_string(), query))
+        .map(|(id, query, _metadata)| (id.to_string(), query.clone()))
         .collect();
 
     // Run parallel analysis
@@ -372,13 +394,43 @@ fn scan_directory(path: &PathBuf, format_str: &str, output: Option<&Path>) -> Re
 }
 
 fn list_queries() {
-    println!("\nAvailable Built-in Queries:");
-    println!("{}", "=".repeat(50));
+    let library = ExtendedStandardLibrary::new();
+    let all_queries = library.all_metadata();
 
-    for (name, _) in StandardLibrary::owasp_queries() {
-        println!("  - {}", name);
+    println!("\nKodeCD Extended Query Library");
+    println!("{}", "=".repeat(70));
+    println!("Total Queries: {}", all_queries.len());
+    println!();
+
+    // Group by category
+    use std::collections::BTreeMap;
+    let mut by_category: BTreeMap<String, Vec<_>> = BTreeMap::new();
+
+    for metadata in all_queries {
+        by_category
+            .entry(metadata.category.as_str().to_string())
+            .or_insert_with(Vec::new)
+            .push(metadata);
     }
 
+    for (category, queries) in by_category {
+        println!("{}:", category);
+        for metadata in queries {
+            println!("  {} - {} [{}]",
+                metadata.id,
+                metadata.name,
+                metadata.severity.as_str()
+            );
+        }
+        println!();
+    }
+
+    println!("Query Suites:");
+    println!("  default          - High precision, critical/high severity (~40 queries)");
+    println!("  extended         - Broader coverage, includes medium severity (~70 queries)");
+    println!("  quality          - Complete coverage including code quality (100+ queries)");
+    println!();
+    println!("Usage: kodecd-sast scan <path> --suite <suite>");
     println!();
 }
 
@@ -400,6 +452,26 @@ fn parse_format(format_str: &str) -> ReportFormat {
         "json" => ReportFormat::Json,
         "text" => ReportFormat::Text,
         _ => ReportFormat::Text,
+    }
+}
+
+fn parse_suite(suite_str: &str) -> QuerySuite {
+    match suite_str.to_lowercase().as_str() {
+        "default" => QuerySuite::Default,
+        "extended" | "security-extended" => QuerySuite::SecurityExtended,
+        "quality" | "security-and-quality" => QuerySuite::SecurityAndQuality,
+        _ => {
+            eprintln!("Unknown suite '{}', using 'default'", suite_str);
+            QuerySuite::Default
+        }
+    }
+}
+
+fn suite_name(suite: QuerySuite) -> &'static str {
+    match suite {
+        QuerySuite::Default => "default",
+        QuerySuite::SecurityExtended => "security-extended",
+        QuerySuite::SecurityAndQuality => "security-and-quality",
     }
 }
 
