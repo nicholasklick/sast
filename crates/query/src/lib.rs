@@ -11,7 +11,9 @@
 //! - **Comparison Operators**: `==`, `!=`, `CONTAINS`, `STARTS_WITH`, `ENDS_WITH`, `MATCHES`
 //! - **Logical Operators**: `AND`, `OR`, `NOT`
 //! - **Taint Analysis Integration**: `.isTainted()` method
-//! - **Standard Library**: 12 built-in OWASP Top 10 queries
+//! - **Standard Library**: 100+ built-in security queries
+//! - **Query Metadata**: CWE mappings, severity levels, OWASP/SANS coverage
+//! - **Query Suites**: Default, security-extended, security-and-quality
 //!
 //! ## Quick Start
 //!
@@ -292,9 +294,16 @@ pub mod executor;
 pub mod lexer;
 pub mod parser;
 pub mod stdlib;
+pub mod metadata;
+pub mod extended_stdlib;
 
 pub use ast::{Query, QueryAst, Predicate};
 pub use executor::{QueryExecutor, QueryResult, Finding};
 pub use lexer::{Token, Lexer};
 pub use parser::{QueryParser, ParseError};
 pub use stdlib::StandardLibrary;
+pub use metadata::{
+    QueryMetadata, QueryMetadataBuilder, QueryCategory, QuerySeverity,
+    QueryPrecision, QuerySuite, QueryRegistry, QueryRegistryStats
+};
+pub use extended_stdlib::ExtendedStandardLibrary;

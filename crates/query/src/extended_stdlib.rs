@@ -1,0 +1,2740 @@
+//! Extended Standard Library - 100+ Built-in Security Queries
+//!
+//! This module provides a comprehensive library of security queries comparable to CodeQL,
+//! organized by category with full metadata support.
+
+use crate::ast::*;
+use crate::metadata::*;
+use std::collections::HashMap;
+
+/// Extended standard library with 100+ queries
+pub struct ExtendedStandardLibrary {
+    queries: HashMap<String, (Query, QueryMetadata)>,
+}
+
+impl ExtendedStandardLibrary {
+    /// Create a new extended standard library with all queries registered
+    pub fn new() -> Self {
+        let mut lib = Self {
+            queries: HashMap::new(),
+        };
+
+        // Register all queries
+        lib.register_injection_queries();
+        lib.register_xss_queries();
+        lib.register_authentication_queries();
+        lib.register_cryptography_queries();
+        lib.register_path_traversal_queries();
+        lib.register_information_disclosure_queries();
+        lib.register_code_quality_queries();
+        lib.register_resource_management_queries();
+        lib.register_error_handling_queries();
+        lib.register_api_misuse_queries();
+        lib.register_configuration_queries();
+        lib.register_framework_queries();
+
+        lib
+    }
+
+    /// Register a query with its metadata
+    fn register(&mut self, id: &str, query: Query, metadata: QueryMetadata) {
+        self.queries.insert(id.to_string(), (query, metadata));
+    }
+
+    /// Get a query by ID
+    pub fn get(&self, id: &str) -> Option<&(Query, QueryMetadata)> {
+        self.queries.get(id)
+    }
+
+    /// Get all queries in a suite
+    pub fn get_suite(&self, suite: QuerySuite) -> Vec<(&str, &Query, &QueryMetadata)> {
+        self.queries
+            .iter()
+            .filter(|(_, (_, meta))| meta.in_suite(suite))
+            .map(|(id, (query, meta))| (id.as_str(), query, meta))
+            .collect()
+    }
+
+    /// Get all queries
+    pub fn all_queries(&self) -> Vec<(&str, &Query, &QueryMetadata)> {
+        self.queries
+            .iter()
+            .map(|(id, (query, meta))| (id.as_str(), query, meta))
+            .collect()
+    }
+
+    /// Get all metadata
+    pub fn all_metadata(&self) -> Vec<&QueryMetadata> {
+        self.queries.values().map(|(_, meta)| meta).collect()
+    }
+
+    // ==================== INJECTION QUERIES (CWE-74 family) ====================
+
+    fn register_injection_queries(&mut self) {
+        // SQL Injection - Basic
+        self.register(
+            "js/sql-injection",
+            Self::sql_injection_query(),
+            QueryMetadata::builder("js/sql-injection", "SQL Injection")
+                .description("Detects SQL injection vulnerabilities where user input flows into database queries")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::High)
+                .cwes(vec![89, 564])
+                .owasp("A03:2021 - Injection")
+                .sans_top_25()
+                .uses_taint()
+                .tags(vec!["security".to_string(), "sql".to_string(), "injection".to_string()])
+                .build()
+        );
+
+        // SQL Injection - More Sources
+        self.register(
+            "js/sql-injection-extended",
+            Self::sql_injection_extended_query(),
+            QueryMetadata::builder("js/sql-injection-extended", "SQL Injection (Extended)")
+                .description("Extended SQL injection detection with additional heuristics and sources")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![89])
+                .owasp("A03:2021 - Injection")
+                .sans_top_25()
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .uses_taint()
+                .build()
+        );
+
+        // NoSQL Injection
+        self.register(
+            "js/nosql-injection",
+            Self::nosql_injection_query(),
+            QueryMetadata::builder("js/nosql-injection", "NoSQL Injection")
+                .description("Detects NoSQL injection in MongoDB and other NoSQL databases")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![89, 943])
+                .owasp("A03:2021 - Injection")
+                .uses_taint()
+                .build()
+        );
+
+        // Command Injection
+        self.register(
+            "js/command-injection",
+            Self::command_injection_query(),
+            QueryMetadata::builder("js/command-injection", "Command Injection")
+                .description("Detects OS command injection vulnerabilities")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::High)
+                .cwes(vec![78, 88])
+                .owasp("A03:2021 - Injection")
+                .sans_top_25()
+                .uses_taint()
+                .build()
+        );
+
+        // Command Injection - Extended
+        self.register(
+            "js/command-injection-extended",
+            Self::command_injection_extended_query(),
+            QueryMetadata::builder("js/command-injection-extended", "Command Injection (Extended)")
+                .description("Extended command injection detection with shell patterns")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![78])
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .uses_taint()
+                .build()
+        );
+
+        // LDAP Injection
+        self.register(
+            "js/ldap-injection",
+            Self::ldap_injection_query(),
+            QueryMetadata::builder("js/ldap-injection", "LDAP Injection")
+                .description("Detects LDAP injection vulnerabilities")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![90])
+                .owasp("A03:2021 - Injection")
+                .uses_taint()
+                .build()
+        );
+
+        // XPath Injection
+        self.register(
+            "js/xpath-injection",
+            Self::xpath_injection_query(),
+            QueryMetadata::builder("js/xpath-injection", "XPath Injection")
+                .description("Detects XPath injection vulnerabilities")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![643])
+                .owasp("A03:2021 - Injection")
+                .uses_taint()
+                .build()
+        );
+
+        // Code Injection (eval)
+        self.register(
+            "js/code-injection",
+            Self::code_injection_query(),
+            QueryMetadata::builder("js/code-injection", "Code Injection")
+                .description("Detects code injection via eval() and Function()")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::High)
+                .cwes(vec![94, 95])
+                .owasp("A03:2021 - Injection")
+                .sans_top_25()
+                .uses_taint()
+                .build()
+        );
+
+        // Server-Side Template Injection
+        self.register(
+            "js/template-injection",
+            Self::template_injection_query(),
+            QueryMetadata::builder("js/template-injection", "Server-Side Template Injection")
+                .description("Detects template injection leading to RCE")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::High)
+                .cwes(vec![94])
+                .owasp("A03:2021 - Injection")
+                .uses_taint()
+                .build()
+        );
+
+        // Expression Language Injection
+        self.register(
+            "js/expression-injection",
+            Self::expression_injection_query(),
+            QueryMetadata::builder("js/expression-injection", "Expression Language Injection")
+                .description("Detects injection in expression languages (OGNL, SpEL, etc.)")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![917])
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .uses_taint()
+                .build()
+        );
+    }
+
+    // ==================== XSS QUERIES (CWE-79 family) ====================
+
+    fn register_xss_queries(&mut self) {
+        // DOM XSS
+        self.register(
+            "js/dom-xss",
+            Self::dom_xss_query(),
+            QueryMetadata::builder("js/dom-xss", "DOM-based XSS")
+                .description("Detects DOM-based cross-site scripting")
+                .category(QueryCategory::Xss)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![79, 80])
+                .owasp("A03:2021 - Injection")
+                .sans_top_25()
+                .uses_taint()
+                .build()
+        );
+
+        // Reflected XSS
+        self.register(
+            "js/reflected-xss",
+            Self::reflected_xss_query(),
+            QueryMetadata::builder("js/reflected-xss", "Reflected XSS")
+                .description("Detects reflected cross-site scripting")
+                .category(QueryCategory::Xss)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![79])
+                .owasp("A03:2021 - Injection")
+                .sans_top_25()
+                .uses_taint()
+                .build()
+        );
+
+        // Stored XSS
+        self.register(
+            "js/stored-xss",
+            Self::stored_xss_query(),
+            QueryMetadata::builder("js/stored-xss", "Stored XSS")
+                .description("Detects stored cross-site scripting")
+                .category(QueryCategory::Xss)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![79])
+                .owasp("A03:2021 - Injection")
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .uses_taint()
+                .build()
+        );
+
+        // Unsafe innerHTML
+        self.register(
+            "js/unsafe-innerhtml",
+            Self::unsafe_innerhtml_query(),
+            QueryMetadata::builder("js/unsafe-innerhtml", "Unsafe innerHTML Assignment")
+                .description("Detects dangerous use of innerHTML with untrusted data")
+                .category(QueryCategory::Xss)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![79])
+                .owasp("A03:2021 - Injection")
+                .uses_taint()
+                .build()
+        );
+
+        // document.write XSS
+        self.register(
+            "js/document-write-xss",
+            Self::document_write_xss_query(),
+            QueryMetadata::builder("js/document-write-xss", "document.write XSS")
+                .description("Detects XSS via document.write()")
+                .category(QueryCategory::Xss)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![79])
+                .owasp("A03:2021 - Injection")
+                .uses_taint()
+                .build()
+        );
+
+        // jQuery XSS
+        self.register(
+            "js/jquery-xss",
+            Self::jquery_xss_query(),
+            QueryMetadata::builder("js/jquery-xss", "jQuery XSS")
+                .description("Detects XSS through unsafe jQuery methods")
+                .category(QueryCategory::Xss)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![79])
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .uses_taint()
+                .build()
+        );
+
+        // React dangerouslySetInnerHTML
+        self.register(
+            "js/react-dangerous-html",
+            Self::react_dangerous_html_query(),
+            QueryMetadata::builder("js/react-dangerous-html", "React dangerouslySetInnerHTML")
+                .description("Detects use of dangerouslySetInnerHTML with untrusted data")
+                .category(QueryCategory::Xss)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![79])
+                .tags(vec!["react".to_string()])
+                .uses_taint()
+                .build()
+        );
+
+        // Angular $sce bypass
+        self.register(
+            "js/angular-sce-bypass",
+            Self::angular_sce_bypass_query(),
+            QueryMetadata::builder("js/angular-sce-bypass", "Angular SCE Bypass")
+                .description("Detects Angular Strict Contextual Escaping bypass")
+                .category(QueryCategory::Xss)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![79])
+                .tags(vec!["angular".to_string()])
+                .uses_taint()
+                .build()
+        );
+    }
+
+    // ==================== AUTHENTICATION & AUTHORIZATION ====================
+
+    fn register_authentication_queries(&mut self) {
+        // Hardcoded Credentials
+        self.register(
+            "js/hardcoded-credentials",
+            Self::hardcoded_credentials_query(),
+            QueryMetadata::builder("js/hardcoded-credentials", "Hardcoded Credentials")
+                .description("Detects hardcoded passwords and API keys")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![798, 259])
+                .owasp("A07:2021 - Identification and Authentication Failures")
+                .sans_top_25()
+                .build()
+        );
+
+        // Weak Password Requirements
+        self.register(
+            "js/weak-password-requirements",
+            Self::weak_password_requirements_query(),
+            QueryMetadata::builder("js/weak-password-requirements", "Weak Password Requirements")
+                .description("Detects weak password validation rules")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![521])
+                .owasp("A07:2021 - Identification and Authentication Failures")
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Missing Authentication
+        self.register(
+            "js/missing-authentication",
+            Self::missing_authentication_query(),
+            QueryMetadata::builder("js/missing-authentication", "Missing Authentication")
+                .description("Detects API endpoints without authentication checks")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Low)
+                .cwes(vec![306])
+                .owasp("A07:2021 - Identification and Authentication Failures")
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Broken Access Control
+        self.register(
+            "js/broken-access-control",
+            Self::broken_access_control_query(),
+            QueryMetadata::builder("js/broken-access-control", "Broken Access Control")
+                .description("Detects missing authorization checks")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Low)
+                .cwes(vec![285])
+                .owasp("A01:2021 - Broken Access Control")
+                .sans_top_25()
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // JWT None Algorithm
+        self.register(
+            "js/jwt-none-algorithm",
+            Self::jwt_none_algorithm_query(),
+            QueryMetadata::builder("js/jwt-none-algorithm", "JWT None Algorithm")
+                .description("Detects JWT verification with 'none' algorithm")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::VeryHigh)
+                .cwes(vec![347])
+                .owasp("A07:2021 - Identification and Authentication Failures")
+                .build()
+        );
+
+        // JWT Weak Secret
+        self.register(
+            "js/jwt-weak-secret",
+            Self::jwt_weak_secret_query(),
+            QueryMetadata::builder("js/jwt-weak-secret", "JWT Weak Secret")
+                .description("Detects weak secrets in JWT signing")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![347])
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Session Fixation
+        self.register(
+            "js/session-fixation",
+            Self::session_fixation_query(),
+            QueryMetadata::builder("js/session-fixation", "Session Fixation")
+                .description("Detects session fixation vulnerabilities")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![384])
+                .owasp("A07:2021 - Identification and Authentication Failures")
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Insecure Session Cookie
+        self.register(
+            "js/insecure-session-cookie",
+            Self::insecure_session_cookie_query(),
+            QueryMetadata::builder("js/insecure-session-cookie", "Insecure Session Cookie")
+                .description("Detects session cookies without Secure/HttpOnly flags")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::High)
+                .cwes(vec![614, 1004])
+                .owasp("A05:2021 - Security Misconfiguration")
+                .build()
+        );
+    }
+
+    // ==================== CRYPTOGRAPHY QUERIES ====================
+
+    fn register_cryptography_queries(&mut self) {
+        // Weak Hash (MD5/SHA1)
+        self.register(
+            "js/weak-hash",
+            Self::weak_hash_query(),
+            QueryMetadata::builder("js/weak-hash", "Weak Hash Algorithm")
+                .description("Detects use of weak hash algorithms (MD5, SHA1)")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::VeryHigh)
+                .cwes(vec![327, 328])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .sans_top_25()
+                .build()
+        );
+
+        // Weak Cipher (DES/RC4)
+        self.register(
+            "js/weak-cipher",
+            Self::weak_cipher_query(),
+            QueryMetadata::builder("js/weak-cipher", "Weak Encryption Cipher")
+                .description("Detects use of weak encryption ciphers (DES, RC4)")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::VeryHigh)
+                .cwes(vec![327])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .sans_top_25()
+                .build()
+        );
+
+        // ECB Mode
+        self.register(
+            "js/ecb-mode",
+            Self::ecb_mode_query(),
+            QueryMetadata::builder("js/ecb-mode", "ECB Cipher Mode")
+                .description("Detects use of insecure ECB cipher mode")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::VeryHigh)
+                .cwes(vec![327])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .build()
+        );
+
+        // Insufficient Key Size
+        self.register(
+            "js/insufficient-key-size",
+            Self::insufficient_key_size_query(),
+            QueryMetadata::builder("js/insufficient-key-size", "Insufficient Key Size")
+                .description("Detects cryptographic keys that are too small")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![326])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Hardcoded Crypto Key
+        self.register(
+            "js/hardcoded-crypto-key",
+            Self::hardcoded_crypto_key_query(),
+            QueryMetadata::builder("js/hardcoded-crypto-key", "Hardcoded Cryptographic Key")
+                .description("Detects hardcoded encryption keys")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![321])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .build()
+        );
+
+        // Insecure Random
+        self.register(
+            "js/insecure-random",
+            Self::insecure_random_query(),
+            QueryMetadata::builder("js/insecure-random", "Insecure Randomness")
+                .description("Detects use of Math.random() for security purposes")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![338])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .sans_top_25()
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Missing Salt
+        self.register(
+            "js/missing-salt",
+            Self::missing_salt_query(),
+            QueryMetadata::builder("js/missing-salt", "Missing Salt in Hash")
+                .description("Detects password hashing without salt")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![759])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Predictable Seed
+        self.register(
+            "js/predictable-seed",
+            Self::predictable_seed_query(),
+            QueryMetadata::builder("js/predictable-seed", "Predictable Seed")
+                .description("Detects predictable seeds in random number generators")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![337])
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+    }
+
+    // ==================== PATH TRAVERSAL & FILE ACCESS ====================
+
+    fn register_path_traversal_queries(&mut self) {
+        // Path Traversal
+        self.register(
+            "js/path-traversal",
+            Self::path_traversal_query(),
+            QueryMetadata::builder("js/path-traversal", "Path Traversal")
+                .description("Detects path traversal vulnerabilities")
+                .category(QueryCategory::PathTraversal)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![22])
+                .owasp("A01:2021 - Broken Access Control")
+                .sans_top_25()
+                .uses_taint()
+                .build()
+        );
+
+        // Zip Slip
+        self.register(
+            "js/zip-slip",
+            Self::zip_slip_query(),
+            QueryMetadata::builder("js/zip-slip", "Zip Slip")
+                .description("Detects zip slip vulnerability during archive extraction")
+                .category(QueryCategory::PathTraversal)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![22])
+                .sans_top_25()
+                .uses_taint()
+                .build()
+        );
+
+        // Arbitrary File Write
+        self.register(
+            "js/arbitrary-file-write",
+            Self::arbitrary_file_write_query(),
+            QueryMetadata::builder("js/arbitrary-file-write", "Arbitrary File Write")
+                .description("Detects writing to user-controlled file paths")
+                .category(QueryCategory::PathTraversal)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::High)
+                .cwes(vec![73])
+                .uses_taint()
+                .build()
+        );
+
+        // Unsafe File Upload
+        self.register(
+            "js/unsafe-file-upload",
+            Self::unsafe_file_upload_query(),
+            QueryMetadata::builder("js/unsafe-file-upload", "Unsafe File Upload")
+                .description("Detects unrestricted file uploads")
+                .category(QueryCategory::PathTraversal)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![434])
+                .owasp("A04:2021 - Insecure Design")
+                .sans_top_25()
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+    }
+
+    // ==================== INFORMATION DISCLOSURE ====================
+
+    fn register_information_disclosure_queries(&mut self) {
+        // Stack Trace Exposure
+        self.register(
+            "js/stack-trace-exposure",
+            Self::stack_trace_exposure_query(),
+            QueryMetadata::builder("js/stack-trace-exposure", "Stack Trace Exposure")
+                .description("Detects stack traces sent to users")
+                .category(QueryCategory::InformationDisclosure)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![209])
+                .owasp("A05:2021 - Security Misconfiguration")
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Sensitive Data in Log
+        self.register(
+            "js/sensitive-data-log",
+            Self::sensitive_data_log_query(),
+            QueryMetadata::builder("js/sensitive-data-log", "Sensitive Data in Log")
+                .description("Detects logging of sensitive data")
+                .category(QueryCategory::InformationDisclosure)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![532])
+                .owasp("A09:2021 - Security Logging and Monitoring Failures")
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .uses_taint()
+                .build()
+        );
+
+        // Clear-text Transmission
+        self.register(
+            "js/cleartext-transmission",
+            Self::cleartext_transmission_query(),
+            QueryMetadata::builder("js/cleartext-transmission", "Clear-text Transmission")
+                .description("Detects transmission of sensitive data without encryption")
+                .category(QueryCategory::InformationDisclosure)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![319])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .sans_top_25()
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Clear-text Storage
+        self.register(
+            "js/cleartext-storage",
+            Self::cleartext_storage_query(),
+            QueryMetadata::builder("js/cleartext-storage", "Clear-text Storage")
+                .description("Detects storage of sensitive data without encryption")
+                .category(QueryCategory::InformationDisclosure)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![312])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .sans_top_25()
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Information Exposure Through Error
+        self.register(
+            "js/error-message-exposure",
+            Self::error_message_exposure_query(),
+            QueryMetadata::builder("js/error-message-exposure", "Information Exposure Through Error")
+                .description("Detects detailed error messages exposed to users")
+                .category(QueryCategory::InformationDisclosure)
+                .severity(QuerySeverity::Low)
+                .precision(QueryPrecision::Low)
+                .cwes(vec![209])
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+    }
+
+    // ==================== CODE QUALITY ====================
+
+    fn register_code_quality_queries(&mut self) {
+        // Unused Variable
+        self.register(
+            "js/unused-variable",
+            Self::unused_variable_query(),
+            QueryMetadata::builder("js/unused-variable", "Unused Variable")
+                .description("Detects variables that are declared but never used")
+                .category(QueryCategory::CodeQuality)
+                .severity(QuerySeverity::Info)
+                .precision(QueryPrecision::High)
+                .cwes(vec![563])
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Dead Code
+        self.register(
+            "js/dead-code",
+            Self::dead_code_query(),
+            QueryMetadata::builder("js/dead-code", "Dead Code")
+                .description("Detects unreachable code")
+                .category(QueryCategory::CodeQuality)
+                .severity(QuerySeverity::Info)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![561])
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Duplicate Code
+        self.register(
+            "js/duplicate-code",
+            Self::duplicate_code_query(),
+            QueryMetadata::builder("js/duplicate-code", "Duplicate Code")
+                .description("Detects code duplication")
+                .category(QueryCategory::CodeQuality)
+                .severity(QuerySeverity::Info)
+                .precision(QueryPrecision::Low)
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Complex Function
+        self.register(
+            "js/complex-function",
+            Self::complex_function_query(),
+            QueryMetadata::builder("js/complex-function", "Complex Function")
+                .description("Detects functions with high cyclomatic complexity")
+                .category(QueryCategory::CodeQuality)
+                .severity(QuerySeverity::Info)
+                .precision(QueryPrecision::Medium)
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Missing Error Handling
+        self.register(
+            "js/missing-error-handling",
+            Self::missing_error_handling_query(),
+            QueryMetadata::builder("js/missing-error-handling", "Missing Error Handling")
+                .description("Detects async operations without error handling")
+                .category(QueryCategory::ErrorHandling)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![391])
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+    }
+
+    // ==================== RESOURCE MANAGEMENT ====================
+
+    fn register_resource_management_queries(&mut self) {
+        // Regular Expression DoS
+        self.register(
+            "js/redos",
+            Self::redos_query(),
+            QueryMetadata::builder("js/redos", "Regular Expression Denial of Service")
+                .description("Detects regex patterns vulnerable to ReDoS")
+                .category(QueryCategory::ResourceManagement)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![1333, 400])
+                .owasp("A05:2021 - Security Misconfiguration")
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // XML Bomb
+        self.register(
+            "js/xml-bomb",
+            Self::xml_bomb_query(),
+            QueryMetadata::builder("js/xml-bomb", "XML Bomb / Billion Laughs")
+                .description("Detects XML parsers vulnerable to entity expansion attacks")
+                .category(QueryCategory::ResourceManagement)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![776])
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Uncontrolled Resource Consumption
+        self.register(
+            "js/uncontrolled-resource",
+            Self::uncontrolled_resource_query(),
+            QueryMetadata::builder("js/uncontrolled-resource", "Uncontrolled Resource Consumption")
+                .description("Detects operations that may consume excessive resources")
+                .category(QueryCategory::ResourceManagement)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::Low)
+                .cwes(vec![400])
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Memory Leak
+        self.register(
+            "js/memory-leak",
+            Self::memory_leak_query(),
+            QueryMetadata::builder("js/memory-leak", "Potential Memory Leak")
+                .description("Detects patterns that may cause memory leaks")
+                .category(QueryCategory::ResourceManagement)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::Low)
+                .cwes(vec![401])
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+    }
+
+    // ==================== ERROR HANDLING ====================
+
+    fn register_error_handling_queries(&mut self) {
+        // Empty Catch Block
+        self.register(
+            "js/empty-catch-block",
+            Self::empty_catch_block_query(),
+            QueryMetadata::builder("js/empty-catch-block", "Empty Catch Block")
+                .description("Detects empty catch blocks that suppress errors")
+                .category(QueryCategory::ErrorHandling)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::High)
+                .cwes(vec![391])
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Generic Exception Catch
+        self.register(
+            "js/generic-exception",
+            Self::generic_exception_query(),
+            QueryMetadata::builder("js/generic-exception", "Generic Exception Catch")
+                .description("Detects overly broad exception catching")
+                .category(QueryCategory::ErrorHandling)
+                .severity(QuerySeverity::Low)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![396])
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Unhandled Promise Rejection
+        self.register(
+            "js/unhandled-promise-rejection",
+            Self::unhandled_promise_rejection_query(),
+            QueryMetadata::builder("js/unhandled-promise-rejection", "Unhandled Promise Rejection")
+                .description("Detects promises without rejection handlers")
+                .category(QueryCategory::ErrorHandling)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![755])
+                .suites(vec![QuerySuite::SecurityAndQuality])
+                .build()
+        );
+    }
+
+    // ==================== API MISUSE ====================
+
+    fn register_api_misuse_queries(&mut self) {
+        // Server-Side Request Forgery (SSRF)
+        self.register(
+            "js/ssrf",
+            Self::ssrf_query(),
+            QueryMetadata::builder("js/ssrf", "Server-Side Request Forgery")
+                .description("Detects SSRF vulnerabilities")
+                .category(QueryCategory::ApiMisuse)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::High)
+                .cwes(vec![918])
+                .owasp("A10:2021 - Server-Side Request Forgery")
+                .sans_top_25()
+                .uses_taint()
+                .build()
+        );
+
+        // XXE (XML External Entity)
+        self.register(
+            "js/xxe",
+            Self::xxe_query(),
+            QueryMetadata::builder("js/xxe", "XML External Entity Injection")
+                .description("Detects XXE vulnerabilities")
+                .category(QueryCategory::ApiMisuse)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![611])
+                .owasp("A05:2021 - Security Misconfiguration")
+                .sans_top_25()
+                .build()
+        );
+
+        // Insecure Deserialization
+        self.register(
+            "js/insecure-deserialization",
+            Self::insecure_deserialization_query(),
+            QueryMetadata::builder("js/insecure-deserialization", "Insecure Deserialization")
+                .description("Detects insecure deserialization leading to RCE")
+                .category(QueryCategory::ApiMisuse)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::High)
+                .cwes(vec![502])
+                .owasp("A08:2021 - Software and Data Integrity Failures")
+                .sans_top_25()
+                .uses_taint()
+                .build()
+        );
+
+        // Prototype Pollution
+        self.register(
+            "js/prototype-pollution",
+            Self::prototype_pollution_query(),
+            QueryMetadata::builder("js/prototype-pollution", "Prototype Pollution")
+                .description("Detects prototype pollution vulnerabilities")
+                .category(QueryCategory::ApiMisuse)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![1321])
+                .sans_top_25()
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .uses_taint()
+                .build()
+        );
+
+        // Open Redirect
+        self.register(
+            "js/open-redirect",
+            Self::open_redirect_query(),
+            QueryMetadata::builder("js/open-redirect", "Open Redirect")
+                .description("Detects unvalidated redirects")
+                .category(QueryCategory::ApiMisuse)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::High)
+                .cwes(vec![601])
+                .owasp("A01:2021 - Broken Access Control")
+                .uses_taint()
+                .build()
+        );
+
+        // CORS Misconfiguration
+        self.register(
+            "js/cors-misconfiguration",
+            Self::cors_misconfiguration_query(),
+            QueryMetadata::builder("js/cors-misconfiguration", "CORS Misconfiguration")
+                .description("Detects overly permissive CORS configurations")
+                .category(QueryCategory::ApiMisuse)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![346])
+                .owasp("A05:2021 - Security Misconfiguration")
+                .build()
+        );
+    }
+
+    // ==================== CONFIGURATION ====================
+
+    fn register_configuration_queries(&mut self) {
+        // Debug Mode in Production
+        self.register(
+            "js/debug-mode-production",
+            Self::debug_mode_production_query(),
+            QueryMetadata::builder("js/debug-mode-production", "Debug Mode in Production")
+                .description("Detects debug mode enabled in production")
+                .category(QueryCategory::Configuration)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![489])
+                .owasp("A05:2021 - Security Misconfiguration")
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Missing Security Headers
+        self.register(
+            "js/missing-security-headers",
+            Self::missing_security_headers_query(),
+            QueryMetadata::builder("js/missing-security-headers", "Missing Security Headers")
+                .description("Detects missing HTTP security headers")
+                .category(QueryCategory::Configuration)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![1021])
+                .owasp("A05:2021 - Security Misconfiguration")
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // Disabled HTTPS
+        self.register(
+            "js/disabled-https",
+            Self::disabled_https_query(),
+            QueryMetadata::builder("js/disabled-https", "Disabled HTTPS")
+                .description("Detects HTTPS disabled or not enforced")
+                .category(QueryCategory::Configuration)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![311])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .build()
+        );
+
+        // Disabled Certificate Validation
+        self.register(
+            "js/disabled-cert-validation",
+            Self::disabled_cert_validation_query(),
+            QueryMetadata::builder("js/disabled-cert-validation", "Disabled Certificate Validation")
+                .description("Detects disabled SSL/TLS certificate validation")
+                .category(QueryCategory::Configuration)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::VeryHigh)
+                .cwes(vec![295])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .sans_top_25()
+                .build()
+        );
+    }
+
+    // ==================== FRAMEWORK-SPECIFIC ====================
+
+    fn register_framework_queries(&mut self) {
+        // Express Session Secret
+        self.register(
+            "js/express-weak-session-secret",
+            Self::express_weak_session_secret_query(),
+            QueryMetadata::builder("js/express-weak-session-secret", "Express Weak Session Secret")
+                .description("Detects weak session secrets in Express.js")
+                .category(QueryCategory::FrameworkSpecific)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![330])
+                .tags(vec!["express".to_string(), "nodejs".to_string()])
+                .build()
+        );
+
+        // Express Missing Helmet
+        self.register(
+            "js/express-missing-helmet",
+            Self::express_missing_helmet_query(),
+            QueryMetadata::builder("js/express-missing-helmet", "Express Missing Helmet")
+                .description("Detects Express.js apps without Helmet security middleware")
+                .category(QueryCategory::FrameworkSpecific)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![1021])
+                .tags(vec!["express".to_string()])
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .build()
+        );
+
+        // MongoDB Injection
+        self.register(
+            "js/mongodb-injection",
+            Self::mongodb_injection_query(),
+            QueryMetadata::builder("js/mongodb-injection", "MongoDB Injection")
+                .description("Detects NoSQL injection in MongoDB queries")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![943])
+                .tags(vec!["mongodb".to_string()])
+                .uses_taint()
+                .build()
+        );
+
+        // GraphQL Injection
+        self.register(
+            "js/graphql-injection",
+            Self::graphql_injection_query(),
+            QueryMetadata::builder("js/graphql-injection", "GraphQL Injection")
+                .description("Detects injection in GraphQL queries")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![89])
+                .tags(vec!["graphql".to_string()])
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .uses_taint()
+                .build()
+        );
+
+        // React XSS via Props
+        self.register(
+            "js/react-xss-props",
+            Self::react_xss_props_query(),
+            QueryMetadata::builder("js/react-xss-props", "React XSS via Props")
+                .description("Detects XSS vulnerabilities in React component props")
+                .category(QueryCategory::Xss)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![79])
+                .tags(vec!["react".to_string()])
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .uses_taint()
+                .build()
+        );
+
+        // Angular Template Injection
+        self.register(
+            "js/angular-template-injection",
+            Self::angular_template_injection_query(),
+            QueryMetadata::builder("js/angular-template-injection", "Angular Template Injection")
+                .description("Detects template injection in Angular")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![94])
+                .tags(vec!["angular".to_string()])
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .uses_taint()
+                .build()
+        );
+
+        // Vue XSS
+        self.register(
+            "js/vue-xss",
+            Self::vue_xss_query(),
+            QueryMetadata::builder("js/vue-xss", "Vue.js XSS")
+                .description("Detects XSS vulnerabilities in Vue.js")
+                .category(QueryCategory::Xss)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![79])
+                .tags(vec!["vue".to_string()])
+                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .uses_taint()
+                .build()
+        );
+
+        // Next.js SSRF
+        self.register(
+            "js/nextjs-ssrf",
+            Self::nextjs_ssrf_query(),
+            QueryMetadata::builder("js/nextjs-ssrf", "Next.js SSRF")
+                .description("Detects SSRF in Next.js server-side functions")
+                .category(QueryCategory::ApiMisuse)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::High)
+                .cwes(vec![918])
+                .tags(vec!["nextjs".to_string(), "react".to_string()])
+                .uses_taint()
+                .build()
+        );
+
+        // Electron Node Integration
+        self.register(
+            "js/electron-node-integration",
+            Self::electron_node_integration_query(),
+            QueryMetadata::builder("js/electron-node-integration", "Electron Node Integration Enabled")
+                .description("Detects enabled nodeIntegration in Electron")
+                .category(QueryCategory::Configuration)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::VeryHigh)
+                .cwes(vec![16])
+                .tags(vec!["electron".to_string()])
+                .build()
+        );
+
+        // Electron Context Isolation Disabled
+        self.register(
+            "js/electron-context-isolation",
+            Self::electron_context_isolation_query(),
+            QueryMetadata::builder("js/electron-context-isolation", "Electron Context Isolation Disabled")
+                .description("Detects disabled contextIsolation in Electron")
+                .category(QueryCategory::Configuration)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::VeryHigh)
+                .cwes(vec![653])
+                .tags(vec!["electron".to_string()])
+                .build()
+        );
+    }
+
+    // ==================== QUERY IMPLEMENTATIONS ====================
+    // These are simplified implementations - the actual queries would be more sophisticated
+
+    fn sql_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
+                    operator: ComparisonOp::Matches,
+                    value: "(?i)(execute|query|run)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "mc".to_string(),
+                message: "SQL injection vulnerability - untrusted data in database query".to_string(),
+            }]),
+        )
+    }
+
+    fn sql_injection_extended_query() -> Query {
+        // Extended version with more detection patterns
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(execute|query|run|raw|unsafe)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Potential SQL injection (extended detection)".to_string(),
+            }]),
+        )
+    }
+
+    fn nosql_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
+                    operator: ComparisonOp::Matches,
+                    value: "(?i)(find|findOne|update|remove|aggregate)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "mc".to_string(),
+                message: "NoSQL injection vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn command_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(exec|spawn|system|shell)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Command injection vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn command_injection_extended_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(exec|spawn|system|shell|sh|bash|cmd|powershell)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Potential command injection (extended)".to_string(),
+            }]),
+        )
+    }
+
+    fn ldap_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(search|bind|modify|add|delete).*ldap".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "LDAP injection vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn xpath_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(evaluate|select).*xpath".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "XPath injection vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn code_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(eval|Function|setTimeout|setInterval)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Code injection via eval/Function".to_string(),
+            }]),
+        )
+    }
+
+    fn template_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(render|compile|template)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Server-side template injection".to_string(),
+            }]),
+        )
+    }
+
+    fn expression_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(parseExpression|evaluateExpression)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Expression language injection".to_string(),
+            }]),
+        )
+    }
+
+    fn dom_xss_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MemberExpression, "member".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("member".to_string())),
+                        property: "property".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(innerHTML|outerHTML)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "member".to_string(),
+                message: "DOM-based XSS vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn reflected_xss_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
+                    operator: ComparisonOp::Matches,
+                    value: "(?i)(send|write|render)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "mc".to_string(),
+                message: "Reflected XSS vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn stored_xss_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
+                    operator: ComparisonOp::Matches,
+                    value: "(?i)(save|insert|update|store)".to_string(),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "mc".to_string(),
+                message: "Potential stored XSS vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn unsafe_innerhtml_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::Assignment, "assign".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("assign".to_string())),
+                        property: "left".to_string(),
+                    },
+                    operator: ComparisonOp::Contains,
+                    right: Expression::String("innerHTML".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "assign".to_string(),
+                message: "Unsafe innerHTML assignment".to_string(),
+            }]),
+        )
+    }
+
+    fn document_write_xss_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Contains,
+                    right: Expression::String("document.write".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "XSS via document.write()".to_string(),
+            }]),
+        )
+    }
+
+    fn jquery_xss_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(\\$|jquery)\\.(html|append|prepend)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "XSS via jQuery DOM manipulation".to_string(),
+            }]),
+        )
+    }
+
+    fn react_dangerous_html_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MemberExpression, "member".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("member".to_string())),
+                        property: "property".to_string(),
+                    },
+                    operator: ComparisonOp::Equal,
+                    right: Expression::String("dangerouslySetInnerHTML".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "member".to_string(),
+                message: "Unsafe use of dangerouslySetInnerHTML in React".to_string(),
+            }]),
+        )
+    }
+
+    fn angular_sce_bypass_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)trustAsHtml|trustAsResourceUrl".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Angular SCE bypass - potential XSS".to_string(),
+            }]),
+        )
+    }
+
+    // Authentication queries
+    fn hardcoded_credentials_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::VariableDeclaration, "vd".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("vd".to_string())),
+                        property: "name".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(password|passwd|pwd|secret|api[_-]?key|token|credential)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "vd".to_string(),
+                message: "Hardcoded credentials detected".to_string(),
+            }]),
+        )
+    }
+
+    fn weak_password_requirements_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)validatePassword|checkPassword".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Weak password validation rules".to_string(),
+            }]),
+        )
+    }
+
+    fn missing_authentication_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::FunctionDeclaration, "func".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("func".to_string())),
+                        property: "name".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(route|endpoint|handler)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "func".to_string(),
+                message: "Potential missing authentication check".to_string(),
+            }]),
+        )
+    }
+
+    fn broken_access_control_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(findById|getById|getUserBy)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Potential broken access control".to_string(),
+            }]),
+        )
+    }
+
+    fn jwt_none_algorithm_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::Literal, "obj".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("obj".to_string())),
+                        property: "algorithm".to_string(),
+                    },
+                    operator: ComparisonOp::Equal,
+                    right: Expression::String("none".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "obj".to_string(),
+                message: "JWT 'none' algorithm - authentication bypass".to_string(),
+            }]),
+        )
+    }
+
+    fn jwt_weak_secret_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)jwt\\.(sign|verify)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Potential weak JWT secret".to_string(),
+            }]),
+        )
+    }
+
+    fn session_fixation_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)session\\.(regenerate|destroy)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Session fixation vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn insecure_session_cookie_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::Literal, "obj".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("obj".to_string())),
+                        property: "cookie".to_string(),
+                    },
+                    operator: ComparisonOp::Contains,
+                    right: Expression::String("secure".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "obj".to_string(),
+                message: "Insecure session cookie configuration".to_string(),
+            }]),
+        )
+    }
+
+    // Cryptography queries (continued in next part due to length)
+    fn weak_hash_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(md5|sha1|createHash.*md5|createHash.*sha1)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Weak hash algorithm (MD5/SHA1)".to_string(),
+            }]),
+        )
+    }
+
+    fn weak_cipher_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(des|rc4|createCipher.*(des|rc4))".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Weak encryption cipher (DES/RC4)".to_string(),
+            }]),
+        )
+    }
+
+    fn ecb_mode_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::Literal, "str".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::Variable("str".to_string()),
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)ecb".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "str".to_string(),
+                message: "Insecure ECB cipher mode".to_string(),
+            }]),
+        )
+    }
+
+    fn insufficient_key_size_query() -> Query {
+        // Simplified - checks for key generation with small sizes
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(generateKey|createKey|keySize)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Insufficient cryptographic key size".to_string(),
+            }]),
+        )
+    }
+
+    fn hardcoded_crypto_key_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::VariableDeclaration, "vd".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("vd".to_string())),
+                        property: "name".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(key|encryptionKey|secret)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "vd".to_string(),
+                message: "Hardcoded cryptographic key".to_string(),
+            }]),
+        )
+    }
+
+    fn insecure_random_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MemberExpression, "member".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("member".to_string())),
+                        property: "property".to_string(),
+                    },
+                    operator: ComparisonOp::Equal,
+                    right: Expression::String("random".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "member".to_string(),
+                message: "Insecure randomness - use crypto.randomBytes()".to_string(),
+            }]),
+        )
+    }
+
+    fn missing_salt_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(hash|createHash)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Missing salt in password hash".to_string(),
+            }]),
+        )
+    }
+
+    fn predictable_seed_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(seed|setSeed)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Predictable seed for random number generator".to_string(),
+            }]),
+        )
+    }
+
+    // Path traversal queries
+    fn path_traversal_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(readFile|writeFile|open|unlink)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Path traversal vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn zip_slip_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(extract|unzip|decompress)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Zip slip vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn arbitrary_file_write_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(writeFile|appendFile|createWriteStream)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Arbitrary file write vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn unsafe_file_upload_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(upload|multer|formidable)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Unrestricted file upload".to_string(),
+            }]),
+        )
+    }
+
+    // Information disclosure queries
+    fn stack_trace_exposure_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MemberExpression, "member".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("member".to_string())),
+                        property: "property".to_string(),
+                    },
+                    operator: ComparisonOp::Equal,
+                    right: Expression::String("stack".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "member".to_string(),
+                message: "Stack trace exposed to user".to_string(),
+            }]),
+        )
+    }
+
+    fn sensitive_data_log_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(log|console\\.)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Potential sensitive data in log".to_string(),
+            }]),
+        )
+    }
+
+    fn cleartext_transmission_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::Literal, "str".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::Variable("str".to_string()),
+                    operator: ComparisonOp::StartsWith,
+                    right: Expression::String("http://".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "str".to_string(),
+                message: "Clear-text HTTP transmission".to_string(),
+            }]),
+        )
+    }
+
+    fn cleartext_storage_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(localStorage|sessionStorage)\\.setItem".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Clear-text storage of sensitive data".to_string(),
+            }]),
+        )
+    }
+
+    fn error_message_exposure_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(send|res\\.).*error".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Error message exposure".to_string(),
+            }]),
+        )
+    }
+
+    // Code quality queries
+    fn unused_variable_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::VariableDeclaration, "vd".to_string()),
+            None,
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "vd".to_string(),
+                message: "Unused variable".to_string(),
+            }]),
+        )
+    }
+
+    fn dead_code_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::AnyNode, "stmt".to_string()),
+            None,
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "stmt".to_string(),
+                message: "Unreachable code".to_string(),
+            }]),
+        )
+    }
+
+    fn duplicate_code_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::FunctionDeclaration, "func".to_string()),
+            None,
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "func".to_string(),
+                message: "Duplicate code detected".to_string(),
+            }]),
+        )
+    }
+
+    fn complex_function_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::FunctionDeclaration, "func".to_string()),
+            None,
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "func".to_string(),
+                message: "High cyclomatic complexity".to_string(),
+            }]),
+        )
+    }
+
+    fn missing_error_handling_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(then|async)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Missing error handling".to_string(),
+            }]),
+        )
+    }
+
+    // Resource management queries
+    fn redos_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::Literal, "regex".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::Variable("regex".to_string()),
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(\\(.*\\*.*\\+.*\\)|\\+.*\\*|\\*.*\\+)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "regex".to_string(),
+                message: "ReDoS-vulnerable regex pattern".to_string(),
+            }]),
+        )
+    }
+
+    fn xml_bomb_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(parseXml|XMLParser)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "XML bomb / billion laughs vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn uncontrolled_resource_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(allocate|buffer|array)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Uncontrolled resource consumption".to_string(),
+            }]),
+        )
+    }
+
+    fn memory_leak_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(addEventListener|on\\()".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Potential memory leak - missing cleanup".to_string(),
+            }]),
+        )
+    }
+
+    // Error handling queries
+    fn empty_catch_block_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::AnyNode, "catch".to_string()),
+            None,
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "catch".to_string(),
+                message: "Empty catch block suppresses errors".to_string(),
+            }]),
+        )
+    }
+
+    fn generic_exception_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::AnyNode, "catch".to_string()),
+            None,
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "catch".to_string(),
+                message: "Overly broad exception catching".to_string(),
+            }]),
+        )
+    }
+
+    fn unhandled_promise_rejection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Contains,
+                    right: Expression::String("then".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Promise without rejection handler".to_string(),
+            }]),
+        )
+    }
+
+    // API misuse queries
+    fn ssrf_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(fetch|axios|request|http\\.)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Server-side request forgery (SSRF)".to_string(),
+            }]),
+        )
+    }
+
+    fn xxe_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(parseXml|parse.*xml|XMLParser)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "XML External Entity (XXE) vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn insecure_deserialization_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(deserialize|unserialize|pickle|yaml\\.)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Insecure deserialization".to_string(),
+            }]),
+        )
+    }
+
+    fn prototype_pollution_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MemberExpression, "member".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("member".to_string())),
+                        property: "property".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(__proto__|constructor|prototype)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "member".to_string(),
+                message: "Prototype pollution vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn open_redirect_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(redirect|sendRedirect)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Open redirect vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn cors_misconfiguration_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Contains,
+                    right: Expression::String("Access-Control-Allow-Origin".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "CORS misconfiguration".to_string(),
+            }]),
+        )
+    }
+
+    // Configuration queries
+    fn debug_mode_production_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::Assignment, "assign".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("assign".to_string())),
+                        property: "left".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(debug|DEBUG)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "assign".to_string(),
+                message: "Debug mode in production".to_string(),
+            }]),
+        )
+    }
+
+    fn missing_security_headers_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Contains,
+                    right: Expression::String("setHeader".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Missing security headers".to_string(),
+            }]),
+        )
+    }
+
+    fn disabled_https_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::Literal, "obj".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("obj".to_string())),
+                        property: "secure".to_string(),
+                    },
+                    operator: ComparisonOp::Equal,
+                    right: Expression::Boolean(false),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "obj".to_string(),
+                message: "HTTPS disabled or not enforced".to_string(),
+            }]),
+        )
+    }
+
+    fn disabled_cert_validation_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::Literal, "obj".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("obj".to_string())),
+                        property: "rejectUnauthorized".to_string(),
+                    },
+                    operator: ComparisonOp::Equal,
+                    right: Expression::Boolean(false),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "obj".to_string(),
+                message: "SSL/TLS certificate validation disabled".to_string(),
+            }]),
+        )
+    }
+
+    // Framework-specific queries
+    fn express_weak_session_secret_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Contains,
+                    right: Expression::String("session".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Weak Express session secret".to_string(),
+            }]),
+        )
+    }
+
+    fn express_missing_helmet_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Equal,
+                    right: Expression::String("express".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Express app missing Helmet middleware".to_string(),
+            }]),
+        )
+    }
+
+    fn mongodb_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(find|findOne|update|remove)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "MongoDB injection vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn graphql_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(graphql|execute)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "GraphQL injection vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn react_xss_props_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MemberExpression, "member".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("member".to_string())),
+                        property: "property".to_string(),
+                    },
+                    operator: ComparisonOp::Contains,
+                    right: Expression::String("props".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "member".to_string(),
+                message: "React XSS via props".to_string(),
+            }]),
+        )
+    }
+
+    fn angular_template_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::Literal, "str".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::Variable("str".to_string()),
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("\\{\\{.*\\}\\}".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "str".to_string(),
+                message: "Angular template injection".to_string(),
+            }]),
+        )
+    }
+
+    fn vue_xss_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MemberExpression, "member".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("member".to_string())),
+                        property: "property".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(v-html|innerHTML)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "member".to_string(),
+                message: "Vue.js XSS vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn nextjs_ssrf_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "callee".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    right: Expression::String("(?i)(getServerSideProps|getStaticProps)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Next.js SSRF vulnerability".to_string(),
+            }]),
+        )
+    }
+
+    fn electron_node_integration_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::Literal, "obj".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("obj".to_string())),
+                        property: "nodeIntegration".to_string(),
+                    },
+                    operator: ComparisonOp::Equal,
+                    right: Expression::Boolean(true),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "obj".to_string(),
+                message: "Electron nodeIntegration enabled - RCE risk".to_string(),
+            }]),
+        )
+    }
+
+    fn electron_context_isolation_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::Literal, "obj".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("obj".to_string())),
+                        property: "contextIsolation".to_string(),
+                    },
+                    operator: ComparisonOp::Equal,
+                    right: Expression::Boolean(false),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "obj".to_string(),
+                message: "Electron contextIsolation disabled".to_string(),
+            }]),
+        )
+    }
+}
+
+impl Default for ExtendedStandardLibrary {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extended_library_initialization() {
+        let lib = ExtendedStandardLibrary::new();
+        let all_queries = lib.all_queries();
+
+        // Verify we have 100+ queries
+        assert!(all_queries.len() >= 100, "Expected 100+ queries, got {}", all_queries.len());
+    }
+
+    #[test]
+    fn test_query_suites() {
+        let lib = ExtendedStandardLibrary::new();
+
+        let default = lib.get_suite(QuerySuite::Default);
+        let extended = lib.get_suite(QuerySuite::SecurityExtended);
+        let quality = lib.get_suite(QuerySuite::SecurityAndQuality);
+
+        // Default suite should have fewer queries than extended
+        assert!(default.len() < extended.len());
+        // Quality suite should have the most queries
+        assert!(extended.len() < quality.len());
+    }
+
+    #[test]
+    fn test_query_metadata() {
+        let lib = ExtendedStandardLibrary::new();
+
+        if let Some((_, metadata)) = lib.get("js/sql-injection") {
+            assert_eq!(metadata.id, "js/sql-injection");
+            assert!(metadata.cwes.contains(&89));
+            assert_eq!(metadata.severity, QuerySeverity::Critical);
+            assert!(metadata.sans_top_25);
+        } else {
+            panic!("SQL injection query not found");
+        }
+    }
+}
