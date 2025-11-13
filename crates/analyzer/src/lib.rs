@@ -11,6 +11,7 @@
 //! - **Inter-procedural Analysis**: Cross-function taint tracking
 //! - **Call Graph**: Function call relationship tracking
 //! - **Symbol Table**: Scope-aware symbol tracking
+//! - **Points-to Analysis**: Determine what memory locations pointers may reference
 //!
 //! ## Quick Start
 //!
@@ -120,6 +121,41 @@
 //! # }
 //! ```
 //!
+//! ### Points-to Analysis
+//!
+//! ```rust
+//! use kodecd_analyzer::PointsToAnalysisBuilder;
+//! # use kodecd_parser::{Parser, Language, LanguageConfig};
+//! # use std::path::Path;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! # let mut parser = Parser::new(
+//! #     LanguageConfig::new(Language::JavaScript),
+//! #     Path::new("app.js")
+//! # );
+//! # let source = "let obj = { value: 1 }; let ptr = obj;";
+//! # let ast = parser.parse_source(source)?;
+//! // Build points-to analysis
+//! let pts = PointsToAnalysisBuilder::new().build(&ast);
+//!
+//! // Query what a variable points to
+//! let targets = pts.points_to("ptr");
+//! println!("ptr may point to: {:?}", targets);
+//!
+//! // Check if two variables may alias
+//! let may_alias = pts.may_alias("ptr1", "ptr2");
+//! if may_alias {
+//!     println!("ptr1 and ptr2 may point to the same location");
+//! }
+//!
+//! // Get analysis statistics
+//! let stats = pts.stats();
+//! println!("Analyzed {} locations with {} constraints",
+//!     stats.num_locations, stats.num_constraints);
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! ## Architecture
 //!
 //! The analyzer is built on several core components:
@@ -154,6 +190,14 @@
 //! - **Function Summaries**: Pre-computed taint behavior
 //! - **Bottom-up Analysis**: Analyze callees before callers
 //! - **Cross-function Taint**: Detect vulnerabilities spanning functions
+//!
+//! ### Points-to Analysis
+//!
+//! Determines what memory locations pointers may reference:
+//! - **Andersen-style**: Flow-insensitive, context-insensitive analysis
+//! - **Constraint-based**: Address-of, copy, load, store constraints
+//! - **Alias Analysis**: Determine if two pointers may point to same location
+//! - **Applications**: Improves taint analysis, call graph refinement
 //!
 //! ## Default Configurations
 //!
@@ -247,6 +291,7 @@ pub mod taint;
 pub mod symbol_table;
 pub mod call_graph;
 pub mod interprocedural_taint;
+pub mod points_to;
 
 pub use cfg::{ControlFlowGraph, CfgNode, CfgEdge, CfgBuilder};
 pub use dataflow::{DataFlowAnalysis, DataFlowDirection, TransferFunction};
@@ -254,3 +299,4 @@ pub use taint::{TaintAnalysis, TaintSource, TaintSink, TaintValue, TaintAnalysis
 pub use symbol_table::{SymbolTable, SymbolTableBuilder, Symbol, SymbolKind};
 pub use call_graph::{CallGraph, CallGraphBuilder, CallGraphNode, CallEdge, CallableKind};
 pub use interprocedural_taint::{InterproceduralTaintAnalysis, FunctionTaintSummary};
+pub use points_to::{PointsToAnalysis, PointsToAnalysisBuilder, AbstractLocation, PointsToConstraint, PointsToStats};
