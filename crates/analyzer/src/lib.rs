@@ -341,6 +341,7 @@ pub mod cfg;
 pub mod dataflow;
 pub mod taint;
 pub mod taint_ast_based;  // New: AST-based taint analysis with proper expression evaluation
+pub mod taint_config;     // Language-specific taint configurations
 pub mod symbol_table;
 pub mod call_graph;
 pub mod interprocedural_taint;
@@ -350,6 +351,7 @@ pub mod symbolic;
 pub use cfg::{ControlFlowGraph, CfgNode, CfgEdge, CfgBuilder};
 pub use dataflow::{DataFlowAnalysis, DataFlowDirection, TransferFunction};
 pub use taint::{TaintAnalysis, TaintSource, TaintSink, TaintValue, TaintAnalysisResult, Severity, TaintSinkKind, TaintSourceKind};
+pub use taint_config::LanguageTaintConfig;
 pub use symbol_table::{SymbolTable, SymbolTableBuilder, Symbol, SymbolKind};
 pub use call_graph::{CallGraph, CallGraphBuilder, CallGraphNode, CallEdge, CallableKind};
 pub use interprocedural_taint::{InterproceduralTaintAnalysis, FunctionTaintSummary};

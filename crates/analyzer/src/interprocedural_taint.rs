@@ -499,6 +499,23 @@ impl InterproceduralTaintAnalysis {
 
         self
     }
+
+    /// Configure taint analysis for a specific language
+    ///
+    /// This method replaces the default configuration with language-specific
+    /// taint sources, sinks, and sanitizers appropriate for the target language.
+    pub fn for_language(mut self, language: kodecd_parser::Language) -> Self {
+        use crate::taint_config::LanguageTaintConfig;
+
+        let config = LanguageTaintConfig::for_language(language);
+
+        // Replace sources, sinks, and sanitizers with language-specific ones
+        self.sources = config.sources;
+        self.sinks = config.sinks;
+        self.sanitizers = config.sanitizers.into_iter().collect();
+
+        self
+    }
 }
 
 impl Default for InterproceduralTaintAnalysis {
