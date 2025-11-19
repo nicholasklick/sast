@@ -41,7 +41,7 @@
 //!     .with_default_sinks()
 //!     .with_default_sanitizers();
 //!
-//! let result = taint.analyze(&cfg);
+//! let result = taint.analyze(&cfg, &ast);
 //!
 //! // Process vulnerabilities
 //! for vuln in &result.vulnerabilities {

@@ -2,6 +2,7 @@
 
 use crate::cfg::{CfgGraphIndex, CfgNode, CfgNodeKind, ControlFlowGraph};
 use crate::dataflow::{DataFlowAnalysis, DataFlowDirection, DataFlowResult, TransferFunction};
+use crate::taint_ast_based::AstBasedTaintTransferFunction;
 use kodecd_parser::ast::{AstNode, AstNodeKind, NodeId};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -99,11 +100,8 @@ impl TaintAnalysis {
         let sources = self.sources.clone();
         let sanitizers = self.sanitizers.clone();
 
-        // Create transfer function (no longer need to clone CFG!)
-        let transfer = OwnedTaintTransferFunction {
-            sources,
-            sanitizers,
-        };
+        // Create AST-based transfer function (proper semantic analysis!)
+        let transfer = AstBasedTaintTransferFunction::new(sources, sanitizers);
 
         let analysis = DataFlowAnalysis::new(
             DataFlowDirection::Forward,
@@ -241,16 +239,6 @@ impl Default for TaintAnalysis {
 struct OwnedTaintTransferFunction {
     sources: Vec<TaintSource>,
     sanitizers: HashSet<String>,
-}
-
-/// NEW: AST-based taint transfer function with proper expression evaluation
-///
-/// This implementation analyzes the actual AST structure instead of string labels,
-/// providing accurate taint tracking through complex expressions.
-struct AstBasedTaintTransferFunction {
-    sources: Vec<TaintSource>,
-    sanitizers: HashSet<String>,
-    ast_map: HashMap<NodeId, usize>,  // Maps AST node ID to index in flattened list
 }
 
 impl OwnedTaintTransferFunction {

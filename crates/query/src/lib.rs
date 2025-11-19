@@ -86,7 +86,7 @@
 //! let taint = TaintAnalysis::new()
 //!     .with_default_sources()
 //!     .with_default_sinks();
-//! let taint_result = taint.analyze(&cfg);
+//! let taint_result = taint.analyze(&cfg, &ast);
 //!
 //! // Query for tainted eval calls
 //! let query_str = r#"
