@@ -132,10 +132,24 @@ impl Parser {
             "if_statement" | "if_expression" => AstNodeKind::IfStatement,
             "while_statement" | "while_expression" => AstNodeKind::WhileStatement,
             "for_statement" | "for_expression" => AstNodeKind::ForStatement,
+            "do_statement" => AstNodeKind::DoWhileStatement,
             "try_statement" => AstNodeKind::TryStatement,
             "catch_clause" => AstNodeKind::CatchClause,
+            "finally_clause" => AstNodeKind::FinallyClause,
             "throw_statement" => AstNodeKind::ThrowStatement,
             "block" | "statement_block" => AstNodeKind::Block,
+
+            // Control flow
+            "switch_statement" | "match_expression" => self.parse_switch_statement(node, source),
+            "switch_case" | "case_clause" | "expression_case" | "match_arm" | "switch_label" => {
+                self.parse_switch_case(node, source)
+            }
+            "break_statement" | "break_expression" => self.parse_break_statement(node, source),
+            "continue_statement" | "continue_expression" => {
+                self.parse_continue_statement(node, source)
+            }
+            "labeled_statement" => self.parse_labeled_statement(node, source),
+            "with_statement" => self.parse_with_statement(node, source),
 
             // Expressions
             "binary_expression" | "binary_op" => self.parse_binary_expression(node, source),
@@ -161,6 +175,20 @@ impl Parser {
                 value: LiteralValue::Null,
             },
             "assignment_expression" => self.parse_assignment_expression(node, source),
+            "ternary_expression" | "conditional_expression" | "if_expression" => {
+                self.parse_conditional_expression(node, source)
+            }
+            "update_expression" => self.parse_update_expression(node, source),
+            "sequence_expression" => self.parse_sequence_expression(node, source),
+            "new_expression" => self.parse_new_expression(node, source),
+            "this" | "this_expression" => AstNodeKind::ThisExpression,
+            "super" | "super_expression" => AstNodeKind::SuperExpression,
+            "spread_element" | "spread_expression" => AstNodeKind::SpreadElement,
+            "rest_pattern" | "rest_element" => self.parse_rest_element(node, source),
+            "parenthesized_expression" => AstNodeKind::ParenthesizedExpression,
+            "tagged_template_expression" => self.parse_tagged_template_expression(node, source),
+            "function_expression" | "function" => self.parse_function_expression(node, source),
+            "class_expression" => self.parse_class_expression(node, source),
 
             // Comments
             _ if kind.contains("comment") => AstNodeKind::Comment {
@@ -302,6 +330,320 @@ impl Parser {
     fn parse_assignment_expression(&self, node: &Node, source: &str) -> AstNodeKind {
         let operator = self.extract_operator(node, source).unwrap_or_else(|| "=".to_string());
         AstNodeKind::AssignmentExpression { operator }
+    }
+
+    // Control flow parsing methods
+    fn parse_switch_statement(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract the discriminant (expression being switched on)
+        let mut discriminant = String::from("unknown");
+        let mut cases_count = 0;
+
+        // Recursively count case nodes (only direct case clauses, not nested switches)
+        fn count_cases(node: &Node, in_switch_body: bool) -> usize {
+            let mut count = 0;
+            let kind = node.kind();
+
+            // If we're in a switch_body and find a case or default, count it
+            if in_switch_body && (kind == "switch_case" || kind == "switch_default" || kind == "match_arm" || kind == "expression_case") {
+                count += 1;
+            }
+
+            // Decide if children should be considered in switch body
+            let child_in_switch_body = if kind == "switch_body" {
+                true
+            } else if kind == "switch_statement" || kind == "match_expression" {
+                // Don't count cases from nested switches
+                false
+            } else {
+                in_switch_body
+            };
+
+            // Recurse into children
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                count += count_cases(&child, child_in_switch_body);
+            }
+
+            count
+        }
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+
+            // Look for parenthesized_expression or direct identifier for discriminant
+            if discriminant == "unknown" && (kind == "parenthesized_expression" || kind == "identifier") {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    discriminant = text.to_string();
+                }
+            }
+        }
+
+        // Count all case clauses starting from this node
+        cases_count = count_cases(node, false);
+
+        AstNodeKind::SwitchStatement {
+            discriminant,
+            cases_count,
+        }
+    }
+
+    fn parse_switch_case(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract test expression (None for default case)
+        let mut test = None;
+        let mut consequent_count = 0;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+
+            // For "default:" case, test is None
+            if kind == "default" {
+                test = None;
+                break;
+            }
+
+            // First expression after "case" keyword is the test
+            if test.is_none() && !kind.contains("case") && !kind.contains(":") && !kind.contains("{") {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    test = Some(text.to_string());
+                }
+            }
+
+            // Count consequent statements
+            if kind.ends_with("statement") || kind == "expression_statement" {
+                consequent_count += 1;
+            }
+        }
+
+        AstNodeKind::SwitchCase {
+            test,
+            consequent_count,
+        }
+    }
+
+    fn parse_break_statement(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract optional label
+        let mut label = None;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+            // Look for statement_identifier (JS/TS), identifier, or label nodes
+            if kind == "statement_identifier" || kind == "identifier" || kind == "label" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    // Skip the "break" keyword itself
+                    if text != "break" {
+                        label = Some(text.to_string());
+                        break;
+                    }
+                }
+            }
+        }
+
+        AstNodeKind::BreakStatement { label }
+    }
+
+    fn parse_continue_statement(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract optional label
+        let mut label = None;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+            // Look for statement_identifier (JS/TS), identifier, or label nodes
+            if kind == "statement_identifier" || kind == "identifier" || kind == "label" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    // Skip the "continue" keyword itself
+                    if text != "continue" {
+                        label = Some(text.to_string());
+                        break;
+                    }
+                }
+            }
+        }
+
+        AstNodeKind::ContinueStatement { label }
+    }
+
+    fn parse_labeled_statement(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract the label name
+        let mut label = String::from("unknown");
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+            // Look for statement_identifier (JS/TS), identifier, or label nodes
+            if kind == "statement_identifier" || kind == "identifier" || kind == "label" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    label = text.to_string();
+                    break;
+                }
+            }
+        }
+
+        AstNodeKind::LabeledStatement { label }
+    }
+
+    fn parse_with_statement(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract the object expression
+        let mut object = String::from("unknown");
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+            // First expression after "with" keyword
+            if !kind.contains("with") && !kind.contains("{") && !kind.contains("(") && !kind.contains(")") {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    object = text.to_string();
+                    break;
+                }
+            }
+        }
+
+        AstNodeKind::WithStatement { object }
+    }
+
+    // Expression parsing methods
+    fn parse_conditional_expression(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract the test condition
+        let mut test = String::from("unknown");
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+            // First expression is usually the test (before ? operator)
+            if !kind.contains("?") && !kind.contains(":") && test == "unknown" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    if !text.trim().is_empty() {
+                        test = text.to_string();
+                        break;
+                    }
+                }
+            }
+        }
+
+        AstNodeKind::ConditionalExpression { test }
+    }
+
+    fn parse_update_expression(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract operator and determine if prefix or postfix
+        let mut operator = String::from("++");
+        let mut prefix = true;
+
+        let mut cursor = node.walk();
+        let children: Vec<_> = node.children(&mut cursor).collect();
+
+        for (i, child) in children.iter().enumerate() {
+            let kind = child.kind();
+            if kind == "++" || kind == "--" {
+                operator = kind.to_string();
+                // If operator is first child, it's prefix; if last, it's postfix
+                prefix = i == 0;
+                break;
+            }
+        }
+
+        AstNodeKind::UpdateExpression { operator, prefix }
+    }
+
+    fn parse_sequence_expression(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Count expressions separated by commas
+        let mut expressions_count = 0;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+            // Count non-comma children as expressions
+            if kind != "," {
+                expressions_count += 1;
+            }
+        }
+
+        AstNodeKind::SequenceExpression { expressions_count }
+    }
+
+    fn parse_new_expression(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract callee and count arguments
+        let mut callee = String::from("unknown");
+        let mut arguments_count = 0;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+
+            // Get the constructor name/expression
+            if callee == "unknown" && kind != "new" && !kind.contains("arguments") && kind != "(" && kind != ")" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    callee = text.to_string();
+                }
+            }
+
+            // Count arguments
+            if kind == "arguments" {
+                let mut args_cursor = child.walk();
+                for arg in child.children(&mut args_cursor) {
+                    if arg.kind() != "(" && arg.kind() != ")" && arg.kind() != "," {
+                        arguments_count += 1;
+                    }
+                }
+            }
+        }
+
+        AstNodeKind::NewExpression { callee, arguments_count }
+    }
+
+    fn parse_rest_element(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Determine if this is in a parameter list or destructuring
+        // Check parent context to see if it's a parameter
+        let is_parameter = {
+            // This is a heuristic - in parameter lists, parent is usually "parameters" or "formal_parameters"
+            // For now, we'll use a simple check
+            true  // Default to parameter context
+        };
+
+        AstNodeKind::RestElement { is_parameter }
+    }
+
+    fn parse_tagged_template_expression(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract the tag (function name/expression)
+        let mut tag = String::from("unknown");
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+            // First non-template child is the tag
+            if !kind.contains("template") && tag == "unknown" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    tag = text.to_string();
+                    break;
+                }
+            }
+        }
+
+        AstNodeKind::TaggedTemplateExpression { tag }
+    }
+
+    fn parse_function_expression(&self, node: &Node, source: &str) -> AstNodeKind {
+        let name = self.extract_name(node, source);
+        let parameters = self.extract_parameters_detailed(node, source);
+        let return_type = self.extract_return_type(node, source);
+        let is_async = self.is_async_function(node, source);
+        let is_generator = self.is_generator_function(node, source);
+
+        AstNodeKind::FunctionExpression {
+            name,
+            parameters,
+            return_type,
+            is_async,
+            is_generator,
+        }
+    }
+
+    fn parse_class_expression(&self, node: &Node, source: &str) -> AstNodeKind {
+        let name = self.extract_name(node, source);
+
+        AstNodeKind::ClassExpression { name }
     }
 
     // Helper methods for extracting information from nodes

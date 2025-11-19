@@ -11,7 +11,8 @@ use kodecd_parser::{Language, LanguageConfig, Parser};
 use kodecd_query::{QueryExecutor, QueryParser};
 use std::path::Path;
 
-fn main() {
+#[test]
+fn test_kql_end_to_end() {
     println!("=== KQL End-to-End Test ===\n");
 
     // Test file with vulnerabilities
@@ -34,7 +35,7 @@ fn main() {
 
     // Build CFG
     println!("🔧 Building control flow graph...");
-    let cfg = ControlFlowGraphBuilder::build(&ast);
+    let cfg = CfgBuilder::new().build(&ast);
     println!("✅ CFG built with {} nodes\n", cfg.graph.node_count());
 
     // Test queries

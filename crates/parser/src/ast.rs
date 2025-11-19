@@ -170,10 +170,34 @@ pub enum AstNodeKind {
     IfStatement,
     WhileStatement,
     ForStatement,
+    DoWhileStatement,
     TryStatement,
     CatchClause,
+    FinallyClause,
     ThrowStatement,
     Block,
+
+    // Control flow
+    SwitchStatement {
+        discriminant: String,
+        cases_count: usize,
+    },
+    SwitchCase {
+        test: Option<String>,  // None for default case
+        consequent_count: usize,
+    },
+    BreakStatement {
+        label: Option<String>,
+    },
+    ContinueStatement {
+        label: Option<String>,
+    },
+    LabeledStatement {
+        label: String,
+    },
+    WithStatement {
+        object: String,
+    },
 
     // Expressions
     BinaryExpression {
@@ -219,6 +243,40 @@ pub enum AstNodeKind {
     },
     TemplateString {
         has_expressions: bool,
+    },
+    ConditionalExpression {
+        test: String,
+    },
+    UpdateExpression {
+        operator: String,  // ++, --
+        prefix: bool,      // ++i vs i++
+    },
+    SequenceExpression {
+        expressions_count: usize,
+    },
+    NewExpression {
+        callee: String,
+        arguments_count: usize,
+    },
+    ThisExpression,
+    SuperExpression,
+    SpreadElement,
+    RestElement {
+        is_parameter: bool,  // In function params vs array/object
+    },
+    ParenthesizedExpression,
+    TaggedTemplateExpression {
+        tag: String,
+    },
+    FunctionExpression {
+        name: Option<String>,
+        parameters: Vec<Parameter>,
+        return_type: Option<String>,
+        is_async: bool,
+        is_generator: bool,
+    },
+    ClassExpression {
+        name: Option<String>,
     },
 
     // Special constructs
