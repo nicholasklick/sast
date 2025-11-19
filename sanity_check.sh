@@ -129,7 +129,16 @@ TOTAL_TESTS=$((PARSER_TESTS + QUERY_TESTS + ANALYZER_TESTS))
 echo "✓ Total: $TOTAL_TESTS tests passing"
 
 echo ""
-echo "7. QUICK FUNCTIONALITY TEST"
+echo "7. BENCHMARK CHECKS"
+echo "────────────────────────────────────────────────────────────────"
+
+run_test "Parser benchmark builds" "cargo build --bench parser_benchmark --quiet"
+run_test "Query benchmark builds" "cargo build --bench query_benchmark --quiet"
+run_test "Taint benchmark builds" "cargo build --bench taint_analysis_benchmark --quiet"
+run_test "Analyzer benchmark builds" "cargo build --bench analyzer_benchmark --quiet"
+
+echo ""
+echo "8. QUICK FUNCTIONALITY TEST"
 echo "────────────────────────────────────────────────────────────────"
 
 # Create a simple test file

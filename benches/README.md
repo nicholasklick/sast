@@ -4,10 +4,11 @@ This directory contains comprehensive performance benchmarks for the KodeCD SAST
 
 ## Overview
 
-The benchmark suite measures performance across three main areas:
+The benchmark suite measures performance across four main areas:
 1. **Parser Performance** - Tree-sitter parsing across languages
 2. **Query Execution** - KQL query parsing and execution
 3. **Taint Analysis** - Data flow analysis performance
+4. **Analyzer Components** - Symbol tables, call graphs, points-to, interprocedural analysis
 
 ## Benchmark Suites
 
@@ -58,6 +59,25 @@ Tests data flow analysis performance.
 - Taint propagation speed
 - Scalability with multiple flows
 
+### 4. Analyzer Component Benchmarks (`analyzer_benchmark.rs`)
+
+Tests performance of core analyzer components used in interprocedural analysis.
+
+**Benchmarks:**
+- `symbol_table` - Symbol table construction (simple, medium, complex code)
+- `call_graph` - Call graph construction across complexity levels
+- `points_to` - Points-to analysis performance
+- `interprocedural_taint` - Cross-function taint tracking
+- `full_pipeline` - Complete analysis: symbol table → call graph → points-to → taint → interprocedural
+- `scaling` - Performance scaling with function count (10, 50, 100, 200 functions)
+
+**Key Metrics:**
+- Symbol table build time
+- Call graph construction speed
+- Points-to analysis efficiency
+- Interprocedural taint throughput
+- Pipeline end-to-end performance
+
 ## Running Benchmarks
 
 ### Run All Benchmarks
@@ -77,6 +97,9 @@ cargo bench --bench query_benchmark
 
 # Taint analysis benchmarks only
 cargo bench --bench taint_analysis_benchmark
+
+# Analyzer component benchmarks only
+cargo bench --bench analyzer_benchmark
 ```
 
 ### Run Specific Benchmark
@@ -90,6 +113,15 @@ cargo bench --bench query_benchmark -- query_parsing
 
 # Run taint analysis scaling benchmark
 cargo bench --bench taint_analysis_benchmark -- taint_scaling
+
+# Run symbol table benchmark
+cargo bench --bench analyzer_benchmark -- symbol_table
+
+# Run call graph benchmark
+cargo bench --bench analyzer_benchmark -- call_graph
+
+# Run interprocedural taint benchmark
+cargo bench --bench analyzer_benchmark -- interprocedural_taint
 ```
 
 ### Filter by Name
@@ -142,6 +174,13 @@ Based on benchmarks, these are the target performance metrics:
 - **CFG build**: <2ms for medium complexity
 - **Taint analysis**: <10ms for 10 taint flows
 - **Full pipeline**: <50ms for complex code
+
+### Analyzer Component Performance
+- **Symbol table**: <1ms for medium complexity
+- **Call graph**: <2ms for complex code
+- **Points-to analysis**: <5ms for medium code
+- **Interprocedural taint**: <10ms for cross-function analysis
+- **Full analyzer pipeline**: <30ms for complex code
 
 ## Comparing Results
 

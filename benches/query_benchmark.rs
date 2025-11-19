@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use kodecd_query::{QueryParser, QueryExecutor};
 use kodecd_parser::{Parser, Language, LanguageConfig};
 use kodecd_analyzer::CfgBuilder;
@@ -95,8 +95,7 @@ fn bench_query_stdlib(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("query_stdlib");
 
-    let stdlib = StandardLibrary::new();
-    let queries = stdlib.get_owasp_queries();
+    let queries = StandardLibrary::owasp_queries();
 
     // Prepare AST and CFG
     let parser = Parser::new(
@@ -107,14 +106,13 @@ fn bench_query_stdlib(c: &mut Criterion) {
     let cfg = CfgBuilder::new().build(&ast);
 
     // Benchmark all OWASP queries
-    for query_def in queries.iter().take(5) {  // First 5 for speed
+    for (id, query) in queries.iter().take(5) {  // First 5 for speed
         group.bench_with_input(
-            BenchmarkId::from_parameter(&query_def.id),
-            &query_def.query,
-            |b, query_str| {
-                let query = QueryParser::parse(query_str).unwrap();
+            BenchmarkId::from_parameter(id),
+            query,
+            |b, query| {
                 b.iter(|| {
-                    QueryExecutor::execute(black_box(&query), black_box(&ast), black_box(&cfg), None)
+                    QueryExecutor::execute(black_box(query), black_box(&ast), black_box(&cfg), None)
                 });
             }
         );
