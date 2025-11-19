@@ -1,6 +1,6 @@
 //! Core parser implementation using Tree-sitter
 
-use crate::ast::{AstNode, AstNodeKind, LiteralValue, Location, Span, Visibility};
+use crate::ast::{AstNode, AstNodeKind, LiteralValue, Location, Span, Visibility, MethodKind};
 use crate::language::{Language, LanguageConfig};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -193,6 +193,9 @@ impl Parser {
             "object_pattern" => self.parse_object_pattern(node, source),
             "assignment_pattern" => self.parse_assignment_pattern(node, source),
             "rest_pattern" => self.parse_rest_pattern(node, source),
+            "pair" | "property" | "property_assignment" => self.parse_property(node, source),
+            "computed_property_name" => self.parse_computed_property_name(node, source),
+            "field_definition" => self.parse_method_definition(node, source),
 
             // Comments
             _ if kind.contains("comment") => AstNodeKind::Comment {
@@ -245,6 +248,35 @@ impl Parser {
         let is_async = self.is_async_function(node, source);
         let is_abstract = self.is_abstract_method(node, source);
 
+        // Check if this is a getter, setter, or constructor
+        let mut method_kind: Option<MethodKind> = None;
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let child_kind = child.kind();
+
+            if child_kind == "get" {
+                method_kind = Some(MethodKind::Get);
+            } else if child_kind == "set" {
+                method_kind = Some(MethodKind::Set);
+            } else if child_kind == "property_identifier" || child_kind == "identifier" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    if text == "constructor" {
+                        method_kind = Some(MethodKind::Constructor);
+                    }
+                }
+            }
+        }
+
+        // If it's a special method (getter/setter/constructor), return MethodDefinition
+        if let Some(kind) = method_kind {
+            return AstNodeKind::MethodDefinition {
+                name,
+                kind,
+                is_static,
+            };
+        }
+
+        // Otherwise return regular MethodDeclaration
         AstNodeKind::MethodDeclaration {
             name,
             parameters,
@@ -730,6 +762,128 @@ impl Parser {
         };
 
         AstNodeKind::RestPattern { is_array }
+    }
+
+    // Object/Array detail parsing methods
+    fn parse_property(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract key, value, and detect computed/shorthand/method properties
+        let mut key = String::from("unknown");
+        let mut value: Option<String> = None;
+        let mut is_computed = false;
+        let mut is_shorthand = false;
+        let mut is_method = false;
+
+        let mut cursor = node.walk();
+        let children: Vec<_> = node.children(&mut cursor).collect();
+
+        // Check for shorthand property (only one identifier child)
+        if children.len() == 1 && children[0].kind() == "identifier" {
+            is_shorthand = true;
+            if let Ok(text) = children[0].utf8_text(source.as_bytes()) {
+                key = text.to_string();
+                value = Some(text.to_string());
+            }
+        } else {
+            // Parse key-value pair
+            for (i, child) in children.iter().enumerate() {
+                let kind = child.kind();
+
+                // Skip delimiters
+                if kind == ":" || kind == "," {
+                    continue;
+                }
+
+                // First non-delimiter is the key
+                if key == "unknown" {
+                    if kind == "computed_property_name" {
+                        is_computed = true;
+                        if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                            key = text.to_string();
+                        }
+                    } else if kind != ":" && kind != "," {
+                        if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                            key = text.to_string();
+                        }
+                    }
+                } else if value.is_none() && kind != ":" && kind != "," {
+                    // After key, we have the value
+                    if kind.contains("function") || kind == "method_definition" {
+                        is_method = true;
+                    }
+                    if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                        value = Some(text.to_string());
+                    }
+                }
+            }
+        }
+
+        AstNodeKind::Property {
+            key,
+            value,
+            is_computed,
+            is_shorthand,
+            is_method,
+        }
+    }
+
+    fn parse_computed_property_name(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract the expression inside brackets
+        let mut expression = String::from("unknown");
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+            // Skip brackets
+            if kind != "[" && kind != "]" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    expression = text.to_string();
+                    break;
+                }
+            }
+        }
+
+        AstNodeKind::ComputedPropertyName { expression }
+    }
+
+    fn parse_method_definition(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract method name and determine kind (method, get, set, constructor)
+        let mut name = String::from("unknown");
+        let mut kind = MethodKind::Method;
+        let mut is_static = false;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let child_kind = child.kind();
+
+            // Check for static keyword
+            if child_kind == "static" {
+                is_static = true;
+            }
+
+            // Check for getter/setter
+            if child_kind == "get" {
+                kind = MethodKind::Get;
+            } else if child_kind == "set" {
+                kind = MethodKind::Set;
+            }
+
+            // Extract name
+            if (child_kind == "property_identifier" || child_kind == "identifier") && name == "unknown" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    // Check if it's a constructor
+                    if text == "constructor" {
+                        kind = MethodKind::Constructor;
+                    }
+                    name = text.to_string();
+                }
+            }
+        }
+
+        AstNodeKind::MethodDefinition {
+            name,
+            kind,
+            is_static,
+        }
     }
 
     // Helper methods for extracting information from nodes

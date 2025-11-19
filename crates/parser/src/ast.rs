@@ -295,6 +295,23 @@ pub enum AstNodeKind {
         is_array: bool,  // true for array rest, false for object rest
     },
 
+    // Object/Array Details
+    Property {
+        key: String,
+        value: Option<String>,
+        is_computed: bool,   // obj[key] vs obj.key
+        is_shorthand: bool,  // {x} vs {x: x}
+        is_method: bool,     // {foo() {}} vs {foo: function() {}}
+    },
+    ComputedPropertyName {
+        expression: String,
+    },
+    MethodDefinition {
+        name: String,
+        kind: MethodKind,  // method, get, set, constructor
+        is_static: bool,
+    },
+
     // Special constructs
     ImportDeclaration {
         source: String,
@@ -335,6 +352,14 @@ pub enum Visibility {
     Private,
     Protected,
     Internal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MethodKind {
+    Method,      // Regular method
+    Get,         // Getter
+    Set,         // Setter
+    Constructor, // Constructor
 }
 
 impl fmt::Display for AstNodeKind {
