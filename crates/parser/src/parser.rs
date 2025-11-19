@@ -1131,6 +1131,114 @@ impl Parser {
         }
     }
 
+    // TypeScript Parsing Methods (Phase 6)
+
+    fn parse_type_annotation(&self, node: &Node, source: &str) -> AstNodeKind {
+        let mut type_string = String::from("unknown");
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+
+            // Skip the colon
+            if kind == ":" {
+                continue;
+            }
+
+            // Extract the type
+            if kind != ":" && !kind.is_empty() {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    type_string = text.to_string();
+                    break;
+                }
+            }
+        }
+
+        AstNodeKind::TypeAnnotation { type_string }
+    }
+
+    fn parse_type_arguments(&self, node: &Node, source: &str) -> AstNodeKind {
+        let mut types = Vec::new();
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+
+            // Skip angle brackets and commas
+            if kind == "<" || kind == ">" || kind == "," {
+                continue;
+            }
+
+            // Extract type names
+            if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                types.push(text.to_string());
+            }
+        }
+
+        AstNodeKind::TypeArguments { types }
+    }
+
+    fn parse_type_parameters(&self, node: &Node, source: &str) -> AstNodeKind {
+        let mut parameters = Vec::new();
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+
+            // Skip angle brackets and commas
+            if kind == "<" || kind == ">" || kind == "," {
+                continue;
+            }
+
+            // Extract type parameter names
+            if kind == "type_parameter" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    parameters.push(text.to_string());
+                }
+            }
+        }
+
+        AstNodeKind::TypeParameters { parameters }
+    }
+
+    fn parse_as_expression(&self, node: &Node, source: &str) -> AstNodeKind {
+        let mut type_string = String::from("unknown");
+
+        let mut cursor = node.walk();
+        let children: Vec<_> = node.children(&mut cursor).collect();
+
+        // Pattern: expression as Type
+        for (i, child) in children.iter().enumerate() {
+            if child.kind() == "as" && i + 1 < children.len() {
+                if let Ok(text) = children[i + 1].utf8_text(source.as_bytes()) {
+                    type_string = text.to_string();
+                    break;
+                }
+            }
+        }
+
+        AstNodeKind::AsExpression { type_string }
+    }
+
+    fn parse_satisfies_expression(&self, node: &Node, source: &str) -> AstNodeKind {
+        let mut type_string = String::from("unknown");
+
+        let mut cursor = node.walk();
+        let children: Vec<_> = node.children(&mut cursor).collect();
+
+        // Pattern: expression satisfies Type
+        for (i, child) in children.iter().enumerate() {
+            if child.kind() == "satisfies" && i + 1 < children.len() {
+                if let Ok(text) = children[i + 1].utf8_text(source.as_bytes()) {
+                    type_string = text.to_string();
+                    break;
+                }
+            }
+        }
+
+        AstNodeKind::SatisfiesExpression { type_string }
+    }
+
     // Helper methods for extracting information from nodes
     fn extract_name(&self, node: &Node, source: &str) -> Option<String> {
         let mut cursor = node.walk();
