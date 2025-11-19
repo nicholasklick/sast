@@ -9,6 +9,14 @@ use tree_sitter::{Node, Parser as TreeSitterParser};
 
 static NODE_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+/// Error information extracted from tree-sitter
+#[derive(Debug)]
+struct ErrorInfo {
+    message: String,
+    line: usize,
+    column: usize,
+}
+
 #[derive(Error, Debug)]
 pub enum ParseError {
     #[error("Failed to read file: {0}")]
@@ -17,6 +25,13 @@ pub enum ParseError {
     FileTooLarge(usize, usize),
     #[error("Failed to parse file: {0}")]
     TreeSitterError(String),
+    #[error("Syntax error at line {line}, column {column}: {message}")]
+    SyntaxError {
+        message: String,
+        line: usize,
+        column: usize,
+        file_path: Option<String>,
+    },
     #[error("Language error: {0}")]
     LanguageError(#[from] crate::language::LanguageError),
 }
@@ -65,11 +80,47 @@ impl Parser {
             .parse(source, None)
             .ok_or_else(|| ParseError::TreeSitterError("Failed to parse".to_string()))?;
 
-        // Convert Tree-sitter tree to our AST
+        // Check for syntax errors
         let root = tree.root_node();
+        if root.has_error() {
+            // Find the first error node to report location
+            if let Some(error_info) = self.find_first_error(&root) {
+                return Err(ParseError::SyntaxError {
+                    message: error_info.message,
+                    line: error_info.line,
+                    column: error_info.column,
+                    file_path: Some(self.file_path.to_string_lossy().to_string()),
+                });
+            }
+        }
+
+        // Convert Tree-sitter tree to our AST
         let ast = self.convert_node(&root, source);
 
         Ok(ast)
+    }
+
+    /// Find the first error node in the tree for better error reporting
+    fn find_first_error(&self, node: &Node) -> Option<ErrorInfo> {
+        // Check if this node is an error
+        if node.is_error() || node.kind() == "ERROR" {
+            let start = node.start_position();
+            return Some(ErrorInfo {
+                message: format!("Unexpected '{}'", node.kind()),
+                line: start.row + 1, // tree-sitter uses 0-based rows
+                column: start.column + 1, // tree-sitter uses 0-based columns
+            });
+        }
+
+        // Recursively search children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if let Some(error) = self.find_first_error(&child) {
+                return Some(error);
+            }
+        }
+
+        None
     }
 
     /// Convert a Tree-sitter node to our AST representation
