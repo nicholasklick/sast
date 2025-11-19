@@ -293,12 +293,14 @@ pub mod parser;
 pub mod stdlib;
 pub mod metadata;
 pub mod extended_stdlib;
+pub mod owasp_rules;
 
 pub use ast::{Query, QueryAst, Predicate};
 pub use executor::{QueryExecutor, QueryResult, Finding};
 pub use lexer::{Token, Lexer};
 pub use parser::{QueryParser, ParseError};
 pub use stdlib::StandardLibrary;
+pub use owasp_rules::{OwaspRuleLibrary, RuleMetadata, Severity};
 pub use metadata::{
     QueryMetadata, QueryMetadataBuilder, QueryCategory, QuerySeverity,
     QueryPrecision, QuerySuite, QueryRegistry, QueryRegistryStats
