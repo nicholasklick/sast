@@ -279,6 +279,22 @@ pub enum AstNodeKind {
         name: Option<String>,
     },
 
+    // Patterns (destructuring)
+    ArrayPattern {
+        elements_count: usize,
+        has_rest: bool,
+    },
+    ObjectPattern {
+        properties_count: usize,
+        has_rest: bool,
+    },
+    AssignmentPattern {
+        has_default: bool,
+    },
+    RestPattern {
+        is_array: bool,  // true for array rest, false for object rest
+    },
+
     // Special constructs
     ImportDeclaration {
         source: String,

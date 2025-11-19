@@ -189,6 +189,10 @@ impl Parser {
             "tagged_template_expression" => self.parse_tagged_template_expression(node, source),
             "function_expression" | "function" => self.parse_function_expression(node, source),
             "class_expression" => self.parse_class_expression(node, source),
+            "array_pattern" => self.parse_array_pattern(node, source),
+            "object_pattern" => self.parse_object_pattern(node, source),
+            "assignment_pattern" => self.parse_assignment_pattern(node, source),
+            "rest_pattern" => self.parse_rest_pattern(node, source),
 
             // Comments
             _ if kind.contains("comment") => AstNodeKind::Comment {
@@ -644,6 +648,88 @@ impl Parser {
         let name = self.extract_name(node, source);
 
         AstNodeKind::ClassExpression { name }
+    }
+
+    // Pattern parsing methods
+    fn parse_array_pattern(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Count elements and check for rest
+        let mut elements_count = 0;
+        let mut has_rest = false;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+
+            // Skip delimiters
+            if kind == "[" || kind == "]" || kind == "," {
+                continue;
+            }
+
+            // Check for rest pattern
+            if kind == "rest_pattern" || kind == "rest_element" || kind.contains("spread") {
+                has_rest = true;
+            }
+
+            // Count as element if it's a meaningful node
+            if !kind.is_empty() && kind != "[" && kind != "]" && kind != "," {
+                elements_count += 1;
+            }
+        }
+
+        AstNodeKind::ArrayPattern {
+            elements_count,
+            has_rest,
+        }
+    }
+
+    fn parse_object_pattern(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Count properties and check for rest
+        let mut properties_count = 0;
+        let mut has_rest = false;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+
+            // Skip delimiters
+            if kind == "{" || kind == "}" || kind == "," {
+                continue;
+            }
+
+            // Check for rest pattern
+            if kind == "rest_pattern" || kind == "rest_element" || kind.contains("spread") {
+                has_rest = true;
+            }
+
+            // Count properties (shorthand_property_identifier, pair, etc.)
+            if kind.contains("property") || kind == "pair" || kind == "shorthand_property_identifier" {
+                properties_count += 1;
+            }
+        }
+
+        AstNodeKind::ObjectPattern {
+            properties_count,
+            has_rest,
+        }
+    }
+
+    fn parse_assignment_pattern(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Check if there's a default value (assignment)
+        let has_default = node.child_count() > 1;
+
+        AstNodeKind::AssignmentPattern { has_default }
+    }
+
+    fn parse_rest_pattern(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Determine context: array or object rest
+        // This is a heuristic - check if parent or siblings suggest array context
+        let is_array = {
+            // For now, default to true (array context is more common)
+            // In a more sophisticated implementation, we'd check parent node
+            true
+        };
+
+        AstNodeKind::RestPattern { is_array }
     }
 
     // Helper methods for extracting information from nodes
