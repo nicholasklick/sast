@@ -205,6 +205,14 @@ impl Parser {
             "namespace_import" => self.parse_namespace_import(node, source),
             "namespace_export" => self.parse_namespace_export(node, source),
 
+            // TypeScript (Phase 6)
+            "type_annotation" => self.parse_type_annotation(node, source),
+            "type_arguments" => self.parse_type_arguments(node, source),
+            "type_parameters" => self.parse_type_parameters(node, source),
+            "as_expression" => self.parse_as_expression(node, source),
+            "satisfies_expression" => self.parse_satisfies_expression(node, source),
+            "non_null_expression" => AstNodeKind::NonNullAssertion,
+
             // Comments
             _ if kind.contains("comment") => AstNodeKind::Comment {
                 is_multiline: kind.contains("block") || kind.contains("multi"),

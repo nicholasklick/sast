@@ -354,6 +354,28 @@ pub enum AstNodeKind {
         is_multiline: bool,
     },
 
+    // TypeScript Support (Phase 6)
+    TypeAnnotation {
+        type_string: String,
+    },
+    TypeArguments {
+        types: Vec<String>,
+    },
+    TypeParameters {
+        parameters: Vec<String>,
+    },
+    AsExpression {
+        type_string: String,
+    },
+    SatisfiesExpression {
+        type_string: String,
+    },
+    NonNullAssertion,
+    TypePredicate {
+        parameter_name: String,
+        type_name: String,
+    },
+
     // Fallback for unsupported constructs
     Other {
         node_type: String,
