@@ -253,22 +253,8 @@ impl QueryExecutor {
             Expression::Boolean(b) => Value::Boolean(*b),
 
             Expression::PropertyAccess { object, property } => {
-                // Evaluate object first
-                match object.as_ref() {
-                    Expression::Variable(var_name) => {
-                        if let Some(node) = ctx.get_binding(var_name) {
-                            Self::get_property_value(node, property)
-                        } else {
-                            Value::Null
-                        }
-                    }
-                    _ => {
-                        // Nested property access
-                        let obj_val = Self::evaluate_expression(object, ctx);
-                        // For now, return the property name as string
-                        Value::String(format!("{}.{}", obj_val.as_string(), property))
-                    }
-                }
+                // Recursively evaluate nested property access
+                Self::evaluate_property_access(object, property, ctx)
             }
 
             Expression::MethodCall {
@@ -324,6 +310,80 @@ impl QueryExecutor {
                 }
             }
         }
+    }
+
+    /// Evaluate property access, supporting nested properties like a.b.c
+    fn evaluate_property_access(
+        object: &Expression,
+        property: &str,
+        ctx: &EvaluationContext,
+    ) -> Value {
+        match object {
+            // Base case: simple variable
+            Expression::Variable(var_name) => {
+                if let Some(node) = ctx.get_binding(var_name) {
+                    Self::get_property_value(node, property)
+                } else {
+                    Value::Null
+                }
+            }
+            // Recursive case: nested property access (a.b.c)
+            Expression::PropertyAccess {
+                object: nested_object,
+                property: nested_property,
+            } => {
+                // First evaluate the nested part (a.b), which should give us an AST node
+                // Then access the property (c) on that node
+                if let Expression::Variable(var_name) = nested_object.as_ref() {
+                    if let Some(node) = ctx.get_binding(var_name) {
+                        // Navigate to the nested property
+                        if let Some(nested_node) =
+                            Self::navigate_to_property(node, nested_property)
+                        {
+                            // Now get the final property from the nested node
+                            Self::get_property_value(&nested_node, property)
+                        } else {
+                            Value::Null
+                        }
+                    } else {
+                        Value::Null
+                    }
+                } else {
+                    // Even deeper nesting - recursively evaluate
+                    Value::Null // TODO: Could implement deeper recursion if needed
+                }
+            }
+            _ => Value::Null,
+        }
+    }
+
+    /// Navigate to a property within an AST node's children
+    fn navigate_to_property(node: &AstNode, property: &str) -> Option<AstNode> {
+        // Search through children for a node matching the property name
+        for child in &node.children {
+            if let Some(child_name) = Self::extract_name(child) {
+                if child_name == property {
+                    return Some(child.clone());
+                }
+            }
+
+            // Also check if this child is a MemberExpression matching the property
+            if let AstNodeKind::MemberExpression {
+                property: prop, ..
+            } = &child.kind
+            {
+                if prop == property {
+                    return Some(child.clone());
+                }
+            }
+
+            // Recursively search in children
+            if let Some(found) = Self::navigate_to_property(child, property) {
+                return Some(found);
+            }
+        }
+
+        None
     }
 
     fn get_property_value(node: &AstNode, property: &str) -> Value {
@@ -399,10 +459,13 @@ impl QueryExecutor {
                 // Check if the node is tainted
                 if let Some(taint_results) = ctx.taint_results {
                     // Check if any vulnerability involves this variable
-                    let is_tainted = taint_results
-                        .vulnerabilities
-                        .iter()
-                        .any(|v| v.tainted_value.variable.contains(var_name));
+                    // Use exact matching instead of contains() for precision
+                    let is_tainted = taint_results.vulnerabilities.iter().any(|v| {
+                        // Exact match on variable name
+                        v.tainted_value.variable == var_name
+                            // Or check if it's a property access pattern (e.g., "obj.prop")
+                            || v.tainted_value.variable.split('.').any(|part| part == var_name)
+                    });
                     Value::Boolean(is_tainted)
                 } else {
                     Value::Boolean(false)
@@ -463,10 +526,13 @@ impl QueryExecutor {
         match function {
             "isTainted" => {
                 if let Some(taint_results) = ctx.taint_results {
-                    taint_results
-                        .vulnerabilities
-                        .iter()
-                        .any(|v| v.tainted_value.variable.contains(variable))
+                    // Use exact matching instead of contains() for precision
+                    taint_results.vulnerabilities.iter().any(|v| {
+                        // Exact match on variable name
+                        v.tainted_value.variable == variable
+                            // Or check if it's a property access pattern (e.g., "obj.prop")
+                            || v.tainted_value.variable.split('.').any(|part| part == variable)
+                    })
                 } else {
                     false
                 }
