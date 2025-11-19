@@ -6,7 +6,7 @@
 //! kodecd-analyzer = { path = "crates/analyzer" }
 //! ```
 
-use kodecd_analyzer::cfg::ControlFlowGraphBuilder;
+use kodecd_analyzer::CfgBuilder;
 use kodecd_parser::{Language, LanguageConfig, Parser};
 use kodecd_query::{QueryExecutor, QueryParser};
 use std::path::Path;

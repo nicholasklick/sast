@@ -119,7 +119,7 @@ fn test_basic_taint_flow() {
     let cfg = CfgBuilder::new().build(&ast);
 
     // Run taint analysis
-    let result = taint.analyze(&cfg);
+    let result = taint.analyze(&cfg, &ast);
 
     // Should detect at least one vulnerability
     println!("Found {} vulnerabilities", result.vulnerabilities.len());
@@ -202,7 +202,7 @@ fn test_real_file_taint_analysis() {
         .with_default_sanitizers();
 
     // Run analysis
-    let result = taint.analyze(&cfg);
+    let result = taint.analyze(&cfg, &ast);
 
     println!(
         "\n=== Taint Analysis on {} ===",

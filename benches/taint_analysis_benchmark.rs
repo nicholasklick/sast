@@ -112,7 +112,7 @@ fn bench_taint_analysis(c: &mut Criterion) {
         let ast = parser.parse_source(SIMPLE_TAINT).unwrap();
         let cfg = CfgBuilder::new().build(&ast);
         b.iter(|| {
-            taint.analyze(black_box(&cfg))
+            taint.analyze(black_box(&cfg), black_box(&ast))
         });
     });
 
@@ -120,7 +120,7 @@ fn bench_taint_analysis(c: &mut Criterion) {
         let ast = parser.parse_source(MEDIUM_TAINT).unwrap();
         let cfg = CfgBuilder::new().build(&ast);
         b.iter(|| {
-            taint.analyze(black_box(&cfg))
+            taint.analyze(black_box(&cfg), black_box(&ast))
         });
     });
 
@@ -128,7 +128,7 @@ fn bench_taint_analysis(c: &mut Criterion) {
         let ast = parser.parse_source(COMPLEX_TAINT).unwrap();
         let cfg = CfgBuilder::new().build(&ast);
         b.iter(|| {
-            taint.analyze(black_box(&cfg))
+            taint.analyze(black_box(&cfg), black_box(&ast))
         });
     });
 
@@ -151,7 +151,7 @@ fn bench_taint_analysis_config(c: &mut Criterion) {
             .with_default_sinks()
             .with_default_sanitizers();
         b.iter(|| {
-            taint.analyze(black_box(&cfg))
+            taint.analyze(black_box(&cfg), black_box(&ast))
         });
     });
 
@@ -159,7 +159,7 @@ fn bench_taint_analysis_config(c: &mut Criterion) {
         let taint = TaintAnalysis::new()
             .with_default_sources();
         b.iter(|| {
-            taint.analyze(black_box(&cfg))
+            taint.analyze(black_box(&cfg), black_box(&ast))
         });
     });
 
@@ -168,7 +168,7 @@ fn bench_taint_analysis_config(c: &mut Criterion) {
             .with_default_sources()
             .with_default_sinks();
         b.iter(|| {
-            taint.analyze(black_box(&cfg))
+            taint.analyze(black_box(&cfg), black_box(&ast))
         });
     });
 
@@ -192,7 +192,7 @@ fn bench_full_pipeline(c: &mut Criterion) {
             );
             let ast = parser.parse_source(black_box(COMPLEX_TAINT)).unwrap();
             let cfg = CfgBuilder::new().build(&ast);
-            taint.analyze(&cfg)
+            taint.analyze(&cfg, &ast)
         });
     });
 
@@ -230,7 +230,7 @@ fn bench_taint_scaling(c: &mut Criterion) {
             let cfg = CfgBuilder::new().build(&ast);
 
             b.iter(|| {
-                taint.analyze(black_box(&cfg))
+                taint.analyze(black_box(&cfg), black_box(&ast))
             });
         });
     }

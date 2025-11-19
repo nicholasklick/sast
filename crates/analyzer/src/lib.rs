@@ -340,6 +340,7 @@
 pub mod cfg;
 pub mod dataflow;
 pub mod taint;
+pub mod taint_ast_based;  // New: AST-based taint analysis with proper expression evaluation
 pub mod symbol_table;
 pub mod call_graph;
 pub mod interprocedural_taint;

@@ -22,7 +22,7 @@ fuzz_target!(|data: &[u8]| {
                 .with_default_sinks()
                 .with_default_sanitizers();
 
-            let _ = taint.analyze(&cfg);
+            let _ = taint.analyze(&cfg, &ast);
         }
     }
 });
