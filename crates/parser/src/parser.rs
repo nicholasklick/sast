@@ -197,6 +197,14 @@ impl Parser {
             "computed_property_name" => self.parse_computed_property_name(node, source),
             "field_definition" => self.parse_method_definition(node, source),
 
+            // Module system (Phase 5)
+            "import_statement" => self.parse_import_statement(node, source),
+            "export_statement" => self.parse_export_statement(node, source),
+            "import_specifier" => self.parse_import_specifier(node, source),
+            "export_specifier" => self.parse_export_specifier(node, source),
+            "namespace_import" => self.parse_namespace_import(node, source),
+            "namespace_export" => self.parse_namespace_export(node, source),
+
             // Comments
             _ if kind.contains("comment") => AstNodeKind::Comment {
                 is_multiline: kind.contains("block") || kind.contains("multi"),
@@ -886,6 +894,235 @@ impl Parser {
         }
     }
 
+    // Module System Parsing Methods (Phase 5)
+
+    fn parse_import_statement(&self, node: &Node, source: &str) -> AstNodeKind {
+        // Extract source module and imported names
+        let mut source_module = String::new();
+        let mut imported_names = Vec::new();
+        let mut is_type_only = false;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+
+            // Check for type-only imports (TypeScript)
+            if kind == "type" {
+                is_type_only = true;
+            }
+
+            // Extract source module from string literal
+            if kind == "string" || kind == "string_literal" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    source_module = text.trim_matches('\'').trim_matches('"').to_string();
+                }
+            }
+
+            // Extract import specifiers from import_clause
+            if kind == "import_clause" {
+                imported_names = self.extract_import_specifiers(&child, source);
+            }
+        }
+
+        AstNodeKind::ImportDeclaration {
+            source: source_module,
+            imported_names,
+            is_type_only,
+        }
+    }
+
+    fn parse_export_statement(&self, node: &Node, source: &str) -> AstNodeKind {
+        let mut cursor = node.walk();
+        let children: Vec<_> = node.children(&mut cursor).collect();
+
+        // Check for export *
+        for child in &children {
+            if child.kind() == "*" {
+                // This is export * from 'module' or export * as X from 'module'
+                return self.parse_export_all(node, source);
+            }
+        }
+
+        // Check for default export
+        let is_default = children.iter().any(|c| c.kind() == "default");
+
+        // Extract exported names
+        let mut exported_names = Vec::new();
+        let mut is_type_only = false;
+
+        for child in &children {
+            let kind = child.kind();
+
+            if kind == "type" {
+                is_type_only = true;
+            }
+
+            if kind == "export_clause" {
+                exported_names = self.extract_export_specifiers(child, source);
+            } else if kind == "identifier" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    exported_names.push(text.to_string());
+                }
+            }
+        }
+
+        AstNodeKind::ExportDeclaration {
+            exported_names,
+            is_default,
+            is_type_only,
+        }
+    }
+
+    fn parse_export_all(&self, node: &Node, source: &str) -> AstNodeKind {
+        let mut source_module = String::new();
+        let mut exported_name: Option<String> = None;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+
+            // Extract source module
+            if kind == "string" || kind == "string_literal" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    source_module = text.trim_matches('\'').trim_matches('"').to_string();
+                }
+            }
+
+            // Check for export * as X
+            if kind == "namespace_export" {
+                let mut ns_cursor = child.walk();
+                for ns_child in child.children(&mut ns_cursor) {
+                    if ns_child.kind() == "identifier" {
+                        if let Ok(text) = ns_child.utf8_text(source.as_bytes()) {
+                            exported_name = Some(text.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        AstNodeKind::ExportAllDeclaration {
+            source: source_module,
+            exported: exported_name,
+        }
+    }
+
+    fn parse_import_specifier(&self, node: &Node, source: &str) -> AstNodeKind {
+        let mut imported = String::from("unknown");
+        let mut local = String::from("unknown");
+
+        let mut cursor = node.walk();
+        let children: Vec<_> = node.children(&mut cursor).collect();
+
+        // Pattern: { imported as local } or just { imported }
+        if children.is_empty() {
+            // Try to get the whole node text
+            if let Ok(text) = node.utf8_text(source.as_bytes()) {
+                imported = text.to_string();
+                local = text.to_string();
+            }
+        } else if children.len() == 1 {
+            // Simple import: { X }
+            if let Ok(text) = children[0].utf8_text(source.as_bytes()) {
+                imported = text.to_string();
+                local = text.to_string();
+            }
+        } else {
+            // Renamed import: { X as Y }
+            if let Ok(text) = children[0].utf8_text(source.as_bytes()) {
+                imported = text.to_string();
+            }
+            // Find the local name (after "as")
+            for (i, child) in children.iter().enumerate() {
+                if child.kind() == "as" && i + 1 < children.len() {
+                    if let Ok(text) = children[i + 1].utf8_text(source.as_bytes()) {
+                        local = text.to_string();
+                    }
+                }
+            }
+        }
+
+        AstNodeKind::ImportSpecifierNode {
+            imported,
+            local,
+            is_default: false,
+        }
+    }
+
+    fn parse_export_specifier(&self, node: &Node, source: &str) -> AstNodeKind {
+        let mut exported = String::from("unknown");
+        let mut local = String::from("unknown");
+
+        let mut cursor = node.walk();
+        let children: Vec<_> = node.children(&mut cursor).collect();
+
+        if children.is_empty() {
+            if let Ok(text) = node.utf8_text(source.as_bytes()) {
+                exported = text.to_string();
+                local = text.to_string();
+            }
+        } else if children.len() == 1 {
+            if let Ok(text) = children[0].utf8_text(source.as_bytes()) {
+                exported = text.to_string();
+                local = text.to_string();
+            }
+        } else {
+            // Renamed export: { X as Y }
+            if let Ok(text) = children[0].utf8_text(source.as_bytes()) {
+                local = text.to_string();
+            }
+            for (i, child) in children.iter().enumerate() {
+                if child.kind() == "as" && i + 1 < children.len() {
+                    if let Ok(text) = children[i + 1].utf8_text(source.as_bytes()) {
+                        exported = text.to_string();
+                    }
+                }
+            }
+        }
+
+        AstNodeKind::ExportSpecifierNode {
+            exported,
+            local,
+        }
+    }
+
+    fn parse_namespace_import(&self, node: &Node, source: &str) -> AstNodeKind {
+        let mut local = String::from("unknown");
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "identifier" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    local = text.to_string();
+                    break;
+                }
+            }
+        }
+
+        AstNodeKind::ImportNamespaceSpecifier { local }
+    }
+
+    fn parse_namespace_export(&self, node: &Node, source: &str) -> AstNodeKind {
+        // This is handled by parse_export_all, so we'll just extract the name here
+        let mut local = String::from("unknown");
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "identifier" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    local = text.to_string();
+                    break;
+                }
+            }
+        }
+
+        // For now, return an ExportAllDeclaration
+        AstNodeKind::ExportAllDeclaration {
+            source: String::new(),
+            exported: Some(local),
+        }
+    }
+
     // Helper methods for extracting information from nodes
     fn extract_name(&self, node: &Node, source: &str) -> Option<String> {
         let mut cursor = node.walk();
@@ -1248,6 +1485,117 @@ impl Parser {
 
     fn is_optional_chain(&self, node: &Node, _source: &str) -> bool {
         node.kind().contains("optional") || node.kind().contains("?.")
+    }
+
+    // Module System Helper Methods (Phase 5)
+
+    fn extract_import_specifiers(&self, node: &Node, source: &str) -> Vec<crate::ast::ImportSpecifier> {
+        let mut specifiers = Vec::new();
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+
+            // Handle default import: import X from 'module'
+            if kind == "identifier" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    specifiers.push(crate::ast::ImportSpecifier {
+                        imported: text.to_string(),
+                        local: text.to_string(),
+                        is_namespace: false,
+                        is_default: true,
+                    });
+                }
+            }
+
+            // Handle namespace import: import * as X
+            if kind == "namespace_import" {
+                let mut ns_cursor = child.walk();
+                for ns_child in child.children(&mut ns_cursor) {
+                    if ns_child.kind() == "identifier" {
+                        if let Ok(text) = ns_child.utf8_text(source.as_bytes()) {
+                            specifiers.push(crate::ast::ImportSpecifier {
+                                imported: "*".to_string(),
+                                local: text.to_string(),
+                                is_namespace: true,
+                                is_default: false,
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Handle named imports: import { X, Y as Z }
+            if kind == "named_imports" {
+                let mut named_cursor = child.walk();
+                for named_child in child.children(&mut named_cursor) {
+                    if named_child.kind() == "import_specifier" {
+                        let spec = self.extract_single_import_specifier(&named_child, source);
+                        specifiers.push(spec);
+                    }
+                }
+            }
+        }
+
+        specifiers
+    }
+
+    fn extract_single_import_specifier(&self, node: &Node, source: &str) -> crate::ast::ImportSpecifier {
+        let mut imported = String::from("unknown");
+        let mut local = String::from("unknown");
+
+        let mut cursor = node.walk();
+        let children: Vec<_> = node.children(&mut cursor).collect();
+
+        if children.is_empty() {
+            if let Ok(text) = node.utf8_text(source.as_bytes()) {
+                imported = text.to_string();
+                local = text.to_string();
+            }
+        } else if children.len() == 1 {
+            if let Ok(text) = children[0].utf8_text(source.as_bytes()) {
+                imported = text.to_string();
+                local = text.to_string();
+            }
+        } else {
+            // Renamed import: X as Y
+            if let Ok(text) = children[0].utf8_text(source.as_bytes()) {
+                imported = text.to_string();
+            }
+            for (i, child) in children.iter().enumerate() {
+                if child.kind() == "as" && i + 1 < children.len() {
+                    if let Ok(text) = children[i + 1].utf8_text(source.as_bytes()) {
+                        local = text.to_string();
+                    }
+                }
+            }
+        }
+
+        crate::ast::ImportSpecifier {
+            imported,
+            local,
+            is_namespace: false,
+            is_default: false,
+        }
+    }
+
+    fn extract_export_specifiers(&self, node: &Node, source: &str) -> Vec<String> {
+        let mut specifiers = Vec::new();
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "export_specifier" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    specifiers.push(text.to_string());
+                }
+            } else if child.kind() == "identifier" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    specifiers.push(text.to_string());
+                }
+            }
+        }
+
+        specifiers
     }
 }
 

@@ -323,6 +323,29 @@ pub enum AstNodeKind {
         is_default: bool,
         is_type_only: bool,
     },
+
+    // Module System Details (Phase 5)
+    ImportSpecifierNode {
+        imported: String,  // Original name in module
+        local: String,     // Local name in current file
+        is_default: bool,  // import X from 'mod'
+    },
+    ImportNamespaceSpecifier {
+        local: String,     // import * as X
+    },
+    ExportSpecifierNode {
+        exported: String,  // Name being exported
+        local: String,     // Local name (may differ if renamed)
+    },
+    ExportAllDeclaration {
+        source: String,    // export * from 'module'
+        exported: Option<String>,  // export * as X from 'module'
+    },
+    ReExportDeclaration {
+        source: String,           // Re-export from another module
+        specifiers: Vec<String>,  // Names being re-exported
+    },
+
     Decorator {
         name: String,
         arguments: Vec<String>,
