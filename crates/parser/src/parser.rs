@@ -175,7 +175,7 @@ impl Parser {
                 value: LiteralValue::Null,
             },
             "assignment_expression" => self.parse_assignment_expression(node, source),
-            "ternary_expression" | "conditional_expression" | "if_expression" => {
+            "ternary_expression" | "conditional_expression" => {
                 self.parse_conditional_expression(node, source)
             }
             "update_expression" => self.parse_update_expression(node, source),
@@ -192,7 +192,6 @@ impl Parser {
             "array_pattern" => self.parse_array_pattern(node, source),
             "object_pattern" => self.parse_object_pattern(node, source),
             "assignment_pattern" => self.parse_assignment_pattern(node, source),
-            "rest_pattern" => self.parse_rest_pattern(node, source),
             "pair" | "property" | "property_assignment" => self.parse_property(node, source),
             "computed_property_name" => self.parse_computed_property_name(node, source),
 
@@ -393,7 +392,6 @@ impl Parser {
     fn parse_switch_statement(&self, node: &Node, source: &str) -> AstNodeKind {
         // Extract the discriminant (expression being switched on)
         let mut discriminant = String::from("unknown");
-        let mut cases_count = 0;
 
         // Recursively count case nodes (only direct case clauses, not nested switches)
         fn count_cases(node: &Node, in_switch_body: bool) -> usize {
@@ -437,7 +435,7 @@ impl Parser {
         }
 
         // Count all case clauses starting from this node
-        cases_count = count_cases(node, false);
+        let cases_count = count_cases(node, false);
 
         AstNodeKind::SwitchStatement {
             discriminant,
@@ -583,7 +581,7 @@ impl Parser {
         AstNodeKind::ConditionalExpression { test }
     }
 
-    fn parse_update_expression(&self, node: &Node, source: &str) -> AstNodeKind {
+    fn parse_update_expression(&self, node: &Node, _source: &str) -> AstNodeKind {
         // Extract operator and determine if prefix or postfix
         let mut operator = String::from("++");
         let mut prefix = true;
@@ -604,7 +602,7 @@ impl Parser {
         AstNodeKind::UpdateExpression { operator, prefix }
     }
 
-    fn parse_sequence_expression(&self, node: &Node, source: &str) -> AstNodeKind {
+    fn parse_sequence_expression(&self, node: &Node, _source: &str) -> AstNodeKind {
         // Count expressions separated by commas
         let mut expressions_count = 0;
 
@@ -650,7 +648,7 @@ impl Parser {
         AstNodeKind::NewExpression { callee, arguments_count }
     }
 
-    fn parse_rest_element(&self, node: &Node, source: &str) -> AstNodeKind {
+    fn parse_rest_element(&self, _node: &Node, _source: &str) -> AstNodeKind {
         // Determine if this is in a parameter list or destructuring
         // Check parent context to see if it's a parameter
         let is_parameter = {
@@ -704,7 +702,7 @@ impl Parser {
     }
 
     // Pattern parsing methods
-    fn parse_array_pattern(&self, node: &Node, source: &str) -> AstNodeKind {
+    fn parse_array_pattern(&self, node: &Node, _source: &str) -> AstNodeKind {
         // Count elements and check for rest
         let mut elements_count = 0;
         let mut has_rest = false;
@@ -735,7 +733,7 @@ impl Parser {
         }
     }
 
-    fn parse_object_pattern(&self, node: &Node, source: &str) -> AstNodeKind {
+    fn parse_object_pattern(&self, node: &Node, _source: &str) -> AstNodeKind {
         // Count properties and check for rest
         let mut properties_count = 0;
         let mut has_rest = false;
@@ -766,24 +764,13 @@ impl Parser {
         }
     }
 
-    fn parse_assignment_pattern(&self, node: &Node, source: &str) -> AstNodeKind {
+    fn parse_assignment_pattern(&self, node: &Node, _source: &str) -> AstNodeKind {
         // Check if there's a default value (assignment)
         let has_default = node.child_count() > 1;
 
         AstNodeKind::AssignmentPattern { has_default }
     }
 
-    fn parse_rest_pattern(&self, node: &Node, source: &str) -> AstNodeKind {
-        // Determine context: array or object rest
-        // This is a heuristic - check if parent or siblings suggest array context
-        let is_array = {
-            // For now, default to true (array context is more common)
-            // In a more sophisticated implementation, we'd check parent node
-            true
-        };
-
-        AstNodeKind::RestPattern { is_array }
-    }
 
     // Object/Array detail parsing methods
     fn parse_property(&self, node: &Node, source: &str) -> AstNodeKind {
@@ -806,7 +793,7 @@ impl Parser {
             }
         } else {
             // Parse key-value pair
-            for (i, child) in children.iter().enumerate() {
+            for child in children.iter() {
                 let kind = child.kind();
 
                 // Skip delimiters
@@ -866,46 +853,6 @@ impl Parser {
         AstNodeKind::ComputedPropertyName { expression }
     }
 
-    fn parse_method_definition(&self, node: &Node, source: &str) -> AstNodeKind {
-        // Extract method name and determine kind (method, get, set, constructor)
-        let mut name = String::from("unknown");
-        let mut kind = MethodKind::Method;
-        let mut is_static = false;
-
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            let child_kind = child.kind();
-
-            // Check for static keyword
-            if child_kind == "static" {
-                is_static = true;
-            }
-
-            // Check for getter/setter
-            if child_kind == "get" {
-                kind = MethodKind::Get;
-            } else if child_kind == "set" {
-                kind = MethodKind::Set;
-            }
-
-            // Extract name
-            if (child_kind == "property_identifier" || child_kind == "identifier") && name == "unknown" {
-                if let Ok(text) = child.utf8_text(source.as_bytes()) {
-                    // Check if it's a constructor
-                    if text == "constructor" {
-                        kind = MethodKind::Constructor;
-                    }
-                    name = text.to_string();
-                }
-            }
-        }
-
-        AstNodeKind::MethodDefinition {
-            name,
-            kind,
-            is_static,
-        }
-    }
 
     // Module System Parsing Methods (Phase 5)
 
@@ -1528,7 +1475,7 @@ impl Parser {
         self.infer_type_from_initializer(node, source)
     }
 
-    fn infer_type_from_initializer(&self, node: &Node, source: &str) -> Option<String> {
+    fn infer_type_from_initializer(&self, node: &Node, _source: &str) -> Option<String> {
         let mut cursor = node.walk();
 
         for child in node.children(&mut cursor) {

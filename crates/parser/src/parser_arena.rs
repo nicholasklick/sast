@@ -26,7 +26,6 @@ pub type ParseResult<'arena> = Result<&'arena AstNode<'arena>, ParseError>;
 /// Arena-based parser that builds AST directly into arena memory
 pub struct ParserArena {
     ts_parser: TSParser,
-    config: LanguageConfig,
     file_path: String,
 }
 
@@ -41,7 +40,6 @@ impl ParserArena {
 
         Self {
             ts_parser,
-            config,
             file_path: file_path.to_string_lossy().to_string(),
         }
     }
@@ -382,7 +380,7 @@ impl ParserArena {
         None
     }
 
-    fn extract_visibility(&self, node: &Node, source: &str) -> Visibility {
+    fn extract_visibility(&self, node: &Node, _source: &str) -> Visibility {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             match child.kind() {
@@ -400,7 +398,7 @@ impl ParserArena {
         &self,
         arena: &'arena AstArena,
         node: &Node,
-        source: &str,
+        _source: &str,
     ) -> &'arena str {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
