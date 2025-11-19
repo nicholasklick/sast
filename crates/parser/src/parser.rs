@@ -195,7 +195,6 @@ impl Parser {
             "rest_pattern" => self.parse_rest_pattern(node, source),
             "pair" | "property" | "property_assignment" => self.parse_property(node, source),
             "computed_property_name" => self.parse_computed_property_name(node, source),
-            "field_definition" => self.parse_method_definition(node, source),
 
             // Module system (Phase 5)
             "import_statement" => self.parse_import_statement(node, source),
@@ -212,6 +211,12 @@ impl Parser {
             "as_expression" => self.parse_as_expression(node, source),
             "satisfies_expression" => self.parse_satisfies_expression(node, source),
             "non_null_expression" => AstNodeKind::NonNullAssertion,
+
+            // Class Enhancements (Phase 7)
+            "public_field_definition" | "field_definition" | "class_field" => {
+                self.parse_field_declaration(node, source)
+            }
+            "class_static_block" => AstNodeKind::StaticBlock,
 
             // Comments
             _ if kind.contains("comment") => AstNodeKind::Comment {
@@ -1237,6 +1242,65 @@ impl Parser {
         }
 
         AstNodeKind::SatisfiesExpression { type_string }
+    }
+
+    // Class Enhancement Parsing Methods (Phase 7)
+
+    fn parse_field_declaration(&self, node: &Node, source: &str) -> AstNodeKind {
+        let mut name = String::from("unknown");
+        let mut field_type: Option<String> = None;
+        let mut is_static = false;
+        let mut visibility = Visibility::Public;
+        let mut has_initializer = false;
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let kind = child.kind();
+
+            // Check for static keyword
+            if kind == "static" {
+                is_static = true;
+            }
+
+            // Check for visibility modifiers
+            if kind == "accessibility_modifier" {
+                visibility = self.extract_visibility(&child, source);
+            }
+
+            // Extract field name
+            if kind == "property_identifier" || kind == "identifier" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    name = text.to_string();
+                }
+            }
+
+            // Extract type annotation
+            if kind == "type_annotation" {
+                // Extract the type string from the type annotation
+                let mut type_cursor = child.walk();
+                for type_child in child.children(&mut type_cursor) {
+                    if type_child.kind() != ":" {
+                        if let Ok(text) = type_child.utf8_text(source.as_bytes()) {
+                            field_type = Some(text.to_string());
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Check for initializer
+            if kind == "=" {
+                has_initializer = true;
+            }
+        }
+
+        AstNodeKind::FieldDeclaration {
+            name,
+            field_type,
+            is_static,
+            visibility,
+            has_initializer,
+        }
     }
 
     // Helper methods for extracting information from nodes

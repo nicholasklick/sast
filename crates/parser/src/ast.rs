@@ -376,6 +376,20 @@ pub enum AstNodeKind {
         type_name: String,
     },
 
+    // Class Enhancements (Phase 7)
+    FieldDeclaration {
+        name: String,
+        field_type: Option<String>,
+        is_static: bool,
+        visibility: Visibility,
+        has_initializer: bool,
+    },
+    StaticBlock,
+    AccessorProperty {
+        name: String,
+        is_getter: bool,  // true for getter, false for setter
+    },
+
     // Fallback for unsupported constructs
     Other {
         node_type: String,
