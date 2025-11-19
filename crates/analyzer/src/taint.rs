@@ -234,8 +234,30 @@ impl Default for TaintAnalysis {
 
 /// Transfer function for taint analysis (with owned data)
 ///
-/// NOTE: This is the legacy implementation that uses string-based analysis.
-/// It has known issues with complex expressions but is kept for backwards compatibility.
+/// # Deprecation Notice
+///
+/// **This is a legacy implementation that is deprecated and will be removed in a future version.**
+///
+/// ## Known Issues
+/// - Uses string-based analysis which is imprecise
+/// - Cannot handle complex expressions properly
+/// - Does not integrate with AST-based symbol tracking
+///
+/// ## Migration Path
+/// Please use `AstBasedTaintTransferFunction` from `taint_ast_based` module instead.
+/// It provides:
+/// - Precise AST-based analysis
+/// - Better integration with symbol tables
+/// - Support for complex expressions
+/// - More accurate taint tracking
+///
+/// ## Why Kept?
+/// This implementation is maintained only for backward compatibility with existing
+/// code. All new development should use the AST-based implementation.
+#[deprecated(
+    since = "0.2.0",
+    note = "Use AstBasedTaintTransferFunction from taint_ast_based module instead. This legacy implementation has known issues with complex expressions."
+)]
 struct OwnedTaintTransferFunction {
     sources: Vec<TaintSource>,
     sanitizers: HashSet<String>,

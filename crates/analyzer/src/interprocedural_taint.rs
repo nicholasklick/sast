@@ -229,11 +229,28 @@ impl InterproceduralTaintAnalysis {
         vulnerabilities: &mut Vec<TaintVulnerability>,
     ) {
         match &node.kind {
-            // Variable assignment
+            // Variable declaration with initialization
             AstNodeKind::VariableDeclaration { name, .. } => {
                 // Check if initializer is tainted
                 if self.is_initializer_tainted(node, tainted_vars) {
                     tainted_vars.insert(name.clone());
+                }
+            }
+
+            // Assignment expression (x = taintedValue)
+            AstNodeKind::AssignmentExpression { .. } => {
+                // Track assignments where right-hand side is tainted
+                if node.children.len() >= 2 {
+                    let lhs = &node.children[0];
+                    let rhs = &node.children[1];
+
+                    // Check if RHS is tainted
+                    if self.is_node_tainted(rhs, tainted_vars) {
+                        // Extract LHS variable name
+                        if let AstNodeKind::Identifier { name } = &lhs.kind {
+                            tainted_vars.insert(name.clone());
+                        }
+                    }
                 }
             }
 
@@ -257,14 +274,10 @@ impl InterproceduralTaintAnalysis {
                     }
                 }
 
-                // Check if this call generates taint
-                if let Some(summary) = self.summaries.get(callee) {
-                    if summary.generates_taint || summary.returns_taint {
-                        // Mark result as tainted
-                        // In a real implementation, we'd track the result variable
-                        tainted_vars.insert(format!("{}()", callee));
-                    }
-                }
+                // Note: Taint from function return values is now tracked via
+                // AssignmentExpression and VariableDeclaration handlers above.
+                // The is_node_tainted() method checks if a CallExpression returns
+                // taint based on function summaries.
             }
 
             AstNodeKind::FunctionDeclaration { .. } | AstNodeKind::MethodDeclaration { .. } => {

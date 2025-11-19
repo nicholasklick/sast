@@ -97,6 +97,12 @@ pub enum SymbolicValue {
         false_value: Box<SymbolicValue>,
     },
 
+    /// Null value
+    Null,
+
+    /// Undefined value
+    Undefined,
+
     /// Unknown/uninitialized value
     Unknown,
 }
@@ -619,7 +625,12 @@ impl SymbolicExecutor {
                     kodecd_parser::ast::LiteralValue::String(s) => {
                         SymbolicValue::ConcreteString(s.clone())
                     }
-                    _ => SymbolicValue::Unknown,
+                    kodecd_parser::ast::LiteralValue::Null => {
+                        SymbolicValue::Null
+                    }
+                    kodecd_parser::ast::LiteralValue::Undefined => {
+                        SymbolicValue::Undefined
+                    }
                 }
             }
 
