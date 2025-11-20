@@ -12,6 +12,7 @@ members = [
     "crates/analyzer",
     "crates/query",
     "crates/reporter",
+    "crates/cache",
 ]
 
 [dependencies]
@@ -20,6 +21,7 @@ kodecd-parser = { path = "crates/parser" }
 kodecd-analyzer = { path = "crates/analyzer" }
 kodecd-query = { path = "crates/query" }
 kodecd-reporter = { path = "crates/reporter" }
+kodecd-cache = { path = "crates/cache" }
 
 # CLI and utilities
 clap = { version = "4.5", features = ["derive"] }
