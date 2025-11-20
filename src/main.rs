@@ -75,6 +75,30 @@ enum Commands {
         /// Query suite (default, extended, quality)
         #[arg(short = 's', long, default_value = "default")]
         suite: String,
+
+        /// Enable incremental analysis (only scan changed files)
+        #[arg(long)]
+        incremental: bool,
+
+        /// Disable cache (force full scan)
+        #[arg(long)]
+        no_cache: bool,
+
+        /// Create a new baseline from current findings
+        #[arg(long)]
+        baseline_create: bool,
+
+        /// Use existing baseline (suppress baseline findings)
+        #[arg(long)]
+        baseline_use: bool,
+
+        /// Show fixed findings (findings in baseline but now resolved)
+        #[arg(long)]
+        show_fixed: bool,
+
+        /// Enable finding lifecycle tracking
+        #[arg(long)]
+        lifecycle: bool,
     },
 
     /// Show available built-in queries
@@ -112,9 +136,31 @@ fn main() -> Result<()> {
             analyze_file(&path, &format, output.as_deref(), language, query)?
         }
 
-        Commands::Scan { path, format, output, suite } => {
+        Commands::Scan {
+            path,
+            format,
+            output,
+            suite,
+            incremental,
+            no_cache,
+            baseline_create,
+            baseline_use,
+            show_fixed,
+            lifecycle,
+        } => {
             info!("Scanning with built-in queries: {}", path.display());
-            scan_with_builtin(&path, &format, output.as_deref(), &suite)?
+            scan_with_builtin(
+                &path,
+                &format,
+                output.as_deref(),
+                &suite,
+                incremental,
+                no_cache,
+                baseline_create,
+                baseline_use,
+                show_fixed,
+                lifecycle,
+            )?
         }
 
         Commands::ListQueries => {
@@ -238,7 +284,18 @@ fn analyze_file(
     }
 }
 
-fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>, suite_str: &str) -> Result<i32> {
+fn scan_with_builtin(
+    path: &PathBuf,
+    format_str: &str,
+    output: Option<&Path>,
+    suite_str: &str,
+    incremental: bool,
+    no_cache: bool,
+    baseline_create: bool,
+    baseline_use: bool,
+    show_fixed: bool,
+    lifecycle: bool,
+) -> Result<i32> {
     // Parse query suite
     let suite = parse_suite(suite_str);
 
@@ -248,7 +305,18 @@ fn scan_with_builtin(path: &PathBuf, format_str: &str, output: Option<&Path>, su
         scan_single_file(path, format_str, output, suite)
     } else if path.is_dir() {
         // Multi-file analysis (new behavior)
-        scan_directory(path, format_str, output, suite)
+        scan_directory(
+            path,
+            format_str,
+            output,
+            suite,
+            incremental,
+            no_cache,
+            baseline_create,
+            baseline_use,
+            show_fixed,
+            lifecycle,
+        )
     } else {
         anyhow::bail!("Path is neither a file nor directory: {}", path.display());
     }
@@ -327,19 +395,106 @@ fn scan_single_file(path: &PathBuf, format_str: &str, output: Option<&Path>, sui
     }
 }
 
-fn scan_directory(path: &PathBuf, format_str: &str, output: Option<&Path>, suite: QuerySuite) -> Result<i32> {
+fn scan_directory(
+    path: &PathBuf,
+    format_str: &str,
+    output: Option<&Path>,
+    suite: QuerySuite,
+    incremental: bool,
+    no_cache: bool,
+    baseline_create: bool,
+    baseline_use: bool,
+    show_fixed: bool,
+    lifecycle_enabled: bool,
+) -> Result<i32> {
+    use kodecd_cache::{
+        Cache, CacheConfig, BaselineManager, BaselineConfig,
+        SuppressionManager, SuppressionConfig, LifecycleTracker, LifecycleConfig,
+    };
+
     info!("Starting multi-file analysis on directory: {}", path.display());
+
+    // Initialize cache if incremental mode is enabled
+    let use_cache = incremental && !no_cache;
+    let mut cache = if use_cache {
+        info!("Incremental mode enabled");
+        let config = CacheConfig::default();
+        Some(Cache::new(config)?)
+    } else {
+        None
+    };
+
+    // Initialize suppression manager
+    let suppression_config = SuppressionConfig::default();
+    let mut suppressions = SuppressionManager::new(suppression_config)?;
+    if let Err(e) = suppressions.load() {
+        info!("No suppression file found or failed to load: {}", e);
+    } else {
+        let stats = suppressions.stats();
+        info!("Loaded {} suppressions", stats.total);
+    }
+
+    // Initialize baseline manager
+    let baseline_config = BaselineConfig {
+        enabled: baseline_use || baseline_create,
+        ..Default::default()
+    };
+    let mut baseline_manager = BaselineManager::new(baseline_config)?;
+
+    // Initialize lifecycle tracker
+    let lifecycle_config = LifecycleConfig {
+        enabled: lifecycle_enabled,
+        ..Default::default()
+    };
+    let mut lifecycle_tracker = LifecycleTracker::new(lifecycle_config)?;
 
     // Discover all source files
     let discovery = FileDiscovery::with_default_config();
-    let source_files = discovery.discover(path)?;
+    let all_source_files = discovery.discover(path)?;
 
-    if source_files.is_empty() {
+    if all_source_files.is_empty() {
         info!("No source files found in directory");
         return Ok(0);
     }
 
-    info!("Found {} source files to analyze", source_files.len());
+    // Determine which files to scan
+    let source_files = if let Some(cache) = &mut cache {
+        let changed_files = cache.get_changed_files(path)?;
+        info!("Incremental analysis: {} changed out of {} total files",
+              changed_files.len(), all_source_files.len());
+
+        // Convert relative paths to SourceFile structs
+        changed_files
+            .into_iter()
+            .map(|p| path.join(p))
+            .filter(|p| p.exists())
+            .filter_map(|p| {
+                Language::from_path(&p).ok().map(|lang| discovery::SourceFile {
+                    path: p,
+                    language: lang,
+                })
+            })
+            .collect()
+    } else {
+        all_source_files
+    };
+
+    if source_files.is_empty() {
+        info!("No files to scan (all files unchanged)");
+
+        // Still load baseline/lifecycle if needed
+        if baseline_use && show_fixed {
+            // Show fixed findings from baseline
+            if let Some(stats) = baseline_manager.stats() {
+                println!("\nBaseline Statistics:");
+                println!("  Total findings in baseline: {}", stats.total_findings);
+            }
+        }
+
+        return Ok(0);
+    }
+
+    info!("Scanning {} files", source_files.len());
 
     // Get queries from extended library
     let library = ExtendedStandardLibrary::new();
@@ -355,7 +510,7 @@ fn scan_directory(path: &PathBuf, format_str: &str, output: Option<&Path>, suite
 
     // Run parallel analysis
     let analyzer = ParallelAnalyzer::new(true); // Enable progress bar
-    let results = analyzer.analyze_files(source_files, &queries)?;
+    let results = analyzer.analyze_files(source_files.clone(), &queries)?;
 
     // Get statistics
     let stats = ParallelAnalyzer::get_statistics(&results);
@@ -373,9 +528,94 @@ fn scan_directory(path: &PathBuf, format_str: &str, output: Option<&Path>, suite
         finding.severity = determine_severity(&finding.rule_id);
     }
 
+    // Apply suppressions
+    all_findings.retain(|finding| {
+        !suppressions.is_suppressed(
+            std::path::Path::new(&finding.file_path),
+            finding.line,
+            &finding.rule_id,
+        )
+    });
+
+    info!("After suppressions: {} findings", all_findings.len());
+
+    // Store results in cache
+    if let Some(cache) = &mut cache {
+        // Group findings by file
+        use std::collections::HashMap;
+        let mut findings_by_file: HashMap<String, Vec<kodecd_query::Finding>> = HashMap::new();
+        for finding in &all_findings {
+            findings_by_file
+                .entry(finding.file_path.clone())
+                .or_insert_with(Vec::new)
+                .push(finding.clone());
+        }
+
+        // Store each file's results
+        for (file_path, findings) in findings_by_file {
+            if let Err(e) = cache.store_results(&file_path, &findings) {
+                info!("Failed to cache results for {}: {}", file_path, e);
+            }
+        }
+
+        // Save cache
+        cache.save()?;
+        let cache_stats = cache.stats();
+        info!("Cache updated: {} files, {} cached results",
+              cache_stats.total_files, cache_stats.cached_results);
+    }
+
+    // Handle baseline operations
+    if baseline_create {
+        baseline_manager.create_baseline(&all_findings, Some("Baseline created from scan".to_string()))?;
+        info!("Created baseline with {} findings", all_findings.len());
+    }
+
+    let findings_to_report = if baseline_use {
+        let new_findings = baseline_manager.filter_new_findings(&all_findings);
+        let new_count = new_findings.len();
+        let suppressed_count = all_findings.len() - new_count;
+
+        info!("Baseline filtering: {} new findings, {} baseline findings suppressed",
+              new_count, suppressed_count);
+
+        if show_fixed {
+            let fixed = baseline_manager.find_fixed_findings(&all_findings);
+            if !fixed.is_empty() {
+                println!("\n🎉 Fixed Findings ({}):", fixed.len());
+                for f in &fixed {
+                    println!("  ✓ {} at {}:{} [{}]",
+                            f.rule_id, f.file_path, f.line, f.severity);
+                }
+                println!();
+            }
+        }
+
+        new_findings.into_iter().cloned().collect()
+    } else {
+        all_findings.clone()
+    };
+
+    // Update lifecycle tracking
+    if lifecycle_enabled {
+        lifecycle_tracker.update(&all_findings);
+        lifecycle_tracker.save()?;
+
+        let lc_stats = lifecycle_tracker.stats();
+        info!("Lifecycle: {} new, {} existing, {} fixed, {} reopened",
+              lc_stats.new, lc_stats.existing, lc_stats.fixed, lc_stats.reopened);
+
+        println!("\nFinding Lifecycle:");
+        println!("  🆕 New:      {}", lc_stats.new);
+        println!("  📊 Existing: {}", lc_stats.existing);
+        println!("  ✅ Fixed:    {}", lc_stats.fixed);
+        println!("  🔄 Reopened: {}", lc_stats.reopened);
+        println!();
+    }
+
     // Generate report
-    let has_findings = !all_findings.is_empty();
-    let report = Report::new(all_findings);
+    let has_findings = !findings_to_report.is_empty();
+    let report = Report::new(findings_to_report);
     let format = parse_format(format_str);
 
     if let Some(output_path) = output {

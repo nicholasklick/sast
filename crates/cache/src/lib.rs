@@ -67,7 +67,7 @@ pub use suppression::{
     SuppressionScope,
 };
 pub use baseline::{Baseline, BaselineConfig, BaselineManager};
-pub use lifecycle::{FindingLifecycle, FindingState, LifecycleTracker};
+pub use lifecycle::{FindingLifecycle, FindingState, LifecycleConfig, LifecycleTracker};
 
 use thiserror::Error;
 
