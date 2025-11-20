@@ -13,6 +13,14 @@ use std::path::PathBuf;
 use thiserror::Error;
 use tracing::{debug, info};
 
+/// Helper function to get current timestamp, returns 0 on error to avoid panics
+fn current_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 #[derive(Error, Debug)]
 pub enum LifecycleError {
     #[error("IO error: {0}")]
@@ -97,10 +105,7 @@ impl FindingLifecycle {
             &finding.code_snippet,
         );
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = current_timestamp();
 
         Self {
             fingerprint: fingerprint.id,
@@ -118,10 +123,7 @@ impl FindingLifecycle {
 
     /// Update lifecycle when finding appears in scan
     pub fn mark_seen(&mut self) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = current_timestamp();
 
         // If previously fixed, mark as reopened
         if self.state == FindingState::Fixed {
@@ -138,10 +140,7 @@ impl FindingLifecycle {
 
     /// Mark finding as fixed
     pub fn mark_fixed(&mut self) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = current_timestamp();
 
         self.state = FindingState::Fixed;
         self.fixed_at = Some(now);
@@ -150,20 +149,14 @@ impl FindingLifecycle {
 
     /// Get age in seconds (time since first seen)
     pub fn age(&self) -> u64 {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = current_timestamp();
 
         now - self.first_seen
     }
 
     /// Get time since last seen in seconds
     pub fn time_since_last_seen(&self) -> u64 {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = current_timestamp();
 
         now - self.last_seen
     }

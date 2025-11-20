@@ -13,6 +13,14 @@ use std::path::PathBuf;
 use thiserror::Error;
 use tracing::{debug, info};
 
+/// Helper function to get current timestamp, returns 0 on error to avoid panics
+fn current_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 #[derive(Error, Debug)]
 pub enum BaselineError {
     #[error("IO error: {0}")]
@@ -93,10 +101,7 @@ impl BaselineFinding {
             &finding.code_snippet,
         );
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = current_timestamp();
 
         Self {
             fingerprint: fingerprint.id,
@@ -131,10 +136,7 @@ pub struct Baseline {
 impl Baseline {
     /// Create new baseline from findings
     pub fn new(findings: &[kodecd_query::Finding], description: Option<String>) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = current_timestamp();
 
         let mut baseline_findings = HashMap::new();
         for finding in findings {

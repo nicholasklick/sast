@@ -263,7 +263,7 @@ impl SarifReporter {
             "shortDescription": {
                 "text": name
             },
-            "helpUri": format!("{}{}", OWASP_BASE_URI, id.split(':').next().unwrap())
+            "helpUri": format!("{}{}", OWASP_BASE_URI, id.split(':').next().unwrap_or(id))
         })
     }
 

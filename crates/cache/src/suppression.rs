@@ -11,6 +11,14 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{debug, info};
 
+/// Helper function to get current timestamp, returns 0 on error to avoid panics
+fn current_timestamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 #[derive(Error, Debug)]
 pub enum SuppressionError {
     #[error("IO error: {0}")]
@@ -21,6 +29,9 @@ pub enum SuppressionError {
 
     #[error("Invalid suppression format: {0}")]
     InvalidFormat(String),
+
+    #[error("System time error: {0}")]
+    TimeError(#[from] std::time::SystemTimeError),
 }
 
 /// Suppression configuration
@@ -125,10 +136,7 @@ pub struct Suppression {
 impl Suppression {
     /// Create new suppression
     pub fn new(scope: SuppressionScope, reason: SuppressionReason) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = current_timestamp();
 
         Self {
             scope,
@@ -154,10 +162,7 @@ impl Suppression {
     /// Check if suppression has expired
     pub fn is_expired(&self) -> bool {
         if let Some(expires_at) = self.expires_at {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
+            let now = current_timestamp();
             now > expires_at
         } else {
             false

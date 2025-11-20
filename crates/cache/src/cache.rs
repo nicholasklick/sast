@@ -20,6 +20,9 @@ pub enum CacheError {
 
     #[error("Invalid cache format")]
     InvalidCacheFormat,
+
+    #[error("System time error: {0}")]
+    TimeError(#[from] std::time::SystemTimeError),
 }
 
 /// Configuration for cache behavior
@@ -177,8 +180,7 @@ impl Cache {
 
                 // Update file index
                 let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .duration_since(std::time::UNIX_EPOCH)?
                     .as_secs();
 
                 self.file_index.insert(
@@ -263,8 +265,7 @@ impl Cache {
         }
 
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)?
             .as_secs();
 
         let cutoff = now - self.config.ttl_seconds;
