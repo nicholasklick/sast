@@ -43,6 +43,7 @@ glob = "0.3"
 [dev-dependencies]
 criterion = "0.5"
 proptest = "1.5"
+tempfile = "3.13"
 
 [profile.release]
 opt-level = 3
