@@ -22,8 +22,8 @@
 //! ## Example
 //!
 //! ```rust
-//! use kodecd_analyzer::{PointsToAnalysisBuilder, AbstractLocation};
-//! use kodecd_parser::{AstNode, AstNodeKind, Location, Span};
+//! use gittera_analyzer::{PointsToAnalysisBuilder, AbstractLocation};
+//! use gittera_parser::{AstNode, AstNodeKind, Location, Span};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a simple AST for demonstration
@@ -57,7 +57,7 @@
 //! # }
 //! ```
 
-use kodecd_parser::ast::{AstNode, AstNodeKind, NodeId};
+use gittera_parser::ast::{AstNode, AstNodeKind, NodeId};
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 

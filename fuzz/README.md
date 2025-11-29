@@ -1,10 +1,10 @@
-# Fuzzing for KodeCD SAST
+# Fuzzing for Gittera SAST
 
 This directory contains fuzz targets for testing the robustness of the SAST engine using `cargo-fuzz` and libFuzzer.
 
 ## Overview
 
-Fuzzing is an automated testing technique that feeds random or malformed inputs to the system to find crashes, panics, and unexpected behavior. This is critical for a security tool like KodeCD SAST.
+Fuzzing is an automated testing technique that feeds random or malformed inputs to the system to find crashes, panics, and unexpected behavior. This is critical for a security tool like Gittera SAST.
 
 ## Fuzz Targets
 
@@ -20,7 +20,7 @@ Tests the TypeScript/JavaScript parser with arbitrary input to ensure:
 
 ### 2. `fuzz_query` - Query Language Fuzzing
 
-Tests the KQL (KodeCD Query Language) parser with random query strings to ensure:
+Tests the KQL (Gittera Query Language) parser with random query strings to ensure:
 - No panics on invalid query syntax
 - Safe handling of malformed queries
 - Robust error messages

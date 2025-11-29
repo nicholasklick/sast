@@ -1,5 +1,5 @@
 [package]
-name = "kodecd-sast-fuzz"
+name = "gittera-sast-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
@@ -10,13 +10,13 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 
-[dependencies.kodecd-parser]
+[dependencies.gittera-parser]
 path = "../crates/parser"
 
-[dependencies.kodecd-query]
+[dependencies.gittera-query]
 path = "../crates/query"
 
-[dependencies.kodecd-analyzer]
+[dependencies.gittera-analyzer]
 path = "../crates/analyzer"
 
 # Prevent this from interfering with workspaces

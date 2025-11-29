@@ -1,7 +1,7 @@
-// Comprehensive E2E integration tests for KodeCD SAST
+// Comprehensive E2E integration tests for Gittera SAST
 // Tests multi-language scanning, vulnerability detection, and false positive handling
 
-use kodecd_parser::{Language, LanguageConfig, Parser};
+use gittera_parser::{Language, LanguageConfig, Parser};
 use std::path::Path;
 use std::fs;
 
@@ -335,7 +335,7 @@ fn test_ast_node_structure() {
 
     // Check that we can traverse the tree
     let mut node_count = 0;
-    fn count_nodes(node: &kodecd_parser::ast::AstNode) -> usize {
+    fn count_nodes(node: &gittera_parser::ast::AstNode) -> usize {
         1 + node.children.iter().map(|c| count_nodes(c)).sum::<usize>()
     }
 

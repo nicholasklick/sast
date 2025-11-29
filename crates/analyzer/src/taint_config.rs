@@ -5,7 +5,7 @@
 //! security-sensitive functions that need to be tracked.
 
 use crate::taint::{TaintSink, TaintSinkKind, TaintSource, TaintSourceKind};
-use kodecd_parser::language::Language;
+use gittera_parser::language::Language;
 
 /// Language-specific taint configuration
 pub struct LanguageTaintConfig {

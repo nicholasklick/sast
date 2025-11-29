@@ -2,7 +2,7 @@
 
 ## Overview
 
-Points-to analysis is a static program analysis technique that determines what memory locations pointer variables may reference during program execution. KodeCD SAST implements an **Andersen-style flow-insensitive points-to analysis** that provides a conservative approximation of pointer behavior.
+Points-to analysis is a static program analysis technique that determines what memory locations pointer variables may reference during program execution. Gittera SAST implements an **Andersen-style flow-insensitive points-to analysis** that provides a conservative approximation of pointer behavior.
 
 ## What is Points-to Analysis?
 
@@ -24,7 +24,7 @@ After this code:
 
 ## Algorithm: Andersen's Analysis
 
-KodeCD implements Andersen's algorithm, a constraint-based analysis that operates in two phases:
+Gittera implements Andersen's algorithm, a constraint-based analysis that operates in two phases:
 
 ### Phase 1: Constraint Generation
 
@@ -53,7 +53,7 @@ while changed:
 
 ## Abstract Locations
 
-KodeCD represents memory locations using the `AbstractLocation` enum:
+Gittera represents memory locations using the `AbstractLocation` enum:
 
 ```rust
 pub enum AbstractLocation {
@@ -127,8 +127,8 @@ let ret_loc = AbstractLocation::ReturnValue("getUserData".to_string());
 ### Basic Usage
 
 ```rust
-use kodecd_analyzer::PointsToAnalysisBuilder;
-use kodecd_parser::{Parser, Language, LanguageConfig};
+use gittera_analyzer::PointsToAnalysisBuilder;
+use gittera_parser::{Parser, Language, LanguageConfig};
 use std::path::Path;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -271,7 +271,7 @@ console.log(ptr.value);  // Use after free?
 
 ### Flow-Insensitive
 
-KodeCD's points-to analysis is **flow-insensitive**: it doesn't consider the order of statements.
+Gittera's points-to analysis is **flow-insensitive**: it doesn't consider the order of statements.
 
 ```javascript
 let x = obj1;  // Statement 1
@@ -350,32 +350,32 @@ Tested on:
 
 ### Andersen's vs Steensgaard's
 
-| Feature | Andersen's (KodeCD) | Steensgaard's |
+| Feature | Andersen's (Gittera) | Steensgaard's |
 |---------|---------------------|---------------|
 | **Precision** | Higher | Lower |
 | **Speed** | Slower (O(n³)) | Faster (O(n log n)) |
 | **Points-to sets** | Separate per variable | Unified via equivalence |
 | **Aliasing** | More precise | More conservative |
 
-**KodeCD choice**: Andersen's provides better precision at acceptable performance cost for typical codebases.
+**Gittera choice**: Andersen's provides better precision at acceptable performance cost for typical codebases.
 
 ### Flow-Sensitive vs Flow-Insensitive
 
-| Feature | Flow-Sensitive | Flow-Insensitive (KodeCD) |
+| Feature | Flow-Sensitive | Flow-Insensitive (Gittera) |
 |---------|----------------|---------------------------|
 | **Precision** | Higher | Lower |
 | **Complexity** | Much higher | Lower |
 | **Statement order** | Considered | Ignored |
 | **Scalability** | Poor | Good |
 
-**KodeCD choice**: Flow-insensitive is sufficient for most security analysis tasks.
+**Gittera choice**: Flow-insensitive is sufficient for most security analysis tasks.
 
 ## Integration with Other Analyses
 
 ### Enhanced Taint Analysis
 
 ```rust
-use kodecd_analyzer::{PointsToAnalysisBuilder, TaintAnalysis};
+use gittera_analyzer::{PointsToAnalysisBuilder, TaintAnalysis};
 
 let pts = PointsToAnalysisBuilder::new().build(&ast);
 let taint = TaintAnalysis::new()
@@ -388,7 +388,7 @@ let taint = TaintAnalysis::new()
 ### Call Graph Construction
 
 ```rust
-use kodecd_analyzer::{PointsToAnalysisBuilder, CallGraphBuilder};
+use gittera_analyzer::{PointsToAnalysisBuilder, CallGraphBuilder};
 
 let pts = PointsToAnalysisBuilder::new().build(&ast);
 let call_graph = CallGraphBuilder::new()
@@ -588,7 +588,7 @@ let pts = PointsToAnalysisBuilder::new()
 
 ## Summary
 
-Points-to analysis in KodeCD provides:
+Points-to analysis in Gittera provides:
 
 ✅ **Foundation for advanced analysis**: Alias analysis, call graph refinement, taint analysis
 ✅ **Conservative approximation**: Sound over-approximation of pointer behavior

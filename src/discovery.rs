@@ -4,7 +4,7 @@
 
 use anyhow::{Context, Result};
 use ignore::WalkBuilder;
-use kodecd_parser::Language;
+use gittera_parser::Language;
 use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn test_discover_directory() {
         // Create a temp directory with some test files
-        let temp_dir = std::env::temp_dir().join("kodecd_test_discovery");
+        let temp_dir = std::env::temp_dir().join("gittera_test_discovery");
         let _ = fs::remove_dir_all(&temp_dir);
         fs::create_dir_all(&temp_dir).unwrap();
 

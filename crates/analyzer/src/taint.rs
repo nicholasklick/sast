@@ -4,7 +4,7 @@ use crate::cfg::{CfgGraphIndex, CfgNode, CfgNodeKind, ControlFlowGraph};
 use crate::dataflow::{DataFlowAnalysis, DataFlowDirection, DataFlowResult, TransferFunction};
 use crate::symbolic::SymbolicValue;
 use crate::taint_ast_based::AstBasedTaintTransferFunction;
-use kodecd_parser::ast::{AstNode, AstNodeKind, NodeId};
+use gittera_parser::ast::{AstNode, AstNodeKind, NodeId};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -309,14 +309,14 @@ impl TaintAnalysis {
     /// # Example
     ///
     /// ```
-    /// use kodecd_analyzer::TaintAnalysis;
-    /// use kodecd_parser::Language;
+    /// use gittera_analyzer::TaintAnalysis;
+    /// use gittera_parser::Language;
     ///
     /// let taint = TaintAnalysis::new().for_language(Language::Ruby);
     /// // Now configured with Ruby-specific sources like "params", "gets"
     /// // and sinks like "system", "eval", etc.
     /// ```
-    pub fn for_language(mut self, language: kodecd_parser::Language) -> Self {
+    pub fn for_language(mut self, language: gittera_parser::Language) -> Self {
         use crate::taint_config::LanguageTaintConfig;
 
         let config = LanguageTaintConfig::for_language(language);
@@ -611,7 +611,7 @@ impl Severity {
 mod tests {
     use super::*;
     use crate::cfg::{CfgEdge, CfgEdgeKind, CfgNode, CfgNodeKind};
-    use kodecd_parser::ast::{AstNode, AstNodeKind, Location, Span};
+    use gittera_parser::ast::{AstNode, AstNodeKind, Location, Span};
 
     /// Helper function to create a dummy AST node for testing
     fn create_dummy_ast() -> AstNode {

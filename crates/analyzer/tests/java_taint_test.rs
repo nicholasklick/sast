@@ -2,8 +2,8 @@
 //!
 //! Tests that Java-specific taint sources, sinks, and sanitizers are properly configured.
 
-use kodecd_analyzer::{TaintAnalysis, LanguageTaintConfig, TaintSourceKind, TaintSinkKind};
-use kodecd_parser::Language;
+use gittera_analyzer::{TaintAnalysis, LanguageTaintConfig, TaintSourceKind, TaintSinkKind};
+use gittera_parser::Language;
 
 #[test]
 fn test_java_has_taint_sources() {

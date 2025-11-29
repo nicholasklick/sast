@@ -4,10 +4,10 @@
 
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
-use kodecd_analyzer::{CallGraphBuilder, CfgBuilder, InterproceduralTaintAnalysis, SymbolTableBuilder};
-use kodecd_parser::{LanguageConfig, Parser};
-use kodecd_query::{Query, QueryExecutor};
-use kodecd_query::Finding;
+use gittera_analyzer::{CallGraphBuilder, CfgBuilder, InterproceduralTaintAnalysis, SymbolTableBuilder};
+use gittera_parser::{LanguageConfig, Parser};
+use gittera_query::{Query, QueryExecutor};
+use gittera_query::Finding;
 use rayon::prelude::*;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};

@@ -5,7 +5,7 @@
 
 use crate::call_graph::CallGraph;
 use crate::taint::{TaintAnalysisResult, TaintSink, TaintSource, TaintSourceKind, TaintValue, TaintVulnerability, Severity, TaintSinkKind};
-use kodecd_parser::ast::{AstNode, AstNodeKind};
+use gittera_parser::ast::{AstNode, AstNodeKind};
 use std::collections::{HashMap, HashSet};
 
 /// Summary of taint behavior for a function
@@ -504,7 +504,7 @@ impl InterproceduralTaintAnalysis {
     ///
     /// This method replaces the default configuration with language-specific
     /// taint sources, sinks, and sanitizers appropriate for the target language.
-    pub fn for_language(mut self, language: kodecd_parser::Language) -> Self {
+    pub fn for_language(mut self, language: gittera_parser::Language) -> Self {
         use crate::taint_config::LanguageTaintConfig;
 
         let config = LanguageTaintConfig::for_language(language);
@@ -527,7 +527,7 @@ impl Default for InterproceduralTaintAnalysis {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kodecd_parser::ast::{Location, Span};
+    use gittera_parser::ast::{Location, Span};
 
     fn test_location() -> Location {
         Location {
@@ -590,14 +590,14 @@ mod tests {
             AstNodeKind::FunctionDeclaration {
                 name: "test".to_string(),
                 parameters: vec![
-                    kodecd_parser::Parameter {
+                    gittera_parser::Parameter {
                         name: "a".to_string(),
                         param_type: None,
                         default_value: None,
                         is_optional: false,
                         is_rest: false,
                     },
-                    kodecd_parser::Parameter {
+                    gittera_parser::Parameter {
                         name: "b".to_string(),
                         param_type: None,
                         default_value: None,

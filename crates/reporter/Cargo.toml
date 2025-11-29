@@ -1,12 +1,12 @@
 [package]
-name = "kodecd-reporter"
+name = "gittera-reporter"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-kodecd-parser = { path = "../parser" }
-kodecd-analyzer = { path = "../analyzer" }
-kodecd-query = { path = "../query" }
+gittera-parser = { path = "../parser" }
+gittera-analyzer = { path = "../analyzer" }
+gittera-query = { path = "../query" }
 
 # SARIF output
 serde = { version = "1.0", features = ["derive"] }

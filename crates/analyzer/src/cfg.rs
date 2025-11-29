@@ -1,6 +1,6 @@
 //! Control Flow Graph (CFG) construction and analysis
 
-use kodecd_parser::ast::{AstNode, AstNodeKind, NodeId};
+use gittera_parser::ast::{AstNode, AstNodeKind, NodeId};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use serde::{Deserialize, Serialize};

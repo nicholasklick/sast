@@ -2,7 +2,7 @@
 
 ## Overview
 
-KodeCD SAST includes a complete call graph implementation and inter-procedural taint analysis system. This guide covers how to use these features to analyze code across function boundaries.
+Gittera SAST includes a complete call graph implementation and inter-procedural taint analysis system. This guide covers how to use these features to analyze code across function boundaries.
 
 ## Table of Contents
 
@@ -46,8 +46,8 @@ A call graph is a directed graph representing calling relationships between func
 ### Usage
 
 ```rust
-use kodecd_analyzer::call_graph::CallGraphBuilder;
-use kodecd_parser::{Parser, Language, LanguageConfig};
+use gittera_analyzer::call_graph::CallGraphBuilder;
+use gittera_parser::{Parser, Language, LanguageConfig};
 
 // Parse source code
 let parser = Parser::new(
@@ -184,8 +184,8 @@ pub struct FunctionTaintSummary {
 ### Usage
 
 ```rust
-use kodecd_analyzer::call_graph::CallGraphBuilder;
-use kodecd_analyzer::interprocedural_taint::InterproceduralTaintAnalysis;
+use gittera_analyzer::call_graph::CallGraphBuilder;
+use gittera_analyzer::interprocedural_taint::InterproceduralTaintAnalysis;
 
 // Build call graph
 let call_graph = CallGraphBuilder::new().build(&ast);
@@ -286,9 +286,9 @@ function safe() {
 ### Complete Workflow
 
 ```rust
-use kodecd_parser::{Parser, Language, LanguageConfig};
-use kodecd_analyzer::call_graph::CallGraphBuilder;
-use kodecd_analyzer::interprocedural_taint::InterproceduralTaintAnalysis;
+use gittera_parser::{Parser, Language, LanguageConfig};
+use gittera_analyzer::call_graph::CallGraphBuilder;
+use gittera_analyzer::interprocedural_taint::InterproceduralTaintAnalysis;
 use std::path::Path;
 
 fn analyze_file(file_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -423,7 +423,7 @@ SELECT func, "Reachable from entry"
 ### Programmatic Usage (Available Now)
 
 ```rust
-use kodecd_query::QueryExecutor;
+use gittera_query::QueryExecutor;
 
 // Execute query with call graph
 let query = QueryParser::parse(query_str)?;
@@ -599,17 +599,17 @@ function vulnerable(useA) {
 
 ```bash
 # Call graph tests
-cargo test -p kodecd-analyzer call_graph
+cargo test -p gittera-analyzer call_graph
 
 # Inter-procedural taint tests
-cargo test -p kodecd-analyzer interprocedural
+cargo test -p gittera-analyzer interprocedural
 ```
 
 ### Integration Tests
 
 ```bash
 # End-to-end tests
-cargo test -p kodecd-analyzer --test interprocedural_test
+cargo test -p gittera-analyzer --test interprocedural_test
 ```
 
 ### Example Test

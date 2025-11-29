@@ -1,10 +1,10 @@
 [package]
-name = "kodecd-sast"
+name = "gittera-sast"
 version = "0.1.0"
 edition = "2021"
-authors = ["KodeCD Team"]
+authors = ["Gittera Team"]
 description = "A high-performance SAST engine with custom query language"
-license = "MIT OR Apache-2.0"
+license = "Proprietary"
 
 [workspace]
 members = [
@@ -17,11 +17,11 @@ members = [
 
 [dependencies]
 # Core dependencies for the main binary
-kodecd-parser = { path = "crates/parser" }
-kodecd-analyzer = { path = "crates/analyzer" }
-kodecd-query = { path = "crates/query" }
-kodecd-reporter = { path = "crates/reporter" }
-kodecd-cache = { path = "crates/cache" }
+gittera-parser = { path = "crates/parser" }
+gittera-analyzer = { path = "crates/analyzer" }
+gittera-query = { path = "crates/query" }
+gittera-reporter = { path = "crates/reporter" }
+gittera-cache = { path = "crates/cache" }
 
 # CLI and utilities
 clap = { version = "4.5", features = ["derive"] }

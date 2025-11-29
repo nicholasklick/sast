@@ -1,8 +1,8 @@
-# KodeCD SAST Architecture
+# Gittera SAST Architecture
 
 ## System Overview
 
-KodeCD is a multi-stage static analysis pipeline that transforms source code into actionable security findings.
+Gittera is a multi-stage static analysis pipeline that transforms source code into actionable security findings.
 
 ```
 ┌─────────────┐      ┌──────────────┐      ┌─────────────┐      ┌──────────────┐
@@ -366,7 +366,7 @@ pub struct Finding {
   "version": "2.1.0",
   "$schema": "...",
   "runs": [{
-    "tool": { "driver": { "name": "KodeCD SAST" } },
+    "tool": { "driver": { "name": "Gittera SAST" } },
     "results": [...]
   }]
 }
@@ -384,7 +384,7 @@ Source Code (String)
 Tree-sitter CST (tree_sitter::Tree)
     │
     ▼ [AST Conversion]
-KodeCD AST (AstNode)
+Gittera AST (AstNode)
 ```
 
 ### Analysis Phase
@@ -656,7 +656,7 @@ fn parse_file(path: &Path) -> Result<AstNode> {
                             │
                             ▼
                      ┌──────────────┐
-                     │ KodeCD Core  │
+                     │ Gittera Core  │
                      └──────────────┘
 ```
 

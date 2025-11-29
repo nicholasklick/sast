@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# KodeCD SAST - Sanity Check Script
+# Gittera SAST - Sanity Check Script
 # Verifies all core features are working correctly
 
 set -e
 
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║           KodeCD SAST - Sanity Check                           ║"
+echo "║           Gittera SAST - Sanity Check                           ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -71,17 +71,17 @@ echo ""
 echo "2. UNIT TESTS"
 echo "────────────────────────────────────────────────────────────────"
 
-run_test "Parser tests" "cargo test -p kodecd-parser --quiet"
-run_test "Analyzer tests" "cargo test -p kodecd-analyzer --quiet"
-run_test "Query tests" "cargo test -p kodecd-query --quiet"
-run_test "Reporter tests" "cargo test -p kodecd-reporter --quiet"
+run_test "Parser tests" "cargo test -p gittera-parser --quiet"
+run_test "Analyzer tests" "cargo test -p gittera-analyzer --quiet"
+run_test "Query tests" "cargo test -p gittera-query --quiet"
+run_test "Reporter tests" "cargo test -p gittera-reporter --quiet"
 
 echo ""
 echo "3. INTEGRATION TESTS"
 echo "────────────────────────────────────────────────────────────────"
 
-run_test "Query integration" "cargo test -p kodecd-query --test integration_test --quiet"
-run_test "Taint integration" "cargo test -p kodecd-analyzer --test taint_integration_test --quiet"
+run_test "Query integration" "cargo test -p gittera-query --test integration_test --quiet"
+run_test "Taint integration" "cargo test -p gittera-analyzer --test taint_integration_test --quiet"
 
 echo ""
 echo "4. FEATURE CHECKS"
@@ -117,9 +117,9 @@ echo "6. ADVANCED FEATURES"
 echo "────────────────────────────────────────────────────────────────"
 
 # Count tests
-PARSER_TESTS=$(cargo test -p kodecd-parser --quiet 2>&1 | grep -o "[0-9]* passed" | head -1 | cut -d' ' -f1)
-QUERY_TESTS=$(cargo test -p kodecd-query --quiet 2>&1 | grep -o "[0-9]* passed" | head -1 | cut -d' ' -f1)
-ANALYZER_TESTS=$(cargo test -p kodecd-analyzer --quiet 2>&1 | grep -o "[0-9]* passed" | head -1 | cut -d' ' -f1)
+PARSER_TESTS=$(cargo test -p gittera-parser --quiet 2>&1 | grep -o "[0-9]* passed" | head -1 | cut -d' ' -f1)
+QUERY_TESTS=$(cargo test -p gittera-query --quiet 2>&1 | grep -o "[0-9]* passed" | head -1 | cut -d' ' -f1)
+ANALYZER_TESTS=$(cargo test -p gittera-analyzer --quiet 2>&1 | grep -o "[0-9]* passed" | head -1 | cut -d' ' -f1)
 
 echo "✓ Parser: $PARSER_TESTS tests passing"
 echo "✓ Query: $QUERY_TESTS tests passing"
@@ -150,7 +150,7 @@ function vulnerable() {
 EOF
 
 # Test if we can at least build the binary
-if cargo build --release --bin kodecd-sast --quiet 2>/dev/null; then
+if cargo build --release --bin gittera-sast --quiet 2>/dev/null; then
     echo -e "${GREEN}✓ Main binary builds${NC}"
     ((PASSED++))
 else

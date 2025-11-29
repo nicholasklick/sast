@@ -28,7 +28,7 @@ pub enum CacheError {
 /// Configuration for cache behavior
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CacheConfig {
-    /// Directory to store cache files (default: .kodecd/cache)
+    /// Directory to store cache files (default: .gittera/cache)
     pub cache_dir: PathBuf,
 
     /// Enable file content hashing (slower but more accurate)
@@ -44,7 +44,7 @@ pub struct CacheConfig {
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
-            cache_dir: PathBuf::from(".kodecd/cache"),
+            cache_dir: PathBuf::from(".gittera/cache"),
             content_hashing: true,
             ttl_seconds: 0, // No expiration by default
             max_size_mb: 100, // 100 MB default limit
@@ -210,7 +210,7 @@ impl Cache {
     pub fn store_results(
         &mut self,
         file_path: impl AsRef<Path>,
-        findings: &[kodecd_query::Finding],
+        findings: &[gittera_query::Finding],
     ) -> Result<(), CacheError> {
         let file_path = file_path.as_ref();
 
@@ -233,7 +233,7 @@ impl Cache {
     }
 
     /// Get cached results for a file
-    pub fn get_results(&self, file_path: impl AsRef<Path>) -> Option<Vec<kodecd_query::Finding>> {
+    pub fn get_results(&self, file_path: impl AsRef<Path>) -> Option<Vec<gittera_query::Finding>> {
         let results = self.results_cache.get(file_path.as_ref())?;
         serde_json::from_str(&results.findings_json).ok()
     }
@@ -320,7 +320,7 @@ mod tests {
     fn test_cache_creation() {
         let temp_dir = TempDir::new().unwrap();
         let config = CacheConfig {
-            cache_dir: temp_dir.path().join(".kodecd/cache"),
+            cache_dir: temp_dir.path().join(".gittera/cache"),
             ..Default::default()
         };
 
@@ -332,7 +332,7 @@ mod tests {
     fn test_cache_persistence() {
         let temp_dir = TempDir::new().unwrap();
         let config = CacheConfig {
-            cache_dir: temp_dir.path().join(".kodecd/cache"),
+            cache_dir: temp_dir.path().join(".gittera/cache"),
             ..Default::default()
         };
 

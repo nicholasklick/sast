@@ -16,8 +16,8 @@
 //! ### SARIF Output
 //!
 //! ```rust
-//! use kodecd_reporter::{Reporter, ReportFormat, Report};
-//! use kodecd_query::Finding;
+//! use gittera_reporter::{Reporter, ReportFormat, Report};
+//! use gittera_query::Finding;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let findings = vec![
@@ -44,8 +44,8 @@
 //! ### JSON Output
 //!
 //! ```rust
-//! use kodecd_reporter::{Reporter, ReportFormat, Report};
-//! # use kodecd_query::Finding;
+//! use gittera_reporter::{Reporter, ReportFormat, Report};
+//! # use gittera_query::Finding;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! # let findings = vec![];
@@ -62,8 +62,8 @@
 //! ### Text Output
 //!
 //! ```rust
-//! use kodecd_reporter::{Reporter, ReportFormat, Report};
-//! # use kodecd_query::Finding;
+//! use gittera_reporter::{Reporter, ReportFormat, Report};
+//! # use gittera_query::Finding;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! # let findings = vec![];
@@ -94,9 +94,9 @@
 //!   "runs": [{
 //!     "tool": {
 //!       "driver": {
-//!         "name": "KodeCD SAST",
+//!         "name": "Gittera SAST",
 //!         "version": "0.1.0",
-//!         "informationUri": "https://github.com/kodecd/sast",
+//!         "informationUri": "https://github.com/gittera/sast",
 //!         "rules": [...]
 //!       }
 //!     },
@@ -111,7 +111,7 @@
 //!
 //! ```yaml
 //! - name: Run SAST
-//!   run: kodecd-sast scan --format sarif src/ > results.sarif
+//!   run: gittera-sast scan --format sarif src/ > results.sarif
 //!
 //! - name: Upload SARIF
 //!   uses: github/codeql-action/upload-sarif@v2
@@ -123,7 +123,7 @@
 //!
 //! ```bash
 //! # Run scan and generate JSON report
-//! kodecd-sast scan --format json src/ > results.json
+//! gittera-sast scan --format json src/ > results.json
 //!
 //! # Parse results in build script
 //! CRITICAL=$(jq '.summary.critical' results.json)
@@ -138,8 +138,8 @@
 //! The [`Summary`] struct provides aggregate statistics:
 //!
 //! ```rust
-//! use kodecd_reporter::{Report, Summary};
-//! # use kodecd_query::Finding;
+//! use gittera_reporter::{Report, Summary};
+//! # use gittera_query::Finding;
 //!
 //! # let findings = vec![];
 //! let report = Report::new(findings);
@@ -155,8 +155,8 @@
 //! ## Error Handling
 //!
 //! ```rust
-//! use kodecd_reporter::{Reporter, ReportFormat, ReportError, Report};
-//! # use kodecd_query::Finding;
+//! use gittera_reporter::{Reporter, ReportFormat, ReportError, Report};
+//! # use gittera_query::Finding;
 //!
 //! # fn example() -> Result<(), ReportError> {
 //! # let findings = vec![];
@@ -179,7 +179,7 @@
 //! ## Testing
 //!
 //! ```bash
-//! cargo test -p kodecd-reporter
+//! cargo test -p gittera-reporter
 //! ```
 //!
 //! ## See Also
@@ -194,7 +194,7 @@ pub mod sarif;
 pub use formats::{ReportFormat, Reporter};
 pub use sarif::SarifReporter;
 
-use kodecd_query::Finding;
+use gittera_query::Finding;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

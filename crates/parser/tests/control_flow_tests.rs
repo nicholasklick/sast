@@ -8,11 +8,11 @@
 //! - Labeled statements
 //! - With statements (JavaScript)
 
-use kodecd_parser::{Language, LanguageConfig, Parser, ast::AstNodeKind};
+use gittera_parser::{Language, LanguageConfig, Parser, ast::AstNodeKind};
 use std::path::Path;
 
 /// Helper function to parse code and find a specific node kind
-fn find_node_kind<F>(ast: &kodecd_parser::ast::AstNode, kind_matcher: &F) -> Option<AstNodeKind>
+fn find_node_kind<F>(ast: &gittera_parser::ast::AstNode, kind_matcher: &F) -> Option<AstNodeKind>
 where
     F: Fn(&AstNodeKind) -> bool
 {
@@ -30,7 +30,7 @@ where
 }
 
 /// Helper to check if a node kind exists in the tree
-fn has_node_kind<F>(ast: &kodecd_parser::ast::AstNode, kind_matcher: F) -> bool
+fn has_node_kind<F>(ast: &gittera_parser::ast::AstNode, kind_matcher: F) -> bool
 where
     F: Fn(&AstNodeKind) -> bool
 {
@@ -110,7 +110,7 @@ fn test_switch_case_with_default() {
     let mut case_count = 0;
     let mut default_count = 0;
 
-    fn count_cases(node: &kodecd_parser::ast::AstNode, case_count: &mut usize, default_count: &mut usize) {
+    fn count_cases(node: &gittera_parser::ast::AstNode, case_count: &mut usize, default_count: &mut usize) {
         if let AstNodeKind::SwitchCase { test, .. } = &node.kind {
             if test.is_none() {
                 *default_count += 1;
@@ -551,7 +551,7 @@ fn test_nested_try_finally() {
 
     // Count finally clauses
     let mut finally_count = 0;
-    fn count_finally(node: &kodecd_parser::ast::AstNode, count: &mut usize) {
+    fn count_finally(node: &gittera_parser::ast::AstNode, count: &mut usize) {
         if matches!(node.kind, AstNodeKind::FinallyClause) {
             *count += 1;
         }

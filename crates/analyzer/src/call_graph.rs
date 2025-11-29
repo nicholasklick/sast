@@ -3,7 +3,7 @@
 //! This module provides call graph construction for interprocedural analysis.
 //! A call graph shows which functions/methods call which other functions/methods.
 
-use kodecd_parser::ast::{AstNode, AstNodeKind};
+use gittera_parser::ast::{AstNode, AstNodeKind};
 use std::collections::{HashMap, HashSet};
 
 /// Represents a function or method in the call graph
@@ -377,7 +377,7 @@ impl Default for CallGraphBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kodecd_parser::ast::{Location, Span};
+    use gittera_parser::ast::{Location, Span};
 
     // Helper function to create a test location
     fn test_location() -> Location {
@@ -605,7 +605,7 @@ mod tests {
                 name: "bar".to_string(),
                 parameters: vec![],
                 return_type: None,
-                visibility: kodecd_parser::ast::Visibility::Public,
+                visibility: gittera_parser::ast::Visibility::Public,
                 is_static: false,
                 is_async: false,
                 is_abstract: false,

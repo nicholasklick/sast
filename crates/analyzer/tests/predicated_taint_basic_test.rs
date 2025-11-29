@@ -1,8 +1,8 @@
-use kodecd_analyzer::{
+use gittera_analyzer::{
     CfgBuilder, TaintAnalysis, TaintSink, TaintSinkKind, TaintSource, TaintSourceKind,
 };
-use kodecd_parser::ast::{AstNode, AstNodeKind, Location, Span};
-use kodecd_parser::{Language, LanguageConfig, Parser};
+use gittera_parser::ast::{AstNode, AstNodeKind, Location, Span};
+use gittera_parser::{Language, LanguageConfig, Parser};
 use std::path::Path;
 
 /// Helper to create a simple test AST
@@ -27,8 +27,8 @@ fn create_test_ast() -> AstNode {
 
 #[test]
 fn test_predicated_taint_value_creation() {
-    use kodecd_analyzer::taint::TaintValue;
-    use kodecd_analyzer::symbolic::SymbolicValue;
+    use gittera_analyzer::taint::TaintValue;
+    use gittera_analyzer::symbolic::SymbolicValue;
 
     // Create a basic tainted value
     let taint1 = TaintValue::new("data".to_string(), TaintSourceKind::UserInput);
@@ -55,8 +55,8 @@ fn test_predicated_taint_value_creation() {
 
 #[test]
 fn test_sanitize_when() {
-    use kodecd_analyzer::taint::TaintValue;
-    use kodecd_analyzer::symbolic::SymbolicValue;
+    use gittera_analyzer::taint::TaintValue;
+    use gittera_analyzer::symbolic::SymbolicValue;
 
     let mut taint = TaintValue::new("data".to_string(), TaintSourceKind::UserInput);
 
@@ -78,8 +78,8 @@ fn test_sanitize_when() {
 
 #[test]
 fn test_always_safe_with_true_condition() {
-    use kodecd_analyzer::taint::TaintValue;
-    use kodecd_analyzer::symbolic::SymbolicValue;
+    use gittera_analyzer::taint::TaintValue;
+    use gittera_analyzer::symbolic::SymbolicValue;
 
     let mut taint = TaintValue::new("data".to_string(), TaintSourceKind::UserInput);
 
@@ -93,7 +93,7 @@ fn test_always_safe_with_true_condition() {
 
 #[test]
 fn test_unconditional_sanitization() {
-    use kodecd_analyzer::taint::TaintValue;
+    use gittera_analyzer::taint::TaintValue;
 
     let mut taint = TaintValue::new("data".to_string(), TaintSourceKind::UserInput);
 
@@ -149,8 +149,8 @@ fn test_predicated_reduces_false_positives_concept() {
     // Even though we don't have full condition tracking yet,
     // the infrastructure is in place
 
-    use kodecd_analyzer::taint::TaintValue;
-    use kodecd_analyzer::symbolic::SymbolicValue;
+    use gittera_analyzer::taint::TaintValue;
+    use gittera_analyzer::symbolic::SymbolicValue;
 
     // Scenario: data is sanitized when shouldSanitize == true
     let mut taint = TaintValue::new("data".to_string(), TaintSourceKind::UserInput);

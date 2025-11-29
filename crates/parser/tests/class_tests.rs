@@ -5,15 +5,15 @@
 //! - Static blocks
 //! - Accessor properties
 
-use kodecd_parser::{Language, LanguageConfig, Parser, ast::AstNodeKind};
+use gittera_parser::{Language, LanguageConfig, Parser, ast::AstNodeKind};
 use std::path::Path;
 
 /// Helper to check if a node kind exists in the tree
-fn has_node_kind<F>(ast: &kodecd_parser::ast::AstNode, kind_matcher: F) -> bool
+fn has_node_kind<F>(ast: &gittera_parser::ast::AstNode, kind_matcher: F) -> bool
 where
     F: Fn(&AstNodeKind) -> bool
 {
-    fn find_node_kind<F>(ast: &kodecd_parser::ast::AstNode, kind_matcher: &F) -> bool
+    fn find_node_kind<F>(ast: &gittera_parser::ast::AstNode, kind_matcher: &F) -> bool
     where
         F: Fn(&AstNodeKind) -> bool
     {
@@ -192,7 +192,7 @@ fn test_complex_class_structure() {
     let has_fields = has_node_kind(&ast, |k| matches!(k, AstNodeKind::FieldDeclaration { .. }));
     let has_static_block = has_node_kind(&ast, |k| matches!(k, AstNodeKind::StaticBlock));
     let has_constructor = has_node_kind(&ast, |k| {
-        matches!(k, AstNodeKind::MethodDefinition { kind: kodecd_parser::ast::MethodKind::Constructor, .. })
+        matches!(k, AstNodeKind::MethodDefinition { kind: gittera_parser::ast::MethodKind::Constructor, .. })
     });
 
     assert!(has_fields, "Should find field declarations");

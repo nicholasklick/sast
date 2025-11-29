@@ -1,11 +1,11 @@
 [package]
-name = "kodecd-query"
+name = "gittera-query"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-kodecd-parser = { path = "../parser" }
-kodecd-analyzer = { path = "../analyzer" }
+gittera-parser = { path = "../parser" }
+gittera-analyzer = { path = "../analyzer" }
 
 # Parsing KQL
 nom = "7.1"

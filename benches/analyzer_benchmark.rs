@@ -7,11 +7,11 @@
 //! - Interprocedural taint analysis
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
-use kodecd_analyzer::{
+use gittera_analyzer::{
     SymbolTableBuilder, CallGraphBuilder, PointsToAnalysisBuilder, InterproceduralTaintAnalysis,
     TaintAnalysis, CfgBuilder,
 };
-use kodecd_parser::{Language, LanguageConfig, Parser};
+use gittera_parser::{Language, LanguageConfig, Parser};
 use std::path::Path;
 
 // Test programs of varying complexity

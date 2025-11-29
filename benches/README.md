@@ -1,6 +1,6 @@
-# KodeCD SAST Benchmarks
+# Gittera SAST Benchmarks
 
-This directory contains comprehensive performance benchmarks for the KodeCD SAST engine using Criterion.rs.
+This directory contains comprehensive performance benchmarks for the Gittera SAST engine using Criterion.rs.
 
 ## Overview
 

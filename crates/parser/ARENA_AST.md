@@ -62,7 +62,7 @@ arena.reset(); // or just let it go out of scope
 ## Usage Example
 
 ```rust
-use kodecd_parser::{AstArena, ArenaAstNode, ArenaAstNodeKind, ArenaLocation, ArenaSpan};
+use gittera_parser::{AstArena, ArenaAstNode, ArenaAstNodeKind, ArenaLocation, ArenaSpan};
 
 // Create arena
 let arena = AstArena::new();

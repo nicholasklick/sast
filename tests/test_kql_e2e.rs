@@ -1,14 +1,14 @@
 #!/usr/bin/env rust-script
 //! ```cargo
 //! [dependencies]
-//! kodecd-parser = { path = "crates/parser" }
-//! kodecd-query = { path = "crates/query" }
-//! kodecd-analyzer = { path = "crates/analyzer" }
+//! gittera-parser = { path = "crates/parser" }
+//! gittera-query = { path = "crates/query" }
+//! gittera-analyzer = { path = "crates/analyzer" }
 //! ```
 
-use kodecd_analyzer::CfgBuilder;
-use kodecd_parser::{Language, LanguageConfig, Parser};
-use kodecd_query::{QueryExecutor, QueryParser};
+use gittera_analyzer::CfgBuilder;
+use gittera_parser::{Language, LanguageConfig, Parser};
+use gittera_query::{QueryExecutor, QueryParser};
 use std::path::Path;
 
 #[test]

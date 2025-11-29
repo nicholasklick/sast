@@ -21,8 +21,8 @@
 //! ## Example
 //!
 //! ```rust
-//! use kodecd_analyzer::{SymbolicExecutor, SymbolicExecutorBuilder};
-//! use kodecd_parser::{AstNode, AstNodeKind, Location, Span};
+//! use gittera_analyzer::{SymbolicExecutor, SymbolicExecutorBuilder};
+//! use gittera_parser::{AstNode, AstNodeKind, Location, Span};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a simple program AST
@@ -58,7 +58,7 @@
 //! # }
 //! ```
 
-use kodecd_parser::ast::{AstNode, AstNodeKind, NodeId};
+use gittera_parser::ast::{AstNode, AstNodeKind, NodeId};
 use std::collections::{HashMap, HashSet, VecDeque};
 use serde::{Deserialize, Serialize};
 
@@ -614,21 +614,21 @@ impl SymbolicExecutor {
             AstNodeKind::Literal { value } => {
                 // Parse literal value
                 match value {
-                    kodecd_parser::ast::LiteralValue::Number(n) => {
+                    gittera_parser::ast::LiteralValue::Number(n) => {
                         n.parse::<i64>()
                             .map(SymbolicValue::Concrete)
                             .unwrap_or(SymbolicValue::Unknown)
                     }
-                    kodecd_parser::ast::LiteralValue::Boolean(b) => {
+                    gittera_parser::ast::LiteralValue::Boolean(b) => {
                         SymbolicValue::ConcreteBool(*b)
                     }
-                    kodecd_parser::ast::LiteralValue::String(s) => {
+                    gittera_parser::ast::LiteralValue::String(s) => {
                         SymbolicValue::ConcreteString(s.clone())
                     }
-                    kodecd_parser::ast::LiteralValue::Null => {
+                    gittera_parser::ast::LiteralValue::Null => {
                         SymbolicValue::Null
                     }
-                    kodecd_parser::ast::LiteralValue::Undefined => {
+                    gittera_parser::ast::LiteralValue::Undefined => {
                         SymbolicValue::Undefined
                     }
                 }

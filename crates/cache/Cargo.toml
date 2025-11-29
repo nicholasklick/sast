@@ -1,14 +1,14 @@
 [package]
-name = "kodecd-cache"
+name = "gittera-cache"
 version = "0.1.0"
 edition = "2021"
-authors = ["KodeCD Team"]
-description = "Caching and incremental analysis for KodeCD SAST"
-license = "MIT OR Apache-2.0"
+authors = ["Gittera Team"]
+description = "Caching and incremental analysis for Gittera SAST"
+license = "Proprietary"
 
 [dependencies]
 # Core dependencies
-kodecd-query = { path = "../query" }
+gittera-query = { path = "../query" }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

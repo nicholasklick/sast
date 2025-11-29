@@ -1,7 +1,7 @@
 //! Comprehensive tests for points-to analysis
 
-use kodecd_analyzer::{PointsToAnalysisBuilder, AbstractLocation};
-use kodecd_parser::{Parser, Language, LanguageConfig, AstNode, AstNodeKind, Location, Span};
+use gittera_analyzer::{PointsToAnalysisBuilder, AbstractLocation};
+use gittera_parser::{Parser, Language, LanguageConfig, AstNode, AstNodeKind, Location, Span};
 use std::path::Path;
 
 /// Helper to create a test AST node

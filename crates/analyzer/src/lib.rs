@@ -1,4 +1,4 @@
-//! KodeCD Analyzer - Data flow and control flow analysis
+//! Gittera Analyzer - Data flow and control flow analysis
 //!
 //! This crate provides control flow graph generation, data flow analysis,
 //! and taint tracking capabilities for security analysis.
@@ -19,8 +19,8 @@
 //! ### Taint Analysis
 //!
 //! ```rust
-//! use kodecd_analyzer::{CfgBuilder, TaintAnalysis};
-//! use kodecd_parser::{Parser, Language, LanguageConfig};
+//! use gittera_analyzer::{CfgBuilder, TaintAnalysis};
+//! use gittera_parser::{Parser, Language, LanguageConfig};
 //! use std::path::Path;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -59,8 +59,8 @@
 //! ### Inter-procedural Taint Analysis
 //!
 //! ```rust
-//! use kodecd_analyzer::{CallGraphBuilder, InterproceduralTaintAnalysis};
-//! # use kodecd_parser::{Parser, Language, LanguageConfig};
+//! use gittera_analyzer::{CallGraphBuilder, InterproceduralTaintAnalysis};
+//! # use gittera_parser::{Parser, Language, LanguageConfig};
 //! # use std::path::Path;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -92,8 +92,8 @@
 //! ### Call Graph Analysis
 //!
 //! ```rust
-//! use kodecd_analyzer::CallGraphBuilder;
-//! # use kodecd_parser::{Parser, Language, LanguageConfig};
+//! use gittera_analyzer::CallGraphBuilder;
+//! # use gittera_parser::{Parser, Language, LanguageConfig};
 //! # use std::path::Path;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -125,8 +125,8 @@
 //! ### Points-to Analysis
 //!
 //! ```rust
-//! use kodecd_analyzer::PointsToAnalysisBuilder;
-//! # use kodecd_parser::{Parser, Language, LanguageConfig};
+//! use gittera_analyzer::PointsToAnalysisBuilder;
+//! # use gittera_parser::{Parser, Language, LanguageConfig};
 //! # use std::path::Path;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -160,8 +160,8 @@
 //! ### Symbolic Execution
 //!
 //! ```rust
-//! use kodecd_analyzer::SymbolicExecutorBuilder;
-//! # use kodecd_parser::{AstNode, AstNodeKind, Location, Span};
+//! use gittera_analyzer::SymbolicExecutorBuilder;
+//! # use gittera_parser::{AstNode, AstNodeKind, Location, Span};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! # let program = AstNode {
@@ -301,8 +301,8 @@
 //! ### Custom Taint Sources and Sinks
 //!
 //! ```rust
-//! use kodecd_analyzer::{TaintAnalysis, TaintSource, TaintSink};
-//! use kodecd_analyzer::{TaintSourceKind, TaintSinkKind};
+//! use gittera_analyzer::{TaintAnalysis, TaintSource, TaintSink};
+//! use gittera_analyzer::{TaintSourceKind, TaintSinkKind};
 //!
 //! let mut taint = TaintAnalysis::new();
 //!
@@ -326,15 +326,15 @@
 //! Run the analyzer test suite:
 //!
 //! ```bash
-//! cargo test -p kodecd-analyzer
+//! cargo test -p gittera-analyzer
 //! ```
 //!
 //! Test specific modules:
 //!
 //! ```bash
-//! cargo test -p kodecd-analyzer cfg
-//! cargo test -p kodecd-analyzer taint
-//! cargo test -p kodecd-analyzer call_graph
+//! cargo test -p gittera-analyzer cfg
+//! cargo test -p gittera-analyzer taint
+//! cargo test -p gittera-analyzer call_graph
 //! ```
 
 pub mod cfg;

@@ -1,10 +1,10 @@
 //! Query execution engine
 
 use crate::ast::*;
-use kodecd_analyzer::call_graph::CallGraph;
-use kodecd_analyzer::cfg::ControlFlowGraph;
-use kodecd_analyzer::taint::TaintAnalysisResult;
-use kodecd_parser::ast::{AstNode, AstNodeKind, LiteralValue};
+use gittera_analyzer::call_graph::CallGraph;
+use gittera_analyzer::cfg::ControlFlowGraph;
+use gittera_analyzer::taint::TaintAnalysisResult;
+use gittera_parser::ast::{AstNode, AstNodeKind, LiteralValue};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -610,7 +610,7 @@ impl QueryExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kodecd_parser::ast::{Location, Span};
+    use gittera_parser::ast::{Location, Span};
 
     fn create_test_node(kind: AstNodeKind, text: &str) -> AstNode {
         AstNode {

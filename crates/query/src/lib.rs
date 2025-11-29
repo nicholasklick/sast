@@ -1,4 +1,4 @@
-//! KodeCD Query Language (KQL) - A domain-specific language for security queries
+//! Gittera Query Language (KQL) - A domain-specific language for security queries
 //!
 //! KQL allows users to write declarative queries to find security vulnerabilities
 //! in source code using SQL-like syntax.
@@ -20,7 +20,7 @@
 //! ### Simple Query
 //!
 //! ```rust
-//! use kodecd_query::QueryParser;
+//! use gittera_query::QueryParser;
 //!
 //! let query_str = r#"
 //!     FROM CallExpression AS call
@@ -29,15 +29,15 @@
 //! "#;
 //!
 //! let query = QueryParser::parse(query_str)?;
-//! # Ok::<(), kodecd_query::ParseError>(())
+//! # Ok::<(), gittera_query::ParseError>(())
 //! ```
 //!
 //! ### Execute Query
 //!
 //! ```rust,no_run
-//! use kodecd_query::{QueryParser, QueryExecutor};
-//! use kodecd_parser::{Parser, Language, LanguageConfig};
-//! use kodecd_analyzer::CfgBuilder;
+//! use gittera_query::{QueryParser, QueryExecutor};
+//! use gittera_parser::{Parser, Language, LanguageConfig};
+//! use gittera_analyzer::CfgBuilder;
 //! use std::path::Path;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -70,9 +70,9 @@
 //! ### With Taint Analysis
 //!
 //! ```rust,no_run
-//! use kodecd_query::{QueryParser, QueryExecutor};
-//! use kodecd_analyzer::{CfgBuilder, TaintAnalysis};
-//! # use kodecd_parser::{Parser, Language, LanguageConfig};
+//! use gittera_query::{QueryParser, QueryExecutor};
+//! use gittera_analyzer::{CfgBuilder, TaintAnalysis};
+//! # use gittera_parser::{Parser, Language, LanguageConfig};
 //! # use std::path::Path;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -155,7 +155,7 @@
 //! Pre-built queries for common vulnerabilities:
 //!
 //! ```rust
-//! use kodecd_query::StandardLibrary;
+//! use gittera_query::StandardLibrary;
 //!
 //! // Get all OWASP queries
 //! let queries = StandardLibrary::owasp_queries();
@@ -224,7 +224,7 @@
 //! ## Error Handling
 //!
 //! ```rust
-//! use kodecd_query::{QueryParser, ParseError};
+//! use gittera_query::{QueryParser, ParseError};
 //!
 //! match QueryParser::parse("invalid query") {
 //!     Ok(query) => println!("Parsed successfully"),
@@ -277,7 +277,7 @@
 //! Run the query test suite:
 //!
 //! ```bash
-//! cargo test -p kodecd-query
+//! cargo test -p gittera-query
 //! ```
 //!
 //! ## See Also

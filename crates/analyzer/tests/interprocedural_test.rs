@@ -1,9 +1,9 @@
 //! End-to-end tests for interprocedural analysis
 
-use kodecd_analyzer::call_graph::CallGraphBuilder;
-use kodecd_analyzer::interprocedural_taint::InterproceduralTaintAnalysis;
-use kodecd_parser::ast::{AstNode, AstNodeKind, Location, Span};
-use kodecd_parser::{Language, LanguageConfig, Parser};
+use gittera_analyzer::call_graph::CallGraphBuilder;
+use gittera_analyzer::interprocedural_taint::InterproceduralTaintAnalysis;
+use gittera_parser::ast::{AstNode, AstNodeKind, Location, Span};
+use gittera_parser::{Language, LanguageConfig, Parser};
 use std::path::Path;
 
 /// Helper to create a test location
@@ -360,7 +360,7 @@ fn test_method_call_graph() {
             name: "process".to_string(),
             parameters: vec![],
             return_type: None,
-            visibility: kodecd_parser::ast::Visibility::Public,
+            visibility: gittera_parser::ast::Visibility::Public,
             is_static: false,
             is_async: false,
             is_abstract: false,
@@ -376,7 +376,7 @@ fn test_method_call_graph() {
             name: "getData".to_string(),
             parameters: vec![],
             return_type: None,
-            visibility: kodecd_parser::ast::Visibility::Public,
+            visibility: gittera_parser::ast::Visibility::Public,
             is_static: false,
             is_async: false,
             is_abstract: false,

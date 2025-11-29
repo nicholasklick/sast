@@ -1,7 +1,7 @@
 //! Data flow analysis framework
 
 use crate::cfg::{ControlFlowGraph, CfgGraphIndex};
-use kodecd_parser::ast::AstNode;
+use gittera_parser::ast::AstNode;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -217,7 +217,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kodecd_parser::ast::AstNode;
+    use gittera_parser::ast::AstNode;
 
     struct DummyTransfer;
 

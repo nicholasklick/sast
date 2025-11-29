@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
-use kodecd_parser::{Parser, Language, LanguageConfig};
-use kodecd_analyzer::{CfgBuilder, TaintAnalysis};
+use gittera_parser::{Parser, Language, LanguageConfig};
+use gittera_analyzer::{CfgBuilder, TaintAnalysis};
 use std::path::Path;
 
 const SIMPLE_TAINT: &str = r#"

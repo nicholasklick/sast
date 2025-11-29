@@ -1,4 +1,4 @@
-//! Caching and Incremental Analysis for KodeCD SAST
+//! Caching and Incremental Analysis for Gittera SAST
 //!
 //! This crate provides:
 //! - **File Change Detection**: Track which files have changed since last scan
@@ -10,10 +10,10 @@
 //! ## Incremental Analysis
 //!
 //! ```rust,no_run
-//! use kodecd_cache::{Cache, CacheConfig};
+//! use gittera_cache::{Cache, CacheConfig};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! // Create cache in .kodecd directory
+//! // Create cache in .gittera directory
 //! let config = CacheConfig::default();
 //! let mut cache = Cache::new(config)?;
 //!
@@ -34,14 +34,14 @@
 //! ## False Positive Suppression
 //!
 //! ```rust,no_run
-//! use kodecd_cache::{SuppressionManager, SuppressionConfig};
+//! use gittera_cache::{SuppressionManager, SuppressionConfig};
 //! use std::path::Path;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let config = SuppressionConfig::default();
 //! let mut suppressions = SuppressionManager::new(config)?;
 //!
-//! // Load suppressions from .kodecd-ignore
+//! // Load suppressions from .gittera-ignore
 //! suppressions.load()?;
 //!
 //! // Check if finding is suppressed

@@ -39,7 +39,7 @@ pub enum BaselineError {
 /// Baseline configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BaselineConfig {
-    /// Path to baseline file (default: .kodecd/baseline.json)
+    /// Path to baseline file (default: .gittera/baseline.json)
     pub baseline_file: PathBuf,
 
     /// Enable baseline mode
@@ -52,7 +52,7 @@ pub struct BaselineConfig {
 impl Default for BaselineConfig {
     fn default() -> Self {
         Self {
-            baseline_file: PathBuf::from(".kodecd/baseline.json"),
+            baseline_file: PathBuf::from(".gittera/baseline.json"),
             enabled: false,
             track_fixed: true,
         }
@@ -92,7 +92,7 @@ pub struct BaselineFinding {
 
 impl BaselineFinding {
     /// Create from finding
-    pub fn from_finding(finding: &kodecd_query::Finding) -> Self {
+    pub fn from_finding(finding: &gittera_query::Finding) -> Self {
         let fingerprint = FindingFingerprint::new(
             &finding.rule_id,
             &finding.file_path,
@@ -135,7 +135,7 @@ pub struct Baseline {
 
 impl Baseline {
     /// Create new baseline from findings
-    pub fn new(findings: &[kodecd_query::Finding], description: Option<String>) -> Self {
+    pub fn new(findings: &[gittera_query::Finding], description: Option<String>) -> Self {
         let now = current_timestamp();
 
         let mut baseline_findings = HashMap::new();
@@ -153,7 +153,7 @@ impl Baseline {
     }
 
     /// Check if finding exists in baseline
-    pub fn contains(&self, finding: &kodecd_query::Finding) -> bool {
+    pub fn contains(&self, finding: &gittera_query::Finding) -> bool {
         let fingerprint = FindingFingerprint::new(
             &finding.rule_id,
             &finding.file_path,
@@ -223,7 +223,7 @@ impl BaselineManager {
     /// Create new baseline from findings
     pub fn create_baseline(
         &mut self,
-        findings: &[kodecd_query::Finding],
+        findings: &[gittera_query::Finding],
         description: Option<String>,
     ) -> Result<(), BaselineError> {
         let baseline = Baseline::new(findings, description);
@@ -280,7 +280,7 @@ impl BaselineManager {
     }
 
     /// Check if finding is in baseline
-    pub fn is_baseline(&self, finding: &kodecd_query::Finding) -> bool {
+    pub fn is_baseline(&self, finding: &gittera_query::Finding) -> bool {
         if !self.config.enabled {
             return false;
         }
@@ -294,8 +294,8 @@ impl BaselineManager {
     /// Filter findings to only new ones (not in baseline)
     pub fn filter_new_findings<'a>(
         &self,
-        findings: &'a [kodecd_query::Finding],
-    ) -> Vec<&'a kodecd_query::Finding> {
+        findings: &'a [gittera_query::Finding],
+    ) -> Vec<&'a gittera_query::Finding> {
         if !self.config.enabled || self.baseline.is_none() {
             return findings.iter().collect();
         }
@@ -309,7 +309,7 @@ impl BaselineManager {
     /// Find fixed findings (in baseline but not in current findings)
     pub fn find_fixed_findings(
         &self,
-        current_findings: &[kodecd_query::Finding],
+        current_findings: &[gittera_query::Finding],
     ) -> Vec<BaselineFinding> {
         if !self.config.enabled || !self.config.track_fixed {
             return Vec::new();
@@ -384,7 +384,7 @@ pub struct BaselineStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kodecd_query::Finding;
+    use gittera_query::Finding;
 
     fn create_test_finding(rule_id: &str, file: &str, line: usize) -> Finding {
         Finding {

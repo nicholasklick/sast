@@ -1,4 +1,4 @@
-use kodecd_query::parser::QueryParser;
+use gittera_query::parser::QueryParser;
 
 fn main() {
     let query = r#"

@@ -3,7 +3,7 @@
 //! These tests verify that the parser behaves correctly on randomly generated inputs,
 //! ensuring robustness and preventing panics.
 
-use kodecd_parser::{Language, LanguageConfig, Parser};
+use gittera_parser::{Language, LanguageConfig, Parser};
 use proptest::prelude::*;
 use std::path::Path;
 

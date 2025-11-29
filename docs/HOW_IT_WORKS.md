@@ -1,4 +1,4 @@
-# How KodeCD SAST Works - Pseudocode Explanation
+# How Gittera SAST Works - Pseudocode Explanation
 
 ## Table of Contents
 1. [High-Level Architecture](#high-level-architecture)
@@ -810,7 +810,7 @@ function generate_report(findings, format):
             return format_sarif_report(report)
 
 function format_text_report(report):
-    output = "KodeCD SAST Analysis Results\n"
+    output = "Gittera SAST Analysis Results\n"
     output += "=" * 70 + "\n\n"
 
     // Summary statistics
@@ -850,9 +850,9 @@ function format_sarif_report(report):
         "runs": [{
             "tool": {
                 "driver": {
-                    "name": "KodeCD SAST",
+                    "name": "Gittera SAST",
                     "version": "0.1.0",
-                    "informationUri": "https://kodecd.io"
+                    "informationUri": "https://gittera.io"
                 }
             },
             "results": []
@@ -951,7 +951,7 @@ findings = execute_query(query, ast, cfg, taint_results)
 report = generate_report(findings, format="TEXT")
 print(report)
 // Output:
-// KodeCD SAST Analysis Results
+// Gittera SAST Analysis Results
 // ======================================================================
 //
 // Summary:
@@ -1080,7 +1080,7 @@ class QueryExecutor:
 
 ## Summary
 
-KodeCD SAST performs static analysis in these key stages:
+Gittera SAST performs static analysis in these key stages:
 
 1. **Parse** source code into an Abstract Syntax Tree (AST)
 2. **Build** symbol tables to track variables and scopes
@@ -1096,4 +1096,4 @@ The tool uses:
 - **Pattern matching** for security vulnerability detection
 - **Metadata mappings** (CWE, OWASP, SANS) for compliance
 
-This architecture enables KodeCD to be 50-400x faster than CodeQL while maintaining comprehensive security coverage.
+This architecture enables Gittera to be 50-400x faster than CodeQL while maintaining comprehensive security coverage.

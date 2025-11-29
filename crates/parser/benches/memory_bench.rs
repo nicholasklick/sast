@@ -1,4 +1,4 @@
-use kodecd_parser::{
+use gittera_parser::{
     AstArena, Language, LanguageConfig, Parser, ParserArena,
 };
 use std::path::Path;
@@ -18,7 +18,7 @@ fn main() {
     let ast = parser.parse_file().unwrap();
 
     // Count nodes recursively
-    fn count_nodes(node: &kodecd_parser::AstNode) -> usize {
+    fn count_nodes(node: &gittera_parser::AstNode) -> usize {
         1 + node.children.iter().map(count_nodes).sum::<usize>()
     }
 
@@ -39,7 +39,7 @@ fn main() {
     let arena_ast = arena_parser.parse_file(&arena).unwrap();
 
     // Count arena nodes
-    fn count_arena_nodes(node: &kodecd_parser::ArenaAstNode) -> usize {
+    fn count_arena_nodes(node: &gittera_parser::ArenaAstNode) -> usize {
         1 + node.children.iter().map(|n| count_arena_nodes(n)).sum::<usize>()
     }
 

@@ -1,11 +1,11 @@
 //! Integration tests for taint analysis
 
-use kodecd_analyzer::cfg::CfgBuilder;
-use kodecd_analyzer::taint::{
+use gittera_analyzer::cfg::CfgBuilder;
+use gittera_analyzer::taint::{
     TaintAnalysis, TaintSink, TaintSinkKind, TaintSource, TaintSourceKind,
 };
-use kodecd_parser::ast::{AstNode, AstNodeKind, Location, Span};
-use kodecd_parser::{Language, LanguageConfig, Parser};
+use gittera_parser::ast::{AstNode, AstNodeKind, Location, Span};
+use gittera_parser::{Language, LanguageConfig, Parser};
 use std::path::Path;
 
 /// Helper to create a simple test CFG
@@ -160,7 +160,7 @@ fn test_sanitizer_configuration() {
 
 #[test]
 fn test_severity_levels() {
-    use kodecd_analyzer::taint::Severity;
+    use gittera_analyzer::taint::Severity;
 
     assert_eq!(Severity::Critical.as_str(), "Critical");
     assert_eq!(Severity::High.as_str(), "High");
@@ -170,7 +170,7 @@ fn test_severity_levels() {
 
 #[test]
 fn test_taint_value_sanitization() {
-    use kodecd_analyzer::taint::TaintValue;
+    use gittera_analyzer::taint::TaintValue;
 
     let mut taint = TaintValue::new("x".to_string(), TaintSourceKind::UserInput);
     assert!(!taint.sanitized);

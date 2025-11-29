@@ -1,9 +1,9 @@
 //! Integration tests for KQL parser and executor
 
-use kodecd_analyzer::cfg::CfgBuilder;
-use kodecd_parser::ast::{AstNode, AstNodeKind, Location, Parameter, Span};
-use kodecd_parser::{Language, LanguageConfig, Parser};
-use kodecd_query::{QueryExecutor, QueryParser};
+use gittera_analyzer::cfg::CfgBuilder;
+use gittera_parser::ast::{AstNode, AstNodeKind, Location, Parameter, Span};
+use gittera_parser::{Language, LanguageConfig, Parser};
+use gittera_query::{QueryExecutor, QueryParser};
 use std::path::Path;
 
 /// Helper to create a test AST node

@@ -11,11 +11,11 @@
 //! - Tagged template expressions
 //! - Function/class expressions
 
-use kodecd_parser::{Language, LanguageConfig, Parser, ast::AstNodeKind};
+use gittera_parser::{Language, LanguageConfig, Parser, ast::AstNodeKind};
 use std::path::Path;
 
 /// Helper function to find a specific node kind
-fn find_node_kind<F>(ast: &kodecd_parser::ast::AstNode, kind_matcher: &F) -> Option<AstNodeKind>
+fn find_node_kind<F>(ast: &gittera_parser::ast::AstNode, kind_matcher: &F) -> Option<AstNodeKind>
 where
     F: Fn(&AstNodeKind) -> bool
 {
@@ -33,7 +33,7 @@ where
 }
 
 /// Helper to check if a node kind exists in the tree
-fn has_node_kind<F>(ast: &kodecd_parser::ast::AstNode, kind_matcher: F) -> bool
+fn has_node_kind<F>(ast: &gittera_parser::ast::AstNode, kind_matcher: F) -> bool
 where
     F: Fn(&AstNodeKind) -> bool
 {
@@ -70,7 +70,7 @@ fn test_conditional_expression_nested() {
 
     // Should find multiple conditional expressions (nested)
     let mut count = 0;
-    fn count_conditionals(node: &kodecd_parser::ast::AstNode, count: &mut usize) {
+    fn count_conditionals(node: &gittera_parser::ast::AstNode, count: &mut usize) {
         if matches!(node.kind, AstNodeKind::ConditionalExpression { .. }) {
             *count += 1;
         }

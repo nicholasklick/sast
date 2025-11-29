@@ -1,4 +1,4 @@
-//! KodeCD SAST - High-performance static analysis security testing engine
+//! Gittera SAST - High-performance static analysis security testing engine
 //!
 //! A CodeQL competitor written in Rust with custom query language (KQL)
 
@@ -14,14 +14,14 @@ use tracing_subscriber;
 use discovery::FileDiscovery;
 use parallel::ParallelAnalyzer;
 
-use kodecd_analyzer::{CallGraphBuilder, CfgBuilder, InterproceduralTaintAnalysis, SymbolTableBuilder};
-use kodecd_parser::{Language, LanguageConfig};
-use kodecd_query::{QueryExecutor, QueryParser, ExtendedStandardLibrary, QuerySuite};
-use kodecd_reporter::{Report, ReportFormat, Reporter};
+use gittera_analyzer::{CallGraphBuilder, CfgBuilder, InterproceduralTaintAnalysis, SymbolTableBuilder};
+use gittera_parser::{Language, LanguageConfig};
+use gittera_query::{QueryExecutor, QueryParser, ExtendedStandardLibrary, QuerySuite};
+use gittera_reporter::{Report, ReportFormat, Reporter};
 
 #[derive(ClapParser)]
-#[command(name = "kodecd")]
-#[command(author = "KodeCD Team")]
+#[command(name = "gittera")]
+#[command(author = "Gittera Team")]
 #[command(version = "0.1.0")]
 #[command(about = "High-performance SAST engine with custom query language", long_about = None)]
 struct Cli {
@@ -209,7 +209,7 @@ fn analyze_file(
 
     // Parse the source file
     let config = LanguageConfig::new(lang);
-    let parser = kodecd_parser::Parser::new(config, path);
+    let parser = gittera_parser::Parser::new(config, path);
     let ast = parser.parse_file()?;
 
     info!("Parsed AST with {} nodes", ast.children.len());
@@ -325,7 +325,7 @@ fn scan_with_builtin(
 fn scan_single_file(path: &PathBuf, format_str: &str, output: Option<&Path>, suite: QuerySuite) -> Result<i32> {
     let lang = Language::from_path(path)?;
     let config = LanguageConfig::new(lang);
-    let parser = kodecd_parser::Parser::new(config, path);
+    let parser = gittera_parser::Parser::new(config, path);
     let ast = parser.parse_file()?;
 
     // Build symbol table
@@ -407,7 +407,7 @@ fn scan_directory(
     show_fixed: bool,
     lifecycle_enabled: bool,
 ) -> Result<i32> {
-    use kodecd_cache::{
+    use gittera_cache::{
         Cache, CacheConfig, BaselineManager, BaselineConfig,
         SuppressionManager, SuppressionConfig, LifecycleTracker, LifecycleConfig,
     };
@@ -503,7 +503,7 @@ fn scan_directory(
     info!("Using {} queries from {} suite", suite_queries.len(), suite_name(suite));
 
     // Prepare queries with categorization
-    let queries: Vec<(String, kodecd_query::Query)> = suite_queries
+    let queries: Vec<(String, gittera_query::Query)> = suite_queries
         .into_iter()
         .map(|(id, query, _metadata)| (id.to_string(), query.clone()))
         .collect();
@@ -543,7 +543,7 @@ fn scan_directory(
     if let Some(cache) = &mut cache {
         // Group findings by file
         use std::collections::HashMap;
-        let mut findings_by_file: HashMap<String, Vec<kodecd_query::Finding>> = HashMap::new();
+        let mut findings_by_file: HashMap<String, Vec<gittera_query::Finding>> = HashMap::new();
         for finding in &all_findings {
             findings_by_file
                 .entry(finding.file_path.clone())
@@ -639,7 +639,7 @@ fn list_queries() {
     let library = ExtendedStandardLibrary::new();
     let all_queries = library.all_metadata();
 
-    println!("\nKodeCD Extended Query Library");
+    println!("\nGittera Extended Query Library");
     println!("{}", "=".repeat(70));
     println!("Total Queries: {}", all_queries.len());
     println!();
@@ -672,7 +672,7 @@ fn list_queries() {
     println!("  extended         - Broader coverage, includes medium severity (~70 queries)");
     println!("  quality          - Complete coverage including code quality (100+ queries)");
     println!();
-    println!("Usage: kodecd-sast scan <path> --suite <suite>");
+    println!("Usage: gittera-sast scan <path> --suite <suite>");
     println!();
 }
 

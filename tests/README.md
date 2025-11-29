@@ -1,4 +1,4 @@
-# KodeCD SAST Test Suite
+# Gittera SAST Test Suite
 
 ## Directory Structure
 
@@ -105,9 +105,9 @@ cargo test --test '*'
 
 ### Run Unit Tests for Specific Crate
 ```bash
-cargo test -p kodecd-parser
-cargo test -p kodecd-analyzer
-cargo test -p kodecd-query
+cargo test -p gittera-parser
+cargo test -p gittera-analyzer
+cargo test -p gittera-query
 ```
 
 ## Testing Against Fixtures
@@ -115,25 +115,25 @@ cargo test -p kodecd-query
 ### Scan Vulnerable Files (Should Find Issues)
 ```bash
 # Should find multiple vulnerabilities
-./target/release/kodecd-sast scan tests/fixtures/vulnerable/javascript_vulnerabilities.js
+./target/release/gittera-sast scan tests/fixtures/vulnerable/javascript_vulnerabilities.js
 
 # Should find Swift vulnerabilities
-./target/release/kodecd-sast scan tests/fixtures/vulnerable/swift_vulnerabilities.swift
+./target/release/gittera-sast scan tests/fixtures/vulnerable/swift_vulnerabilities.swift
 ```
 
 ### Scan Clean Files (Should Find Nothing)
 ```bash
 # Should report 0 findings
-./target/release/kodecd-sast scan tests/fixtures/clean/safe_javascript.js
+./target/release/gittera-sast scan tests/fixtures/clean/safe_javascript.js
 
 # Should report 0 findings
-./target/release/kodecd-sast scan tests/fixtures/clean/safe_python.py
+./target/release/gittera-sast scan tests/fixtures/clean/safe_python.py
 ```
 
 ### Scan Multi-Language Project
 ```bash
 # Scan entire project directory
-./target/release/kodecd-sast scan tests/fixtures/multi-language/test_project/
+./target/release/gittera-sast scan tests/fixtures/multi-language/test_project/
 ```
 
 ## Adding New Tests

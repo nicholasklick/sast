@@ -6,7 +6,7 @@
 use super::{TaintSource, TaintSourceKind, TaintValue};
 use crate::cfg::{CfgGraphIndex, CfgNode, CfgNodeKind, ControlFlowGraph};
 use crate::dataflow::TransferFunction;
-use kodecd_parser::ast::{AstNode, AstNodeKind, LiteralValue, NodeId};
+use gittera_parser::ast::{AstNode, AstNodeKind, LiteralValue, NodeId};
 use std::collections::{HashMap, HashSet};
 
 /// AST-based taint transfer function
@@ -361,7 +361,7 @@ impl TransferFunction<TaintValue> for AstBasedTaintTransferFunction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kodecd_parser::ast::{Location, Span};
+    use gittera_parser::ast::{Location, Span};
 
     fn create_test_location() -> Location {
         Location {

@@ -126,7 +126,7 @@ impl OwaspRuleLibrary {
     ///
     /// # Example
     /// ```
-    /// use kodecd_query::OwaspRuleLibrary;
+    /// use gittera_query::OwaspRuleLibrary;
     ///
     /// // Get all SQL injection rules (CWE-89)
     /// let sql_rules = OwaspRuleLibrary::rules_by_cwe(89);
@@ -150,7 +150,7 @@ impl OwaspRuleLibrary {
     ///
     /// # Example
     /// ```
-    /// use kodecd_query::OwaspRuleLibrary;
+    /// use gittera_query::OwaspRuleLibrary;
     ///
     /// let cwe_ids = OwaspRuleLibrary::get_all_cwe_ids();
     /// assert!(cwe_ids.contains(&89)); // SQL Injection
@@ -176,7 +176,7 @@ impl OwaspRuleLibrary {
     ///
     /// # Example
     /// ```
-    /// use kodecd_query::OwaspRuleLibrary;
+    /// use gittera_query::OwaspRuleLibrary;
     ///
     /// let stats = OwaspRuleLibrary::cwe_coverage_stats();
     /// for (cwe_id, count) in stats.iter().take(5) {

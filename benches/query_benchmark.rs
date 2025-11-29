@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use kodecd_query::{QueryParser, QueryExecutor};
-use kodecd_parser::{Parser, Language, LanguageConfig};
-use kodecd_analyzer::CfgBuilder;
+use gittera_query::{QueryParser, QueryExecutor};
+use gittera_parser::{Parser, Language, LanguageConfig};
+use gittera_analyzer::CfgBuilder;
 use std::path::Path;
 
 // Sample queries
@@ -91,7 +91,7 @@ fn bench_query_execution(c: &mut Criterion) {
 }
 
 fn bench_query_stdlib(c: &mut Criterion) {
-    use kodecd_query::StandardLibrary;
+    use gittera_query::StandardLibrary;
 
     let mut group = c.benchmark_group("query_stdlib");
 

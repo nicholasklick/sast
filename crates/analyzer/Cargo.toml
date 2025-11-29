@@ -1,10 +1,10 @@
 [package]
-name = "kodecd-analyzer"
+name = "gittera-analyzer"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-kodecd-parser = { path = "../parser" }
+gittera-parser = { path = "../parser" }
 
 # Graph data structures for CFG
 petgraph = "0.6"

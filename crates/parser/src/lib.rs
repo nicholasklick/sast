@@ -1,4 +1,4 @@
-//! KodeCD Parser - Multi-language AST parsing using Tree-sitter
+//! Gittera Parser - Multi-language AST parsing using Tree-sitter
 //!
 //! This crate provides a unified interface for parsing source code in multiple
 //! languages and converting Tree-sitter concrete syntax trees into a language-agnostic
@@ -25,7 +25,7 @@
 //! ### Standard Parser
 //!
 //! ```rust
-//! use kodecd_parser::{Parser, Language, LanguageConfig};
+//! use gittera_parser::{Parser, Language, LanguageConfig};
 //! use std::path::Path;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -50,7 +50,7 @@
 //! ### Arena Parser (Memory-Efficient)
 //!
 //! ```rust
-//! use kodecd_parser::{ParserArena, Language, LanguageConfig, AstArena};
+//! use gittera_parser::{ParserArena, Language, LanguageConfig, AstArena};
 //! use std::path::Path;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -74,7 +74,7 @@
 //! ## Visitor Pattern
 //!
 //! ```rust
-//! use kodecd_parser::{AstVisitor, AstNode, VisitorResult};
+//! use gittera_parser::{AstVisitor, AstNode, VisitorResult};
 //!
 //! struct FunctionCounter {
 //!     count: usize,
@@ -82,7 +82,7 @@
 //!
 //! impl AstVisitor for FunctionCounter {
 //!     fn visit_enter(&mut self, node: &AstNode) -> VisitorResult {
-//!         use kodecd_parser::AstNodeKind;
+//!         use gittera_parser::AstNodeKind;
 //!         if matches!(node.kind, AstNodeKind::FunctionDeclaration { .. }) {
 //!             self.count += 1;
 //!         }
@@ -90,7 +90,7 @@
 //!     }
 //! }
 //!
-//! # fn example(ast: &kodecd_parser::AstNode) {
+//! # fn example(ast: &gittera_parser::AstNode) {
 //! let mut counter = FunctionCounter { count: 0 };
 //! counter.walk(ast).unwrap();
 //! println!("Found {} functions", counter.count);
@@ -132,11 +132,11 @@
 //! The parser returns [`ParseError`] for parsing failures:
 //!
 //! ```rust
-//! use kodecd_parser::{Parser, ParseError};
+//! use gittera_parser::{Parser, ParseError};
 //!
 //! # fn example() -> Result<(), ParseError> {
-//! # let parser = kodecd_parser::Parser::new(
-//! #   kodecd_parser::LanguageConfig::new(kodecd_parser::Language::TypeScript),
+//! # let parser = gittera_parser::Parser::new(
+//! #   gittera_parser::LanguageConfig::new(gittera_parser::Language::TypeScript),
 //! #   std::path::Path::new("test.ts")
 //! # );
 //! match parser.parse_file() {

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `sanity_check.sh` script provides a comprehensive health check for the KodeCD SAST engine, verifying all core features are working correctly.
+The `sanity_check.sh` script provides a comprehensive health check for the Gittera SAST engine, verifying all core features are working correctly.
 
 ## Usage
 
@@ -60,7 +60,7 @@ chmod +x sanity_check.sh
 
 ```
 ╔════════════════════════════════════════════════════════════════╗
-║           KodeCD SAST - Sanity Check                           ║
+║           Gittera SAST - Sanity Check                           ║
 ╚════════════════════════════════════════════════════════════════╝
 
 1. BUILD CHECKS
@@ -180,10 +180,10 @@ cargo build --workspace
 **Solution**:
 ```bash
 # Run specific test package with verbose output
-cargo test -p kodecd-parser -- --nocapture
+cargo test -p gittera-parser -- --nocapture
 
 # Run specific test
-cargo test -p kodecd-query test_query_finds_eval_calls -- --nocapture
+cargo test -p gittera-query test_query_finds_eval_calls -- --nocapture
 ```
 
 ### Missing Files

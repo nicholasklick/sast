@@ -12,7 +12,7 @@
 //! ## Example
 //!
 //! ```rust
-//! use kodecd_query::cwe::{CweId, CweDatabase, CweCategory};
+//! use gittera_query::cwe::{CweId, CweDatabase, CweCategory};
 //!
 //! let db = CweDatabase::new();
 //!

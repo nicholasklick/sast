@@ -6,7 +6,7 @@ def get_user(user_id):
     query = f"SELECT * FROM users WHERE id = {user_id}"
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
-    cursor.execute(query)  # This will be flagged by KodeCD
+    cursor.execute(query)  # This will be flagged by Gittera
     return cursor.fetchone()
 
 def get_user_safe(user_id):

@@ -34,7 +34,7 @@ impl Reporter {
     }
 
     fn write_text<W: Write>(report: &Report, writer: &mut W) -> Result<(), ReportError> {
-        writeln!(writer, "\n{}", "KodeCD SAST Analysis Results".bold())?;
+        writeln!(writer, "\n{}", "Gittera SAST Analysis Results".bold())?;
         writeln!(writer, "{}", "=".repeat(70))?;
         writeln!(writer)?;
 

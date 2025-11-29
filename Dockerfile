@@ -17,4 +17,4 @@ COPY . .
 # Build release binary (skip benches and tests to speed up build)
 RUN cargo build --release --bins
 
-# The binary will be at /build/target/release/kodecd-sast
+# The binary will be at /build/target/release/gittera-sast

@@ -1,4 +1,4 @@
-# KodeCD SAST Engine
+# Gittera SAST Engine
 
 A high-performance Static Application Security Testing (SAST) engine written in Rust - a CodeQL competitor with a custom query language (KQL).
 
@@ -17,7 +17,7 @@ A high-performance Static Application Security Testing (SAST) engine written in 
 
 ```
 ┌─────────────────────────────────────────────┐
-│ KodeCD SAST Engine (Rust-based)            │
+│ Gittera SAST Engine (Rust-based)            │
 ├─────────────────────────────────────────────┤
 │ 1. Parser (Tree-sitter)                     │
 │    - Language grammars                      │
@@ -49,46 +49,46 @@ A high-performance Static Application Security Testing (SAST) engine written in 
 ### Build from source
 
 ```bash
-git clone https://github.com/your-org/kodecd-sast
-cd kodecd-sast
+git clone https://github.com/your-org/gittera-sast
+cd gittera-sast
 cargo build --release
 ```
 
-The binary will be available at `target/release/kodecd`
+The binary will be available at `target/release/gittera`
 
 ## Quick Start
 
 ### Scan a file with built-in queries
 
 ```bash
-kodecd scan src/main.rs
+gittera scan src/main.rs
 ```
 
 ### Analyze with a specific query
 
 ```bash
-kodecd analyze src/main.rs --query queries/sql-injection.kql
+gittera analyze src/main.rs --query queries/sql-injection.kql
 ```
 
 ### List available built-in queries
 
 ```bash
-kodecd list-queries
+gittera list-queries
 ```
 
 ### Output to different formats
 
 ```bash
 # JSON format
-kodecd scan src/main.rs --format json --output report.json
+gittera scan src/main.rs --format json --output report.json
 
 # SARIF format (for IDE integration)
-kodecd scan src/main.rs --format sarif --output report.sarif
+gittera scan src/main.rs --format sarif --output report.sarif
 ```
 
 ## KQL Query Language
 
-KQL (KodeCD Query Language) is a declarative language for writing security queries.
+KQL (Gittera Query Language) is a declarative language for writing security queries.
 
 ### Example: Detect SQL Injection
 
@@ -136,7 +136,7 @@ select <variable>, "<message>"
 ## Project Structure
 
 ```
-kodecd-sast/
+gittera-sast/
 ├── src/                    # Main CLI application
 │   └── main.rs
 ├── crates/
@@ -182,7 +182,7 @@ kodecd-sast/
 
 ## Performance
 
-KodeCD is designed for speed:
+Gittera is designed for speed:
 
 - **Rust-based**: 10-100x faster than Ruby/Python SAST tools
 - **Parallel analysis**: Multi-threaded processing
@@ -227,7 +227,7 @@ MIT OR Apache-2.0
 
 ## Comparison with CodeQL
 
-| Feature | KodeCD | CodeQL |
+| Feature | Gittera | CodeQL |
 |---------|--------|--------|
 | Language | Rust | C++ |
 | Performance | 10-100x faster | Baseline |
@@ -242,7 +242,7 @@ MIT OR Apache-2.0
 ## Example Output
 
 ```
-KodeCD SAST Analysis Results
+Gittera SAST Analysis Results
 ==================================================
 
 Summary:
@@ -273,6 +273,6 @@ Findings:
 
 ## Support
 
-- Documentation: https://docs.kodecd.com
-- Issues: https://github.com/your-org/kodecd-sast/issues
-- Discussions: https://github.com/your-org/kodecd-sast/discussions
+- Documentation: https://docs.gittera.com
+- Issues: https://github.com/your-org/gittera-sast/issues
+- Discussions: https://github.com/your-org/gittera-sast/discussions

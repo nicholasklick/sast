@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Symbol Table provides **scope-aware** variable tracking for the KodeCD SAST engine. It enables precise analysis by resolving variable references to their definitions, supporting shadowing, and tracking symbol usage across scopes.
+The Symbol Table provides **scope-aware** variable tracking for the Gittera SAST engine. It enables precise analysis by resolving variable references to their definitions, supporting shadowing, and tracking symbol usage across scopes.
 
 ## Key Features
 
@@ -19,8 +19,8 @@ The Symbol Table provides **scope-aware** variable tracking for the KodeCD SAST 
 ### Basic Usage
 
 ```rust
-use kodecd_analyzer::{SymbolTable, SymbolTableBuilder};
-use kodecd_parser::{Parser, Language, LanguageConfig};
+use gittera_analyzer::{SymbolTable, SymbolTableBuilder};
+use gittera_parser::{Parser, Language, LanguageConfig};
 use std::path::Path;
 
 // Parse code
@@ -264,7 +264,7 @@ function foo() {         // Scope=1
 ### Enhanced Taint Analysis
 
 ```rust
-use kodecd_analyzer::{SymbolTableBuilder, TaintAnalysis};
+use gittera_analyzer::{SymbolTableBuilder, TaintAnalysis};
 
 // Build symbol table
 let symbol_table = SymbolTableBuilder::new().build(&ast);
@@ -290,7 +290,7 @@ let result = taint.analyze(&cfg);
 ### Example 1: Variable Resolution
 
 ```rust
-use kodecd_analyzer::{SymbolTable, Symbol, SymbolKind};
+use gittera_analyzer::{SymbolTable, Symbol, SymbolKind};
 
 let mut table = SymbolTable::new();
 
@@ -394,10 +394,10 @@ The symbol table has comprehensive test coverage:
 
 ```bash
 # Run all symbol table tests
-cargo test -p kodecd-analyzer symbol_table
+cargo test -p gittera-analyzer symbol_table
 
 # Run specific test
-cargo test -p kodecd-analyzer test_shadowing
+cargo test -p gittera-analyzer test_shadowing
 ```
 
 ### Test Coverage

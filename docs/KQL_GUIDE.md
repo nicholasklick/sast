@@ -1,4 +1,4 @@
-# KQL (KodeCD Query Language) - Complete Guide
+# KQL (Gittera Query Language) - Complete Guide
 
 ## Overview
 
@@ -324,9 +324,9 @@ SELECT call, "SQL injection: unsanitized user input in database query"
 ### Programmatic Usage
 
 ```rust
-use kodecd_query::{QueryParser, QueryExecutor};
-use kodecd_parser::{Parser, Language, LanguageConfig};
-use kodecd_analyzer::cfg::CfgBuilder;
+use gittera_query::{QueryParser, QueryExecutor};
+use gittera_parser::{Parser, Language, LanguageConfig};
+use gittera_analyzer::cfg::CfgBuilder;
 
 // Parse source code
 let parser = Parser::new(
@@ -357,7 +357,7 @@ for finding in results.findings {
 ### Using Standard Library
 
 ```rust
-use kodecd_query::StandardLibrary;
+use gittera_query::StandardLibrary;
 
 // Get all OWASP Top 10 queries
 let queries = StandardLibrary::owasp_queries();

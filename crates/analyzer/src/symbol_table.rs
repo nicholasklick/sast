@@ -1,6 +1,6 @@
 //! Symbol table for tracking variable definitions and uses
 
-use kodecd_parser::ast::{NodeId, Span};
+use gittera_parser::ast::{NodeId, Span};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -208,13 +208,13 @@ impl SymbolTableBuilder {
     }
 
     /// Build symbol table from an AST
-    pub fn build(mut self, ast: &kodecd_parser::ast::AstNode) -> SymbolTable {
+    pub fn build(mut self, ast: &gittera_parser::ast::AstNode) -> SymbolTable {
         self.visit_node(ast);
         self.table
     }
 
-    fn visit_node(&mut self, node: &kodecd_parser::ast::AstNode) {
-        use kodecd_parser::ast::AstNodeKind;
+    fn visit_node(&mut self, node: &gittera_parser::ast::AstNode) {
+        use gittera_parser::ast::AstNodeKind;
 
         match &node.kind {
             // Function declarations create a new scope
@@ -376,7 +376,7 @@ impl Default for SymbolTableBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kodecd_parser::ast::{AstNode, AstNodeKind, Location, Span};
+    use gittera_parser::ast::{AstNode, AstNodeKind, Location, Span};
 
     fn create_test_location() -> Location {
         Location {
@@ -494,14 +494,14 @@ mod tests {
             AstNodeKind::FunctionDeclaration {
                 name: "add".to_string(),
                 parameters: vec![
-                    kodecd_parser::Parameter {
+                    gittera_parser::Parameter {
                         name: "a".to_string(),
                         param_type: None,
                         default_value: None,
                         is_optional: false,
                         is_rest: false,
                     },
-                    kodecd_parser::Parameter {
+                    gittera_parser::Parameter {
                         name: "b".to_string(),
                         param_type: None,
                         default_value: None,
@@ -570,7 +570,7 @@ mod tests {
                 name: "method".to_string(),
                 parameters: vec![],
                 return_type: None,
-                visibility: kodecd_parser::ast::Visibility::Public,
+                visibility: gittera_parser::ast::Visibility::Public,
                 is_static: false,
                 is_async: false,
                 is_abstract: false,

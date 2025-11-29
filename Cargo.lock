@@ -515,6 +515,121 @@ dependencies = [
 ]
 
 [[package]]
+name = "gittera-analyzer"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "dashmap",
+ "gittera-parser",
+ "indexmap",
+ "petgraph",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "gittera-cache"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "blake3",
+ "chrono",
+ "gittera-query",
+ "ignore",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "walkdir",
+]
+
+[[package]]
+name = "gittera-parser"
+version = "0.1.0"
+dependencies = [
+ "bumpalo",
+ "proptest",
+ "serde",
+ "tempfile",
+ "thiserror",
+ "tree-sitter",
+ "tree-sitter-c",
+ "tree-sitter-c-sharp",
+ "tree-sitter-cpp",
+ "tree-sitter-go",
+ "tree-sitter-groovy",
+ "tree-sitter-java",
+ "tree-sitter-javascript",
+ "tree-sitter-kotlin-ng",
+ "tree-sitter-php",
+ "tree-sitter-python",
+ "tree-sitter-ruby",
+ "tree-sitter-rust",
+ "tree-sitter-scala",
+ "tree-sitter-swift",
+ "tree-sitter-typescript",
+ "walkdir",
+]
+
+[[package]]
+name = "gittera-query"
+version = "0.1.0"
+dependencies = [
+ "gittera-analyzer",
+ "gittera-parser",
+ "logos",
+ "nom",
+ "once_cell",
+ "pretty_assertions",
+ "regex",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "gittera-reporter"
+version = "0.1.0"
+dependencies = [
+ "colored",
+ "gittera-analyzer",
+ "gittera-parser",
+ "gittera-query",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "gittera-sast"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "criterion",
+ "gittera-analyzer",
+ "gittera-cache",
+ "gittera-parser",
+ "gittera-query",
+ "gittera-reporter",
+ "glob",
+ "ignore",
+ "indicatif",
+ "proptest",
+ "rayon",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "walkdir",
+]
+
+[[package]]
 name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -671,121 +786,6 @@ checksum = "b011eec8cc36da2aab2d5cff675ec18454fad408585853910a202391cf9f8e65"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "kodecd-analyzer"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "dashmap",
- "indexmap",
- "kodecd-parser",
- "petgraph",
- "serde",
- "thiserror",
-]
-
-[[package]]
-name = "kodecd-cache"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "blake3",
- "chrono",
- "ignore",
- "kodecd-query",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "tracing",
- "walkdir",
-]
-
-[[package]]
-name = "kodecd-parser"
-version = "0.1.0"
-dependencies = [
- "bumpalo",
- "proptest",
- "serde",
- "tempfile",
- "thiserror",
- "tree-sitter",
- "tree-sitter-c",
- "tree-sitter-c-sharp",
- "tree-sitter-cpp",
- "tree-sitter-go",
- "tree-sitter-groovy",
- "tree-sitter-java",
- "tree-sitter-javascript",
- "tree-sitter-kotlin-ng",
- "tree-sitter-php",
- "tree-sitter-python",
- "tree-sitter-ruby",
- "tree-sitter-rust",
- "tree-sitter-scala",
- "tree-sitter-swift",
- "tree-sitter-typescript",
- "walkdir",
-]
-
-[[package]]
-name = "kodecd-query"
-version = "0.1.0"
-dependencies = [
- "kodecd-analyzer",
- "kodecd-parser",
- "logos",
- "nom",
- "once_cell",
- "pretty_assertions",
- "regex",
- "serde",
- "thiserror",
-]
-
-[[package]]
-name = "kodecd-reporter"
-version = "0.1.0"
-dependencies = [
- "colored",
- "kodecd-analyzer",
- "kodecd-parser",
- "kodecd-query",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
-name = "kodecd-sast"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "criterion",
- "glob",
- "ignore",
- "indicatif",
- "kodecd-analyzer",
- "kodecd-cache",
- "kodecd-parser",
- "kodecd-query",
- "kodecd-reporter",
- "proptest",
- "rayon",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "walkdir",
 ]
 
 [[package]]

@@ -1,4 +1,4 @@
-# Getting Started with KodeCD SAST
+# Getting Started with Gittera SAST
 
 ## Quick Start (5 minutes)
 
@@ -14,12 +14,12 @@ Build time: ~8-9 seconds
 ### 2. Run Your First Scan
 
 ```bash
-./target/release/kodecd-sast scan test.rs
+./target/release/gittera-sast scan test.rs
 ```
 
 You should see output like:
 ```
-KodeCD SAST Analysis Results
+Gittera SAST Analysis Results
 ==================================================
 
 Summary:
@@ -34,18 +34,18 @@ Summary:
 
 **JSON format:**
 ```bash
-./target/release/kodecd-sast scan test.rs --format json -o report.json
+./target/release/gittera-sast scan test.rs --format json -o report.json
 ```
 
 **SARIF format (for IDE integration):**
 ```bash
-./target/release/kodecd-sast scan test.rs --format sarif -o report.sarif
+./target/release/gittera-sast scan test.rs --format sarif -o report.sarif
 ```
 
 ### 4. List Available Queries
 
 ```bash
-./target/release/kodecd-sast list-queries
+./target/release/gittera-sast list-queries
 ```
 
 Output:
@@ -83,7 +83,7 @@ EOF
 ### Scan It
 
 ```bash
-./target/release/kodecd-sast scan vulnerable.py
+./target/release/gittera-sast scan vulnerable.py
 ```
 
 ## Command Reference
@@ -92,7 +92,7 @@ EOF
 Scan files with built-in security queries.
 
 ```bash
-kodecd scan <FILE> [OPTIONS]
+gittera scan <FILE> [OPTIONS]
 
 Options:
   -f, --format <FORMAT>   Output format: text, json, sarif [default: text]
@@ -104,7 +104,7 @@ Options:
 Analyze with a custom KQL query.
 
 ```bash
-kodecd analyze <FILE> [OPTIONS]
+gittera analyze <FILE> [OPTIONS]
 
 Options:
   -q, --query <FILE>      Path to KQL query file
@@ -117,14 +117,14 @@ Options:
 Show all built-in queries.
 
 ```bash
-kodecd list-queries
+gittera list-queries
 ```
 
 ### validate-query
 Validate a KQL query file.
 
 ```bash
-kodecd validate-query <QUERY_FILE>
+gittera validate-query <QUERY_FILE>
 ```
 
 ## Writing Custom KQL Queries
@@ -140,7 +140,7 @@ select call, "Function call found"
 
 Run it:
 ```bash
-./target/release/kodecd-sast analyze test.rs --query my-query.kql
+./target/release/gittera-sast analyze test.rs --query my-query.kql
 ```
 
 ## Supported Languages
@@ -209,11 +209,11 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install Rust
         uses: actions-rs/toolchain@v1
-      - name: Build KodeCD
+      - name: Build Gittera
         run: cargo build --release
       - name: Scan Code
         run: |
-          ./target/release/kodecd-sast scan src/ \
+          ./target/release/gittera-sast scan src/ \
             --format sarif \
             --output results.sarif
       - name: Upload Results
@@ -228,7 +228,7 @@ Create `.git/hooks/pre-commit`:
 
 ```bash
 #!/bin/bash
-./target/release/kodecd-sast scan $(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(rs|py|js)$')
+./target/release/gittera-sast scan $(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(rs|py|js)$')
 ```
 
 ### VS Code Task
@@ -240,9 +240,9 @@ Add to `.vscode/tasks.json`:
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "KodeCD Scan",
+      "label": "Gittera Scan",
       "type": "shell",
-      "command": "./target/release/kodecd-sast",
+      "command": "./target/release/gittera-sast",
       "args": ["scan", "${file}", "--format", "json"],
       "problemMatcher": []
     }
@@ -268,7 +268,7 @@ cargo build --release
 Use the `--language` flag:
 
 ```bash
-./target/release/kodecd-sast analyze myfile.txt --language rust
+./target/release/gittera-sast analyze myfile.txt --language rust
 ```
 
 ### No Findings
@@ -303,13 +303,13 @@ For large codebases:
 ### Scan Multiple Files
 
 ```bash
-find src -name "*.rs" -exec ./target/release/kodecd-sast scan {} \;
+find src -name "*.rs" -exec ./target/release/gittera-sast scan {} \;
 ```
 
 ### Filter by Severity
 
 ```bash
-./target/release/kodecd-sast scan src/ --format json | \
+./target/release/gittera-sast scan src/ --format json | \
   jq '.findings[] | select(.severity == "Critical")'
 ```
 
@@ -326,7 +326,7 @@ cargo watch -x 'build --release'
 ### Benchmark Performance
 
 ```bash
-time ./target/release/kodecd-sast scan large-file.rs
+time ./target/release/gittera-sast scan large-file.rs
 ```
 
 Happy Scanning! 🔍

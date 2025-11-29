@@ -1,8 +1,8 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use kodecd_parser::{Parser, Language, LanguageConfig};
-use kodecd_analyzer::{CfgBuilder, TaintAnalysis};
+use gittera_parser::{Parser, Language, LanguageConfig};
+use gittera_analyzer::{CfgBuilder, TaintAnalysis};
 use std::path::Path;
 
 fuzz_target!(|data: &[u8]| {

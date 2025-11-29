@@ -96,7 +96,7 @@ pub struct FindingLifecycle {
 
 impl FindingLifecycle {
     /// Create new lifecycle entry from finding
-    pub fn new(finding: &kodecd_query::Finding) -> Self {
+    pub fn new(finding: &gittera_query::Finding) -> Self {
         let fingerprint = FindingFingerprint::new(
             &finding.rule_id,
             &finding.file_path,
@@ -165,7 +165,7 @@ impl FindingLifecycle {
 /// Configuration for lifecycle tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LifecycleConfig {
-    /// Path to lifecycle database (default: .kodecd/lifecycle.json)
+    /// Path to lifecycle database (default: .gittera/lifecycle.json)
     pub lifecycle_file: PathBuf,
 
     /// Enable lifecycle tracking
@@ -178,7 +178,7 @@ pub struct LifecycleConfig {
 impl Default for LifecycleConfig {
     fn default() -> Self {
         Self {
-            lifecycle_file: PathBuf::from(".kodecd/lifecycle.json"),
+            lifecycle_file: PathBuf::from(".gittera/lifecycle.json"),
             enabled: true,
             purge_fixed_after_days: Some(90), // 90 days
         }
@@ -245,7 +245,7 @@ impl LifecycleTracker {
     }
 
     /// Update lifecycle tracking with new scan results
-    pub fn update(&mut self, current_findings: &[kodecd_query::Finding]) {
+    pub fn update(&mut self, current_findings: &[gittera_query::Finding]) {
         if !self.config.enabled {
             return;
         }
@@ -300,7 +300,7 @@ impl LifecycleTracker {
     }
 
     /// Get lifecycle for a finding
-    pub fn get(&self, finding: &kodecd_query::Finding) -> Option<&FindingLifecycle> {
+    pub fn get(&self, finding: &gittera_query::Finding) -> Option<&FindingLifecycle> {
         let fingerprint = FindingFingerprint::new(
             &finding.rule_id,
             &finding.file_path,
@@ -391,7 +391,7 @@ pub struct LifecycleStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kodecd_query::Finding;
+    use gittera_query::Finding;
 
     fn create_test_finding(rule_id: &str, file: &str, line: usize) -> Finding {
         Finding {

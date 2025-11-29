@@ -2,7 +2,7 @@
 
 ## Overview
 
-Taint analysis is a powerful data flow analysis technique that tracks how untrusted data (**sources**) flows through a program to potentially dangerous operations (**sinks**). The KodeCD SAST engine includes a comprehensive taint analysis implementation that can detect:
+Taint analysis is a powerful data flow analysis technique that tracks how untrusted data (**sources**) flows through a program to potentially dangerous operations (**sinks**). The Gittera SAST engine includes a comprehensive taint analysis implementation that can detect:
 
 - SQL Injection
 - Command Injection
@@ -119,7 +119,7 @@ const filtered = filter(data);           // SANITIZED
 ### Basic Configuration
 
 ```rust
-use kodecd_analyzer::taint::{TaintAnalysis, TaintSource, TaintSourceKind, TaintSink, TaintSinkKind};
+use gittera_analyzer::taint::{TaintAnalysis, TaintSource, TaintSourceKind, TaintSink, TaintSinkKind};
 
 // Create taint analyzer
 let mut taint = TaintAnalysis::new();
@@ -234,10 +234,10 @@ SELECT call, "Potential issue: database query (not proven vulnerable)"
 ## Complete Example
 
 ```rust
-use kodecd_parser::{Parser, Language, LanguageConfig};
-use kodecd_analyzer::cfg::CfgBuilder;
-use kodecd_analyzer::taint::TaintAnalysis;
-use kodecd_query::{QueryParser, QueryExecutor};
+use gittera_parser::{Parser, Language, LanguageConfig};
+use gittera_analyzer::cfg::CfgBuilder;
+use gittera_analyzer::taint::TaintAnalysis;
+use gittera_query::{QueryParser, QueryExecutor};
 use std::path::Path;
 
 fn main() {
@@ -563,7 +563,7 @@ SELECT m, "User input accessed"
 
 ## Summary
 
-The taint analysis in KodeCD SAST provides:
+The taint analysis in Gittera SAST provides:
 
 - ✅ **Comprehensive tracking** - Sources → Propagation → Sinks
 - ✅ **Default configuration** - OWASP Top 10 coverage out-of-the-box

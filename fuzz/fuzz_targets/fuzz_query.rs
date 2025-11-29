@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use kodecd_query::QueryParser;
+use gittera_query::QueryParser;
 
 fuzz_target!(|data: &[u8]| {
     // Convert bytes to string

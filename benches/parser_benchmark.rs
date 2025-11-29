@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
-use kodecd_parser::{Parser, Language, LanguageConfig};
+use gittera_parser::{Parser, Language, LanguageConfig};
 use std::path::Path;
 
 // Sample TypeScript code of varying complexity

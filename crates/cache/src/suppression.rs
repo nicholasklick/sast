@@ -1,8 +1,8 @@
 //! False positive suppression system
 //!
 //! Supports:
-//! - Inline suppressions (// kodecd-ignore)
-//! - File-based suppressions (.kodecd-ignore)
+//! - Inline suppressions (// gittera-ignore)
+//! - File-based suppressions (.gittera-ignore)
 //! - Baseline mode (suppress all existing findings)
 
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,7 @@ pub enum SuppressionError {
 /// Suppression configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SuppressionConfig {
-    /// Path to suppression file (default: .kodecd-ignore)
+    /// Path to suppression file (default: .gittera-ignore)
     pub suppression_file: PathBuf,
 
     /// Enable inline suppressions
@@ -53,7 +53,7 @@ pub struct SuppressionConfig {
 impl Default for SuppressionConfig {
     fn default() -> Self {
         Self {
-            suppression_file: PathBuf::from(".kodecd-ignore"),
+            suppression_file: PathBuf::from(".gittera-ignore"),
             enable_inline: true,
             enable_file: true,
             enable_baseline: false,
@@ -315,7 +315,7 @@ impl SuppressionManager {
         }
 
         let mut lines = vec![
-            "# KodeCD Suppression File".to_string(),
+            "# Gittera Suppression File".to_string(),
             "# Format: <file>:<line> [reason] [comment]".to_string(),
             "#         <file>:<rule-id> [reason] [comment]".to_string(),
             "#         <rule-id> [reason] [comment]".to_string(),
@@ -390,8 +390,8 @@ impl SuppressionManager {
         let mut suppressed_lines = Vec::new();
 
         for (line_num, line) in content.lines().enumerate() {
-            // Check for kodecd-ignore comment
-            if line.contains("kodecd-ignore") || line.contains("kodecd:ignore") {
+            // Check for gittera-ignore comment
+            if line.contains("gittera-ignore") || line.contains("gittera:ignore") {
                 suppressed_lines.push(line_num + 1); // Next line
             }
         }

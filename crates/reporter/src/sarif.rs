@@ -27,9 +27,9 @@
 //!   "runs": [{
 //!     "tool": {
 //!       "driver": {
-//!         "name": "KodeCD SAST",
+//!         "name": "Gittera SAST",
 //!         "version": "0.1.0",
-//!         "informationUri": "https://github.com/kodecd/sast",
+//!         "informationUri": "https://github.com/gittera/sast",
 //!         "rules": [...],
 //!         "taxa": [...]
 //!       }
@@ -44,9 +44,9 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::Write;
 
-const TOOL_NAME: &str = "KodeCD SAST";
+const TOOL_NAME: &str = "Gittera SAST";
 const TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
-const TOOL_URI: &str = "https://github.com/kodecd/sast";
+const TOOL_URI: &str = "https://github.com/gittera/sast";
 const OWASP_BASE_URI: &str = "https://owasp.org/Top10/";
 
 pub struct SarifReporter;
@@ -85,12 +85,12 @@ impl SarifReporter {
                         "version": TOOL_VERSION,
                         "informationUri": TOOL_URI,
                         "semanticVersion": TOOL_VERSION,
-                        "organization": "KodeCD",
+                        "organization": "Gittera",
                         "shortDescription": {
                             "text": "Static Application Security Testing (SAST) tool with OWASP Top 10 coverage"
                         },
                         "fullDescription": {
-                            "text": "KodeCD SAST is a multi-language static analysis security testing tool with comprehensive OWASP Top 10 2021 coverage, CWE mappings, and interprocedural taint analysis."
+                            "text": "Gittera SAST is a multi-language static analysis security testing tool with comprehensive OWASP Top 10 2021 coverage, CWE mappings, and interprocedural taint analysis."
                         },
                         "rules": rules,
                         "taxa": Self::build_taxonomies(),
@@ -124,8 +124,8 @@ impl SarifReporter {
     }
 
     /// Extract unique rules from findings and build SARIF rule descriptors
-    fn extract_rules(findings: &[kodecd_query::Finding]) -> Vec<Value> {
-        let mut rules_map: HashMap<String, kodecd_query::Finding> = HashMap::new();
+    fn extract_rules(findings: &[gittera_query::Finding]) -> Vec<Value> {
+        let mut rules_map: HashMap<String, gittera_query::Finding> = HashMap::new();
 
         // Collect unique rules
         for finding in findings {
@@ -173,7 +173,7 @@ impl SarifReporter {
     }
 
     /// Build SARIF results from findings
-    fn build_results(findings: &[kodecd_query::Finding]) -> Vec<Value> {
+    fn build_results(findings: &[gittera_query::Finding]) -> Vec<Value> {
         findings.iter().map(|finding| {
             json!({
                 "ruleId": finding.rule_id,
@@ -268,7 +268,7 @@ impl SarifReporter {
     }
 
     /// Build rule relationships (CWE mappings, OWASP categories)
-    fn build_rule_relationships(finding: &kodecd_query::Finding) -> Vec<Value> {
+    fn build_rule_relationships(finding: &gittera_query::Finding) -> Vec<Value> {
         let mut relationships = vec![];
 
         // Map to OWASP category (inferred from rule_id or category)
@@ -307,7 +307,7 @@ impl SarifReporter {
     }
 
     /// Build tags for a finding (security, OWASP, CWE, etc.)
-    fn build_tags(finding: &kodecd_query::Finding) -> Vec<String> {
+    fn build_tags(finding: &gittera_query::Finding) -> Vec<String> {
         let mut tags = vec![
             "security".to_string(),
             finding.category.to_lowercase(),
@@ -374,7 +374,7 @@ impl SarifReporter {
     }
 
     /// Generate stable fingerprint for finding deduplication
-    fn generate_fingerprint(finding: &kodecd_query::Finding) -> String {
+    fn generate_fingerprint(finding: &gittera_query::Finding) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 

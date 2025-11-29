@@ -1,10 +1,10 @@
 #!/usr/bin/env rust-script
 //! ```cargo
 //! [dependencies]
-//! kodecd-parser = { path = "crates/parser" }
+//! gittera-parser = { path = "crates/parser" }
 //! ```
 
-use kodecd_parser::{
+use gittera_parser::{
     AstArena, Language, LanguageConfig, Parser, ParserArena,
 };
 use std::path::Path;
@@ -26,7 +26,7 @@ fn main() {
     match arena_parser.parse_file(&arena) {
         Ok(arena_ast) => {
             // Count arena nodes
-            fn count_arena_nodes(node: &kodecd_parser::ArenaAstNode) -> usize {
+            fn count_arena_nodes(node: &gittera_parser::ArenaAstNode) -> usize {
                 1 + node.children.iter().map(|n| count_arena_nodes(n)).sum::<usize>()
             }
 

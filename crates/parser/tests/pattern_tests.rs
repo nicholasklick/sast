@@ -6,11 +6,11 @@
 //! - Assignment patterns (default values)
 //! - Rest patterns (rest in destructuring)
 
-use kodecd_parser::{Language, LanguageConfig, Parser, ast::AstNodeKind};
+use gittera_parser::{Language, LanguageConfig, Parser, ast::AstNodeKind};
 use std::path::Path;
 
 /// Helper function to find a specific node kind
-fn find_node_kind<F>(ast: &kodecd_parser::ast::AstNode, kind_matcher: &F) -> Option<AstNodeKind>
+fn find_node_kind<F>(ast: &gittera_parser::ast::AstNode, kind_matcher: &F) -> Option<AstNodeKind>
 where
     F: Fn(&AstNodeKind) -> bool
 {
@@ -28,7 +28,7 @@ where
 }
 
 /// Helper to check if a node kind exists in the tree
-fn has_node_kind<F>(ast: &kodecd_parser::ast::AstNode, kind_matcher: F) -> bool
+fn has_node_kind<F>(ast: &gittera_parser::ast::AstNode, kind_matcher: F) -> bool
 where
     F: Fn(&AstNodeKind) -> bool
 {
@@ -89,7 +89,7 @@ fn test_array_pattern_nested() {
 
     // Should find multiple array patterns (nested)
     let mut count = 0;
-    fn count_arrays(node: &kodecd_parser::ast::AstNode, count: &mut usize) {
+    fn count_arrays(node: &gittera_parser::ast::AstNode, count: &mut usize) {
         if matches!(node.kind, AstNodeKind::ArrayPattern { .. }) {
             *count += 1;
         }
@@ -172,7 +172,7 @@ fn test_object_pattern_nested() {
 
     // Should find multiple object patterns (nested)
     let mut count = 0;
-    fn count_objects(node: &kodecd_parser::ast::AstNode, count: &mut usize) {
+    fn count_objects(node: &gittera_parser::ast::AstNode, count: &mut usize) {
         if matches!(node.kind, AstNodeKind::ObjectPattern { .. }) {
             *count += 1;
         }
