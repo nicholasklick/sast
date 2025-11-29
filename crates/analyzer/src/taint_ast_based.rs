@@ -236,12 +236,14 @@ impl AstBasedTaintTransferFunction {
 
         // 3. Update taint for LHS
         if let Some(taint) = rhs_taint {
-            // RHS is tainted - propagate to all LHS variables
+            // RHS is tainted - propagate to all LHS variables, preserving conditions
             for var in lhs_vars {
                 output.insert(TaintValue {
                     variable: var,
                     source: taint.source.clone(),
                     sanitized: false,
+                    taint_condition: taint.taint_condition.clone(),
+                    sanitized_condition: taint.sanitized_condition.clone(),
                 });
             }
         } else {
@@ -275,6 +277,8 @@ impl AstBasedTaintTransferFunction {
                             variable: taint.variable,
                             source: taint.source,
                             sanitized: true,
+                            taint_condition: taint.taint_condition.clone(),
+                            sanitized_condition: taint.sanitized_condition.clone(),
                         });
                     }
                 }
@@ -297,6 +301,8 @@ impl AstBasedTaintTransferFunction {
                         variable: name.clone(),
                         source: taint.source,
                         sanitized: false,
+                        taint_condition: taint.taint_condition.clone(),
+                        sanitized_condition: taint.sanitized_condition.clone(),
                     });
                 }
             }

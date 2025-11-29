@@ -2,6 +2,7 @@
 
 use crate::cfg::{CfgGraphIndex, CfgNode, CfgNodeKind, ControlFlowGraph};
 use crate::dataflow::{DataFlowAnalysis, DataFlowDirection, DataFlowResult, TransferFunction};
+use crate::symbolic::SymbolicValue;
 use crate::taint_ast_based::AstBasedTaintTransferFunction;
 use kodecd_parser::ast::{AstNode, AstNodeKind, NodeId};
 use serde::{Deserialize, Serialize};
@@ -50,6 +51,16 @@ pub struct TaintValue {
     pub variable: String,
     pub source: TaintSourceKind,
     pub sanitized: bool,
+
+    /// Condition under which this value becomes tainted (None = always tainted)
+    /// This enables path-sensitive analysis by tracking WHEN taint applies
+    #[serde(skip)]  // Skip serialization for now (SymbolicValue is complex)
+    pub taint_condition: Option<SymbolicValue>,
+
+    /// Condition under which this value is sanitized (None = never sanitized conditionally)
+    /// This tracks WHEN sanitization occurs, enabling precise false positive reduction
+    #[serde(skip)]
+    pub sanitized_condition: Option<SymbolicValue>,
 }
 
 impl TaintValue {
@@ -58,11 +69,74 @@ impl TaintValue {
             variable,
             source,
             sanitized: false,
+            taint_condition: None,      // Always tainted
+            sanitized_condition: None,  // Not conditionally sanitized
         }
     }
 
+    /// Create a tainted value with a condition
+    /// Use this when taint only applies under certain conditions
+    pub fn new_with_condition(
+        variable: String,
+        source: TaintSourceKind,
+        condition: Option<SymbolicValue>,
+    ) -> Self {
+        Self {
+            variable,
+            source,
+            sanitized: false,
+            taint_condition: condition,
+            sanitized_condition: None,
+        }
+    }
+
+    /// Mark as unconditionally sanitized
     pub fn sanitize(&mut self) {
         self.sanitized = true;
+    }
+
+    /// Mark as sanitized under a specific condition
+    /// This is the key to path-sensitive analysis!
+    pub fn sanitize_when(&mut self, condition: SymbolicValue) {
+        self.sanitized_condition = Some(condition);
+    }
+
+    /// Check if this value is potentially tainted (considering conditions)
+    /// Returns true if there exists ANY path where this could be tainted
+    pub fn is_potentially_tainted(&self) -> bool {
+        if self.sanitized {
+            return false;
+        }
+
+        // If there's a sanitization condition, it might not always be sanitized
+        if self.sanitized_condition.is_some() {
+            return true;  // Could be tainted on some paths
+        }
+
+        true  // Always potentially tainted
+    }
+
+    /// Check if this value is always safe (definitely sanitized on all paths)
+    /// Returns true only if we can guarantee it's clean
+    pub fn is_always_safe(&self) -> bool {
+        if self.sanitized {
+            return true;  // Unconditionally sanitized
+        }
+
+        // If sanitized_condition is "true" (always), then always safe
+        if let Some(cond) = &self.sanitized_condition {
+            if let SymbolicValue::ConcreteBool(true) = cond {
+                return true;
+            }
+        }
+
+        false  // Not provably safe
+    }
+
+    /// Check if this value may be tainted on some path
+    /// More conservative than is_potentially_tainted - used for reporting
+    pub fn may_be_tainted(&self) -> bool {
+        !self.is_always_safe()
     }
 }
 
@@ -127,7 +201,9 @@ impl TaintAnalysis {
                 if let Some(taint_set) = result.get_in(cfg_index) {
                     // Check if any tainted values reach this sink without sanitization
                     for taint_value in taint_set {
-                        if !taint_value.sanitized {
+                        // NEW: Use path-sensitive checking
+                        // Only report if potentially tainted AND not always safe
+                        if taint_value.is_potentially_tainted() && !taint_value.is_always_safe() {
                             vulnerabilities.push(TaintVulnerability {
                                 sink: sink.clone(),
                                 tainted_value: taint_value.clone(),
@@ -437,12 +513,15 @@ impl TransferFunction<TaintValue> for OwnedTaintTransferFunction {
 
                         for taint in input {
                             if referenced_vars.contains(&taint.variable) {
-                                // Create new taint for LHS variable
-                                output.insert(TaintValue {
+                                // Create new taint for LHS variable, preserving conditions
+                                let mut new_taint = TaintValue {
                                     variable: lhs.clone(),
                                     source: taint.source.clone(),
                                     sanitized: taint.sanitized,
-                                });
+                                    taint_condition: taint.taint_condition.clone(),
+                                    sanitized_condition: taint.sanitized_condition.clone(),
+                                };
+                                output.insert(new_taint);
                                 propagated_taint = true;
                             }
                         }
