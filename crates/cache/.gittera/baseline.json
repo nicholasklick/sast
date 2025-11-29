@@ -1,17 +1,17 @@
 {
-  "created_at": 1764441352,
+  "created_at": 1764444684,
   "description": null,
   "findings": {
-    "db649fc01e1a3a00126715032b5ab33bf8f2c57dc1a3543f4d91301768a13224": {
-      "fingerprint": "db649fc01e1a3a00126715032b5ab33bf8f2c57dc1a3543f4d91301768a13224",
-      "rule_id": "path-traversal",
+    "ddc0f45367461fb96e23aca1d260a2688758c16861d23a1afd8408103224a18e": {
+      "fingerprint": "ddc0f45367461fb96e23aca1d260a2688758c16861d23a1afd8408103224a18e",
+      "rule_id": "xss",
       "file_path": "app.js",
-      "line": 200,
+      "line": 100,
       "column": 10,
-      "snippet": "code at line 200",
+      "snippet": "code at line 100",
       "severity": "High",
       "category": "injection",
-      "baseline_timestamp": 1764441352
+      "baseline_timestamp": 1764444684
     },
     "570b788306b2fab1df38dce72254e43a489a195c28b6ab957c1c9bb73be6039e": {
       "fingerprint": "570b788306b2fab1df38dce72254e43a489a195c28b6ab957c1c9bb73be6039e",
@@ -22,18 +22,20 @@
       "snippet": "code at line 42",
       "severity": "High",
       "category": "injection",
-      "baseline_timestamp": 1764441352
-    },
-    "ddc0f45367461fb96e23aca1d260a2688758c16861d23a1afd8408103224a18e": {
-      "fingerprint": "ddc0f45367461fb96e23aca1d260a2688758c16861d23a1afd8408103224a18e",
-      "rule_id": "xss",
+      "baseline_timestamp": 1764444684
+    }
+  },
+  "tool_version": "0.1.0"
+}5ab33bf8f2c57dc1a3543f4d91301768a13224": {
+      "fingerprint": "db649fc01e1a3a00126715032b5ab33bf8f2c57dc1a3543f4d91301768a13224",
+      "rule_id": "path-traversal",
       "file_path": "app.js",
-      "line": 100,
+      "line": 200,
       "column": 10,
-      "snippet": "code at line 100",
+      "snippet": "code at line 200",
       "severity": "High",
       "category": "injection",
-      "baseline_timestamp": 1764441352
+      "baseline_timestamp": 1764444684
     }
   },
   "tool_version": "0.1.0"
