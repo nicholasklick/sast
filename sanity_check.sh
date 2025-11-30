@@ -87,6 +87,7 @@ run_test "Cache workflow integration" "cargo test --test cache_workflow_integrat
 run_test "Parallel analysis" "cargo test --test parallel_analysis_test --quiet"
 run_test "CLI integration (22 tests)" "cargo test --test cli_tests --quiet"
 run_test "Symbolic execution (27 tests)" "cargo test -p gittera-analyzer --test symbolic_execution_tests --quiet"
+run_test "Call graph (20 tests)" "cargo test -p gittera-analyzer --test call_graph_tests --quiet"
 
 echo ""
 echo "4. FEATURE CHECKS"
@@ -240,6 +241,7 @@ if [ $FAILED -eq 0 ]; then
     echo "  ✓ Parallel Analysis (6/6 tests passing)"
     echo "  ✓ CLI Interface (22/22 tests passing)"
     echo "  ✓ Symbolic Execution (27/27 tests passing)"
+    echo "  ✓ Call Graph (20/20 tests passing)"
     echo "  ✓ Gemini Test Suite (100 vulnerability tests)"
     echo "  ✓ Standard Library (12 OWASP queries)"
     echo ""
