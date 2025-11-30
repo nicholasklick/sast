@@ -9,7 +9,7 @@ Gittera SAST includes a complete call graph implementation and inter-procedural 
 1. [Call Graph](#call-graph)
 2. [Inter-procedural Taint Analysis](#inter-procedural-taint-analysis)
 3. [Programmatic API](#programmatic-api)
-4. [KQL Integration](#kql-integration-roadmap)
+4. [GQL Integration](#gql-integration-roadmap)
 5. [Examples](#examples)
 6. [Performance](#performance)
 
@@ -371,11 +371,11 @@ analysis.add_sanitizer("customValidator".to_string());
 
 ---
 
-## KQL Integration (Roadmap)
+## GQL Integration (Roadmap)
 
 ### Planned Features
 
-The call graph and inter-procedural analysis are fully implemented, with KQL integration infrastructure in place. The following query methods are available programmatically:
+The call graph and inter-procedural analysis are fully implemented, with GQL integration infrastructure in place. The following query methods are available programmatically:
 
 #### `calls(functionName)`
 Check if a function calls another function
@@ -416,7 +416,7 @@ SELECT func, "Reachable from entry"
 - Helper functions: `calls_function()`, `called_by_function()`, `reachable_from()`
 
 ⏳ **Parser Extension Needed**:
-- KQL parser currently doesn't support function call syntax with arguments
+- GQL parser currently doesn't support function call syntax with arguments
 - Requires extending nom parser to handle `func.method(arg)` patterns
 - Alternative: Use comparison-based syntax
 
@@ -587,7 +587,7 @@ function vulnerable(useA) {
 
 - ✅ Call graph: Complete
 - ✅ Inter-procedural taint: Complete
-- ⏳ KQL parser extension: Planned
+- ⏳ GQL parser extension: Planned
 - ⏳ Cross-file analysis: Planned
 - ⏳ Type-based dispatch: Planned
 
@@ -649,12 +649,12 @@ fn test_cross_function_taint() {
 - Well-documented API
 
 ⏳ **Future Enhancements**:
-- KQL parser extension for query support
+- GQL parser extension for query support
 - Cross-file analysis
 - Type-based call resolution
 - Path-sensitive analysis
 
 For more information:
 - **Taint Analysis**: See `TAINT_ANALYSIS_GUIDE.md`
-- **KQL Queries**: See `KQL_GUIDE.md`
+- **GQL Queries**: See `GQL_GUIDE.md`
 - **Project Status**: See `PROJECT_STATUS.md`

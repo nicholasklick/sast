@@ -7,7 +7,7 @@ edition = "2021"
 gittera-parser = { path = "../parser" }
 gittera-analyzer = { path = "../analyzer" }
 
-# Parsing KQL
+# Parsing GQL
 nom = "7.1"
 logos = "0.14"
 

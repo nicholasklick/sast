@@ -6,7 +6,7 @@ This directory contains comprehensive performance benchmarks for the Gittera SAS
 
 The benchmark suite measures performance across four main areas:
 1. **Parser Performance** - Tree-sitter parsing across languages
-2. **Query Execution** - KQL query parsing and execution
+2. **Query Execution** - GQL query parsing and execution
 3. **Taint Analysis** - Data flow analysis performance
 4. **Analyzer Components** - Symbol tables, call graphs, points-to, interprocedural analysis
 
@@ -30,7 +30,7 @@ Tests parser performance with various code complexities and languages.
 
 ### 2. Query Benchmarks (`query_benchmark.rs`)
 
-Tests KQL query parsing and execution performance.
+Tests GQL query parsing and execution performance.
 
 **Benchmarks:**
 - `query_parsing` - Query parse time (simple, complex, taint)

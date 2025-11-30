@@ -235,12 +235,12 @@ fn transfer(&self, node: CfgGraphIndex, input: &HashSet<TaintValue>)
 
 ### 3. Query Module (`crates/query`)
 
-**Purpose**: Define and execute security queries using KQL.
+**Purpose**: Define and execute security queries using GQL.
 
-#### KQL AST (`ast.rs`)
+#### GQL AST (`ast.rs`)
 
 **Grammar**:
-```kql
+```gql
 Query ::= FROM_CLAUSE WHERE_CLAUSE SELECT_CLAUSE
 
 FROM_CLAUSE ::= "from" EntityType Variable
@@ -279,7 +279,7 @@ pub enum Predicate {
 ```
 
 **Example**:
-```kql
+```gql
 from CallExpression call
 where call.callee = "execute"
 select call, "Potential SQL injection"
@@ -405,7 +405,7 @@ AstNode
 
 ### Query Phase
 ```
-Query (KQL)
+Query (GQL)
     │
     ▼ [Parser]
 QueryAst
@@ -506,7 +506,7 @@ fn tree_sitter_language(&self) -> tree_sitter::Language {
 
 ### Adding a New Query
 ```rust
-// queries/my-check.kql
+// queries/my-check.gql
 from CallExpression call
 where call.callee = "dangerous_function"
 select call, "Dangerous function called"

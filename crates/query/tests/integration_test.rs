@@ -1,4 +1,4 @@
-//! Integration tests for KQL parser and executor
+//! Integration tests for GQL parser and executor
 
 use gittera_analyzer::cfg::CfgBuilder;
 use gittera_parser::ast::{AstNode, AstNodeKind, Location, Parameter, Span};

@@ -98,7 +98,7 @@ else
 fi
 
 # Check documentation
-run_test "KQL documentation exists" "test -f docs/KQL_GUIDE.md"
+run_test "GQL documentation exists" "test -f docs/GQL_GUIDE.md"
 run_test "Taint documentation exists" "test -f docs/TAINT_ANALYSIS_GUIDE.md"
 run_test "Arena documentation exists" "test -f crates/parser/ARENA_AST.md"
 
@@ -110,8 +110,8 @@ echo "────────────────────────�
 run_test "Parser (standard)" "test -f crates/parser/src/parser.rs"
 run_test "Parser (arena)" "test -f crates/parser/src/parser_arena.rs"
 run_test "AST (arena)" "test -f crates/parser/src/ast_arena.rs"
-run_test "KQL parser" "test -f crates/query/src/parser.rs"
-run_test "KQL executor" "test -f crates/query/src/executor.rs"
+run_test "GQL parser" "test -f crates/query/src/parser.rs"
+run_test "GQL executor" "test -f crates/query/src/executor.rs"
 run_test "Taint analysis" "test -f crates/analyzer/src/taint.rs"
 run_test "CFG builder" "test -f crates/analyzer/src/cfg.rs"
 
@@ -230,7 +230,7 @@ if [ $FAILED -eq 0 ]; then
     echo ""
     echo "Core Features Verified:"
     echo "  ✓ Arena-based AST Parser (50-60% memory savings)"
-    echo "  ✓ KQL Query Language (43/43 tests passing)"
+    echo "  ✓ GQL Query Language (43/43 tests passing)"
     echo "  ✓ Taint Analysis (27/27 tests passing)"
     echo "  ✓ Multi-language Support (Tree-sitter)"
     echo "  ✓ CFG Analysis (20/20 construction tests passing)"

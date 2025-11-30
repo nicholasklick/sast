@@ -12,8 +12,8 @@ use gittera_query::{QueryExecutor, QueryParser};
 use std::path::Path;
 
 #[test]
-fn test_kql_end_to_end() {
-    println!("=== KQL End-to-End Test ===\n");
+fn test_gql_end_to_end() {
+    println!("=== GQL End-to-End Test ===\n");
 
     // Test file with vulnerabilities
     let test_file = "test_vulnerabilities.ts";
@@ -123,7 +123,7 @@ fn test_kql_end_to_end() {
     }
 
     println!("\n{}", "=".repeat(80));
-    println!("\n✅ KQL End-to-End Test Complete!");
+    println!("\n✅ GQL End-to-End Test Complete!");
     println!("📊 Total findings: {}", total_findings);
-    println!("\n✨ KQL Parser & Executor are fully functional!");
+    println!("\n✨ GQL Parser & Executor are fully functional!");
 }

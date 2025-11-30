@@ -1,4 +1,4 @@
-//! Lexer for KQL
+//! Lexer for GQL
 
 use logos::Logos;
 

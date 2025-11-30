@@ -203,9 +203,9 @@ Built-in sanitizers include:
 - clean, filter
 ```
 
-## Integration with KQL
+## Integration with GQL
 
-KQL queries can check if data is tainted using the `.isTainted()` method:
+GQL queries can check if data is tainted using the `.isTainted()` method:
 
 ```sql
 -- Find SQL queries with tainted input
@@ -266,7 +266,7 @@ fn main() {
         );
     }
 
-    // 4. Run KQL query with taint information
+    // 4. Run GQL query with taint information
     let query = QueryParser::parse(r#"
         FROM CallExpression AS call
         WHERE call.callee MATCHES "(?i)(execute|query|eval)"
@@ -278,10 +278,10 @@ fn main() {
         &query,
         &ast,
         &cfg,
-        Some(&taint_results)  // Pass taint results to KQL
+        Some(&taint_results)  // Pass taint results to GQL
     );
 
-    println!("Found {} matches via KQL", query_results.findings.len());
+    println!("Found {} matches via GQL", query_results.findings.len());
 }
 ```
 
@@ -529,7 +529,7 @@ The taint analysis is designed for large codebases:
 
 ### Workarounds
 
-For complex scenarios, use KQL queries to add specific checks:
+For complex scenarios, use GQL queries to add specific checks:
 
 ```sql
 -- Manual check for specific pattern
@@ -567,7 +567,7 @@ The taint analysis in Gittera SAST provides:
 
 - ✅ **Comprehensive tracking** - Sources → Propagation → Sinks
 - ✅ **Default configuration** - OWASP Top 10 coverage out-of-the-box
-- ✅ **KQL integration** - `.isTainted()` method in queries
+- ✅ **GQL integration** - `.isTainted()` method in queries
 - ✅ **Inter-procedural** - Tracks taint across function calls
 - ✅ **Sanitizer support** - Breaks taint flow at validation points
 - ✅ **Severity scoring** - Automatic risk assessment

@@ -1,6 +1,6 @@
 # Gittera SAST Engine
 
-A high-performance Static Application Security Testing (SAST) engine written in Rust with a custom query language (KQL).
+A high-performance Static Application Security Testing (SAST) engine written in Rust with a custom query language (GQL).
 
 ## Features
 
@@ -12,7 +12,7 @@ A high-performance Static Application Security Testing (SAST) engine written in 
 - **Data Flow Analysis**: Track data through your application
 - **Taint Analysis**: Detect data flow from sources to dangerous sinks
 - **Predicated Taint Analysis**: Path-sensitive taint tracking with constraint solving
-- **Custom Query Language (KQL)**: Write declarative security queries
+- **Custom Query Language (GQL)**: Write declarative security queries
 - **Interprocedural Analysis**: Cross-function taint flow and call graph construction
 - **Points-to Analysis**: Alias analysis for precision
 - **Symbolic Execution**: Path exploration with constraint generation
@@ -53,7 +53,7 @@ A high-performance Static Application Security Testing (SAST) engine written in 
 │    - Points-to analysis                     │
 │    - Symbolic execution                     │
 │                                             │
-│ 3. Query Engine (KQL)                       │
+│ 3. Query Engine (GQL)                       │
 │    - Custom query language                  │
 │    - 35+ pre-built security queries         │
 │    - User-defined queries                   │
@@ -113,7 +113,7 @@ gittera-sast scan src/
 ### Analyze with a specific query
 
 ```bash
-gittera-sast analyze src/main.rs --query queries/sql-injection.kql
+gittera-sast analyze src/main.rs --query queries/sql-injection.gql
 ```
 
 ### List available built-in queries
@@ -165,13 +165,13 @@ gittera-sast scan gemini_tests/
 gittera-sast scan gemini_tests/javascript
 ```
 
-## KQL Query Language
+## GQL Query Language
 
-KQL (Gittera Query Language) is a declarative language for writing security queries.
+GQL (Gittera Query Language) is a declarative language for writing security queries.
 
 ### Example: Detect SQL Injection
 
-```kql
+```gql
 // Detect SQL injection vulnerabilities
 from MethodCall mc
 where mc.method_name = "execute"
@@ -182,7 +182,7 @@ select mc, "SQL injection vulnerability: user input not sanitized"
 
 ### Example: Detect Command Injection
 
-```kql
+```gql
 // Detect command injection
 from CallExpression call
 where call.callee = "exec"
@@ -193,7 +193,7 @@ select call, "Potential command injection"
 
 ### Example: Detect XSS
 
-```kql
+```gql
 // Cross-site scripting detection
 from Assignment assign
 where assign.left.name = "innerHTML"
@@ -203,7 +203,7 @@ select assign, "Potential XSS vulnerability"
 
 ### Query Structure
 
-```kql
+```gql
 from <EntityType> <variable>
 where <predicates>
 select <variable>, "<message>"
@@ -259,7 +259,7 @@ gittera-sast/
 │   │   │   └── symbol_table.rs # Symbol tracking
 │   │   └── Cargo.toml
 │   │
-│   ├── query/             # KQL query language
+│   ├── query/             # GQL query language
 │   │   ├── src/
 │   │   │   ├── ast.rs          # Query AST
 │   │   │   ├── lexer.rs        # Tokenization
@@ -292,11 +292,11 @@ gittera-sast/
 │   ├── java/              # 25 Java tests
 │   └── go/                # 25 Go tests
 │
-├── queries/               # Example KQL queries
+├── queries/               # Example GQL queries
 │   └── (35+ built-in queries)
 │
 ├── docs/                  # Documentation
-│   ├── KQL_GUIDE.md
+│   ├── GQL_GUIDE.md
 │   ├── TAINT_ANALYSIS_GUIDE.md
 │   └── README.md
 │
@@ -323,7 +323,7 @@ cargo bench
 
 # Available benchmarks:
 # - parser_benchmark: AST generation speed
-# - query_benchmark: KQL execution speed
+# - query_benchmark: GQL execution speed
 # - taint_analysis_benchmark: Analysis performance
 # - analyzer_benchmark: Overall analysis speed
 ```
@@ -391,7 +391,7 @@ Current test coverage: **~55%**
 - [x] Control flow graph generation
 - [x] Data flow analysis framework
 - [x] Taint tracking
-- [x] KQL query language
+- [x] GQL query language
 - [x] SARIF output
 - [x] Parallel analysis
 - [x] Incremental analysis (cache-based)
@@ -635,7 +635,7 @@ Built with:
 A: Gittera focuses on deep program analysis (CFG, taint analysis, symbolic execution) while Semgrep excels at pattern matching. Gittera is better for finding complex data flow issues.
 
 **Q: Can I write custom queries?**
-A: Yes! KQL is designed to be simple to write. See `docs/KQL_GUIDE.md` for examples.
+A: Yes! GQL is designed to be simple to write. See `docs/GQL_GUIDE.md` for examples.
 
 **Q: What's the false positive rate?**
 A: With predicated taint analysis and path-sensitive checking, Gittera has significantly lower false positives than pattern-based tools.

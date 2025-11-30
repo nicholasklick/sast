@@ -668,7 +668,7 @@ Taint Analysis Result:
 function execute_query(query, ast, cfg, taint_results):
     executor = new QueryExecutor()
 
-    // Parse KQL query
+    // Parse GQL query
     // Example: FROM CallExpression WHERE callee.name = "eval" SELECT *
 
     // Step 1: FROM clause - Find matching entities
@@ -1087,7 +1087,7 @@ Gittera SAST performs static analysis in these key stages:
 3. **Construct** call graphs to understand function relationships
 4. **Generate** control flow graphs (CFG) for execution paths
 5. **Analyze** data flow with interprocedural taint analysis
-6. **Execute** security queries using KQL (SQL-like language)
+6. **Execute** security queries using GQL (SQL-like language)
 7. **Report** findings in multiple formats (text, JSON, SARIF)
 
 The tool uses:

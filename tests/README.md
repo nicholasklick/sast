@@ -21,7 +21,7 @@ tests/
 ├── test_call_graph.ts                 # Call graph tests
 ├── test_clean.ts                      # Clean code tests
 ├── test_interprocedural.ts            # Interprocedural analysis tests
-├── test_kql_e2e.rs                    # KQL end-to-end tests
+├── test_gql_e2e.rs                    # GQL end-to-end tests
 ├── test_parser.rs                     # Parser tests
 ├── test_symbol_table.ts               # Symbol table tests
 ├── test_taint_analysis.ts             # Taint analysis tests

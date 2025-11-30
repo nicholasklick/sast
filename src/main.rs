@@ -1,6 +1,6 @@
 //! Gittera SAST - High-performance static analysis security testing engine
 //!
-//! A CodeQL competitor written in Rust with custom query language (KQL)
+//! A CodeQL competitor written in Rust with custom query language (GQL)
 
 mod discovery;
 mod parallel;
@@ -53,7 +53,7 @@ enum Commands {
         #[arg(short, long)]
         language: Option<String>,
 
-        /// Custom KQL query file
+        /// Custom GQL query file
         #[arg(short, long)]
         query: Option<PathBuf>,
     },
@@ -104,9 +104,9 @@ enum Commands {
     /// Show available built-in queries
     ListQueries,
 
-    /// Validate a KQL query
+    /// Validate a GQL query
     ValidateQuery {
-        /// Path to KQL query file
+        /// Path to GQL query file
         #[arg(value_name = "QUERY")]
         query: PathBuf,
     },

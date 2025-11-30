@@ -1,6 +1,6 @@
-//! Gittera Query Language (KQL) - A domain-specific language for security queries
+//! Gittera Query Language (GQL) - A domain-specific language for security queries
 //!
-//! KQL allows users to write declarative queries to find security vulnerabilities
+//! GQL allows users to write declarative queries to find security vulnerabilities
 //! in source code using SQL-like syntax.
 //!
 //! ## Features
@@ -282,8 +282,8 @@
 //!
 //! ## See Also
 //!
-//! - `KQL_GUIDE.md` - Complete KQL language guide
-//! - `KQL_QUICK_REFERENCE.md` - One-page reference
+//! - `GQL_GUIDE.md` - Complete GQL language guide
+//! - `GQL_QUICK_REFERENCE.md` - One-page reference
 //! - `TAINT_ANALYSIS_GUIDE.md` - Taint analysis integration
 
 pub mod ast;

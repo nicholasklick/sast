@@ -1,8 +1,8 @@
-//! KQL Abstract Syntax Tree
+//! GQL Abstract Syntax Tree
 
 use serde::{Deserialize, Serialize};
 
-/// A complete KQL query
+/// A complete GQL query
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Query {
     pub from: FromClause,
@@ -127,7 +127,7 @@ pub enum SelectItem {
     },
 }
 
-/// The complete AST for a KQL query
+/// The complete AST for a GQL query
 pub type QueryAst = Query;
 
 impl Query {

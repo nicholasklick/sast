@@ -33,7 +33,7 @@ chmod +x sanity_check.sh
 ### 4. Feature Checks
 - ✓ Test files exist
 - ✓ Documentation complete
-  - KQL_GUIDE.md
+  - GQL_GUIDE.md
   - TAINT_ANALYSIS_GUIDE.md
   - ARENA_PARSER_COMPLETE.md
 
@@ -41,8 +41,8 @@ chmod +x sanity_check.sh
 - ✓ Standard parser implementation
 - ✓ Arena parser implementation
 - ✓ Arena AST implementation
-- ✓ KQL parser
-- ✓ KQL executor
+- ✓ GQL parser
+- ✓ GQL executor
 - ✓ Taint analysis engine
 - ✓ CFG builder
 
@@ -84,7 +84,7 @@ Failed: 0
 
 Core Features Verified:
   ✓ Arena-based AST Parser (50-60% memory savings)
-  ✓ KQL Query Language (43/43 tests passing)
+  ✓ GQL Query Language (43/43 tests passing)
   ✓ Taint Analysis (27/27 tests passing)
   ✓ Multi-language Support (Tree-sitter)
   ✓ CFG Analysis
@@ -196,7 +196,7 @@ cargo test -p gittera-query test_query_finds_eval_calls -- --nocapture
 git status
 
 # If files are missing, check git history
-git log --all --full-history --oneline -- KQL_GUIDE.md
+git log --all --full-history --oneline -- GQL_GUIDE.md
 ```
 
 ### Permission Issues
@@ -291,7 +291,7 @@ When all checks pass, the following features are verified:
 - ✅ Arena AST generation (50-60% memory savings)
 - ✅ Symbol table construction
 
-### Query Engine (KQL)
+### Query Engine (GQL)
 - ✅ 39/39 tests passing (31 unit + 8 integration)
 - ✅ SQL-like query syntax
 - ✅ All comparison operators

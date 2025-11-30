@@ -1,4 +1,4 @@
-//! Parser for KQL queries using nom
+//! Parser for GQL queries using nom
 
 use crate::ast::*;
 use nom::{

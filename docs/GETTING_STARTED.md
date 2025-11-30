@@ -101,13 +101,13 @@ Options:
 ```
 
 ### analyze
-Analyze with a custom KQL query.
+Analyze with a custom GQL query.
 
 ```bash
 gittera analyze <FILE> [OPTIONS]
 
 Options:
-  -q, --query <FILE>      Path to KQL query file
+  -q, --query <FILE>      Path to GQL query file
   -l, --language <LANG>   Force language (rust, python, javascript, etc.)
   -f, --format <FORMAT>   Output format
   -o, --output <FILE>     Output file
@@ -121,17 +121,17 @@ gittera list-queries
 ```
 
 ### validate-query
-Validate a KQL query file.
+Validate a GQL query file.
 
 ```bash
 gittera validate-query <QUERY_FILE>
 ```
 
-## Writing Custom KQL Queries
+## Writing Custom GQL Queries
 
-Create a file `my-query.kql`:
+Create a file `my-query.gql`:
 
-```kql
+```gql
 // Find all function calls
 from CallExpression call
 where call.arguments_count > 0
@@ -140,7 +140,7 @@ select call, "Function call found"
 
 Run it:
 ```bash
-./target/release/gittera-sast analyze test.rs --query my-query.kql
+./target/release/gittera-sast analyze test.rs --query my-query.gql
 ```
 
 ## Supported Languages
@@ -286,10 +286,10 @@ For large codebases:
 
 ## Next Steps
 
-1. **Explore Built-in Queries**: Check `queries/*.kql` for examples
+1. **Explore Built-in Queries**: Check `queries/*.gql` for examples
 2. **Read the Full Documentation**: See `README.md`
 3. **Check the Architecture**: Review `PROJECT_SUMMARY.md`
-4. **Write Custom Queries**: Learn KQL syntax
+4. **Write Custom Queries**: Learn GQL syntax
 5. **Contribute**: Add new language support or queries
 
 ## Support

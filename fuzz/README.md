@@ -20,13 +20,13 @@ Tests the TypeScript/JavaScript parser with arbitrary input to ensure:
 
 ### 2. `fuzz_query` - Query Language Fuzzing
 
-Tests the KQL (Gittera Query Language) parser with random query strings to ensure:
+Tests the GQL (Gittera Query Language) parser with random query strings to ensure:
 - No panics on invalid query syntax
 - Safe handling of malformed queries
 - Robust error messages
 - No undefined behavior
 
-**Coverage**: KQL lexer, parser, and AST construction
+**Coverage**: GQL lexer, parser, and AST construction
 
 ### 3. `fuzz_taint_analysis` - Taint Analysis Fuzzing
 
