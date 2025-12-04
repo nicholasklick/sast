@@ -1,5 +1,4 @@
 /target
-/gemini_tests
 # Fuzzing artifacts
 /fuzz/target
 /fuzz/corpus
