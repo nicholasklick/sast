@@ -2,17 +2,27 @@
 //!
 //! This module implements the corrected taint analysis that operates on AST nodes
 //! instead of string labels, providing accurate tracking through complex expressions.
+//!
+//! ## Type-Aware Analysis
+//!
+//! When type information is available (via `TypeContext`), the analysis uses it to:
+//! - Skip taint propagation to primitive types (numbers, booleans) that cannot carry string data
+//! - More precisely track taint through typed function parameters and returns
+//! - Reduce false positives by understanding type constraints
 
 use super::{TaintSource, TaintSourceKind, TaintValue};
-use crate::cfg::{CfgGraphIndex, CfgNode, CfgNodeKind, ControlFlowGraph};
+use crate::cfg::{CfgGraphIndex, ControlFlowGraph};
 use crate::dataflow::TransferFunction;
-use gittera_parser::ast::{AstNode, AstNodeKind, LiteralValue, NodeId};
+use crate::type_system::{TypeContext, TypeCategory};
+use gittera_parser::ast::{AstNode, AstNodeKind, NodeId};
 use std::collections::{HashMap, HashSet};
 
 /// AST-based taint transfer function
 pub struct AstBasedTaintTransferFunction {
     sources: Vec<TaintSource>,
     sanitizers: HashSet<String>,
+    /// Optional type context for type-aware analysis
+    type_context: Option<TypeContext>,
 }
 
 impl AstBasedTaintTransferFunction {
@@ -20,7 +30,54 @@ impl AstBasedTaintTransferFunction {
         Self {
             sources,
             sanitizers,
+            type_context: None,
         }
+    }
+
+    /// Create a type-aware transfer function
+    ///
+    /// When type context is provided, the analysis will:
+    /// - Skip taint propagation to variables with primitive types
+    /// - Use return types to determine if function calls can return tainted data
+    /// - Reduce false positives for type-safe code
+    pub fn with_type_context(
+        sources: Vec<TaintSource>,
+        sanitizers: HashSet<String>,
+        type_context: TypeContext,
+    ) -> Self {
+        Self {
+            sources,
+            sanitizers,
+            type_context: Some(type_context),
+        }
+    }
+
+    /// Check if a variable's type can carry taint
+    fn can_type_carry_taint(&self, var_name: &str) -> bool {
+        if let Some(ref ctx) = self.type_context {
+            if let Some(type_info) = ctx.get_variable_type(var_name) {
+                return type_info.can_carry_taint();
+            }
+        }
+        // Conservative: if no type info, assume it can carry taint
+        true
+    }
+
+    /// Check if taint can propagate from one variable to another based on types
+    fn can_taint_propagate(&self, from: &str, to: &str) -> bool {
+        if let Some(ref ctx) = self.type_context {
+            return ctx.can_propagate_taint(from, to);
+        }
+        // Conservative: if no type info, allow propagation
+        true
+    }
+
+    /// Get the return type category of a function
+    fn get_function_return_type_category(&self, func_name: &str) -> Option<TypeCategory> {
+        self.type_context.as_ref().and_then(|ctx| {
+            ctx.get_function_return_type(func_name)
+                .map(|t| t.category.clone())
+        })
     }
 
     /// Build a mapping from AST node ID to the actual node for fast lookup
@@ -105,12 +162,26 @@ impl AstBasedTaintTransferFunction {
             AstNodeKind::CallExpression { callee, .. } => {
                 // Check if this is a taint source
                 if let Some(source_kind) = self.is_taint_source(callee) {
+                    // TYPE-AWARE: Check if the return type can carry taint
+                    if let Some(ret_category) = self.get_function_return_type_category(callee) {
+                        if !ret_category.can_carry_taint() {
+                            // Function returns a primitive type - cannot carry taint
+                            return None;
+                        }
+                    }
                     return Some(TaintValue::new(expr.text.clone(), source_kind));
                 }
 
                 // Check if this is a sanitizer
                 if self.is_sanitizer(callee) {
                     return None; // Sanitizer returns clean value
+                }
+
+                // TYPE-AWARE: If return type is primitive, skip taint propagation
+                if let Some(ret_category) = self.get_function_return_type_category(callee) {
+                    if !ret_category.can_carry_taint() {
+                        return None;
+                    }
                 }
 
                 // Otherwise, propagate taint from arguments
@@ -238,6 +309,17 @@ impl AstBasedTaintTransferFunction {
         if let Some(taint) = rhs_taint {
             // RHS is tainted - propagate to all LHS variables, preserving conditions
             for var in lhs_vars {
+                // TYPE-AWARE: Skip taint propagation if target type can't carry taint
+                if !self.can_type_carry_taint(&var) {
+                    // Target variable has a primitive type - skip taint
+                    continue;
+                }
+
+                // TYPE-AWARE: Check if taint can propagate based on types
+                if !self.can_taint_propagate(&taint.variable, &var) {
+                    continue;
+                }
+
                 output.insert(TaintValue {
                     variable: var,
                     source: taint.source.clone(),
@@ -293,7 +375,17 @@ impl AstBasedTaintTransferFunction {
         output: &mut HashSet<TaintValue>,
         input: &HashSet<TaintValue>,
     ) {
-        if let AstNodeKind::VariableDeclaration { name, .. } = &node.kind {
+        if let AstNodeKind::VariableDeclaration { name, var_type, .. } = &node.kind {
+            // TYPE-AWARE: Check if this variable's declared type can carry taint
+            if let Some(type_str) = var_type {
+                use crate::type_system::TypeInfo;
+                let type_info = TypeInfo::from_type_string(type_str);
+                if !type_info.can_carry_taint() {
+                    // Variable is declared with a primitive type - skip taint analysis
+                    return;
+                }
+            }
+
             // Check if the initializer is tainted
             if let Some(init_node) = node.children.first() {
                 if let Some(taint) = self.evaluate_expression(init_node, input) {
@@ -361,7 +453,7 @@ impl TransferFunction<TaintValue> for AstBasedTaintTransferFunction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gittera_parser::ast::{Location, Span};
+    use gittera_parser::ast::{Location, Span, LiteralValue};
 
     fn create_test_location() -> Location {
         Location {

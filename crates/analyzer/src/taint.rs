@@ -187,6 +187,66 @@ impl TaintAnalysis {
         self.find_vulnerabilities(cfg, &dataflow_result)
     }
 
+    /// Run type-aware taint analysis on a CFG with AST
+    ///
+    /// This variant uses type information from the AST to reduce false positives:
+    /// - Skips taint propagation to primitive types (numbers, booleans)
+    /// - Uses function return types to determine taint-carrying capability
+    /// - Filters assignments based on type compatibility
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gittera_analyzer::{CfgBuilder, TaintAnalysis, TypeContext};
+    /// use gittera_parser::{Parser, Language, LanguageConfig};
+    /// use std::path::Path;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let mut parser = Parser::new(
+    /// #     LanguageConfig::new(Language::TypeScript),
+    /// #     Path::new("app.ts")
+    /// # );
+    /// # let source = "const x: number = getUserInput().length;";
+    /// # let ast = parser.parse_source(source)?;
+    /// // Build type context from AST
+    /// let type_ctx = TypeContext::from_ast(&ast);
+    ///
+    /// let cfg = CfgBuilder::new().build(&ast);
+    /// let taint = TaintAnalysis::new()
+    ///     .with_default_sources()
+    ///     .with_default_sinks();
+    ///
+    /// // Type-aware analysis reduces false positives
+    /// let result = taint.analyze_with_types(&cfg, &ast, type_ctx);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn analyze_with_types(
+        &self,
+        cfg: &ControlFlowGraph,
+        ast: &AstNode,
+        type_context: crate::type_system::TypeContext,
+    ) -> TaintAnalysisResult {
+        let sources = self.sources.clone();
+        let sanitizers = self.sanitizers.clone();
+
+        // Create type-aware transfer function
+        let transfer = AstBasedTaintTransferFunction::with_type_context(
+            sources,
+            sanitizers,
+            type_context,
+        );
+
+        let analysis = DataFlowAnalysis::new(
+            DataFlowDirection::Forward,
+            Box::new(transfer),
+        );
+
+        let dataflow_result = analysis.analyze(cfg, ast);
+
+        self.find_vulnerabilities(cfg, &dataflow_result)
+    }
+
     fn find_vulnerabilities(
         &self,
         cfg: &ControlFlowGraph,

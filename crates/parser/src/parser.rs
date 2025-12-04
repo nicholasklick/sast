@@ -205,7 +205,15 @@ impl Parser {
             // Expressions
             "binary_expression" | "binary_op" => self.parse_binary_expression(node, source),
             "unary_expression" => self.parse_unary_expression(node, source),
-            "call_expression" => self.parse_call_expression(node, source),
+            // Function/method calls - handle language-specific node types
+            // JavaScript/TypeScript/Go/Rust/C/C++/Scala/Swift/Kotlin: call_expression
+            // Python/Ruby: call
+            // Java/Groovy: method_invocation
+            // C#: invocation_expression
+            // Groovy also: juxt_function_call
+            "call_expression" | "call" | "method_invocation" | "invocation_expression" | "juxt_function_call" => {
+                self.parse_call_expression(node, source)
+            }
             "member_expression" | "field_expression" => {
                 self.parse_member_expression(node, source)
             }
@@ -1418,10 +1426,38 @@ impl Parser {
     }
 
     fn extract_callee(&self, node: &Node, source: &str) -> Option<String> {
+        // Try language-specific field names first using tree-sitter's field API
+        // Python/C#: "function" field
+        if let Some(func_node) = node.child_by_field_name("function") {
+            return Some(func_node.utf8_text(source.as_bytes()).unwrap_or("").to_string());
+        }
+
+        // Java/Groovy method_invocation: combine "object" and "name" fields
+        if let Some(name_node) = node.child_by_field_name("name") {
+            let name = name_node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+            if let Some(obj_node) = node.child_by_field_name("object") {
+                let obj = obj_node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+                return Some(format!("{}.{}", obj, name));
+            }
+            return Some(name);
+        }
+
+        // Ruby: combine "receiver" and "method" fields
+        if let Some(method_node) = node.child_by_field_name("method") {
+            let method = method_node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+            if let Some(recv_node) = node.child_by_field_name("receiver") {
+                let recv = recv_node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+                return Some(format!("{}.{}", recv, method));
+            }
+            return Some(method);
+        }
+
+        // Fallback: iterate through children for JS/Go/Rust/C/C++ style
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             // Handle member expressions (e.g., crypto.createHash)
-            if child.kind() == "member_expression" || child.kind() == "field_expression" {
+            if child.kind() == "member_expression" || child.kind() == "field_expression"
+                || child.kind() == "attribute" {  // Python attribute access
                 return Some(child.utf8_text(source.as_bytes()).unwrap_or("").to_string());
             }
             // Handle simple identifiers

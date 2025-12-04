@@ -204,7 +204,7 @@ mod tests {
     #[test]
     fn test_discover_single_file() {
         let discovery = FileDiscovery::with_default_config();
-        let files = discovery.discover(Path::new("test_clean.ts")).unwrap();
+        let files = discovery.discover(Path::new("tests/test_clean.ts")).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].language, Language::TypeScript);
     }

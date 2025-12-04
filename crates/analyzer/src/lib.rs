@@ -347,6 +347,7 @@ pub mod call_graph;
 pub mod interprocedural_taint;
 pub mod points_to;
 pub mod symbolic;
+pub mod type_system;      // Type system integration for enhanced analysis precision
 
 pub use cfg::{ControlFlowGraph, CfgNode, CfgEdge, CfgBuilder};
 pub use dataflow::{DataFlowAnalysis, DataFlowDirection, TransferFunction};
@@ -357,3 +358,4 @@ pub use call_graph::{CallGraph, CallGraphBuilder, CallGraphNode, CallEdge, Calla
 pub use interprocedural_taint::{InterproceduralTaintAnalysis, FunctionTaintSummary};
 pub use points_to::{PointsToAnalysis, PointsToAnalysisBuilder, AbstractLocation, PointsToConstraint, PointsToStats};
 pub use symbolic::{SymbolicExecutor, SymbolicExecutorBuilder, SymbolicValue, SymbolicState, ExecutionPath, SymbolicExecutionResult, Constraint, BinaryOperator, UnaryOperator};
+pub use type_system::{TypeContext, TypeInfo, TypeCategory, TypeContextStats};

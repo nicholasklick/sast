@@ -5,6 +5,9 @@ import java.sql.Connection
 import java.sql.PreparedStatement
 import java.nio.file.Paths
 import java.security.SecureRandom
+import java.security.MessageDigest
+import javax.crypto.Cipher
+import javax.crypto.spec.SecretKeySpec
 
 class SafeGroovyCode {
 
@@ -36,9 +39,6 @@ class SafeGroovyCode {
 
     // 4. Safe Cryptography - AES
     def encryptData(byte[] data, byte[] keyBytes) {
-        import javax.crypto.Cipher
-        import javax.crypto.spec.SecretKeySpec
-
         def key = new SecretKeySpec(keyBytes, "AES")
         def cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key)
@@ -47,7 +47,6 @@ class SafeGroovyCode {
 
     // 5. Safe Hashing - SHA-256
     def hashPassword(String password) {
-        import java.security.MessageDigest
         def digest = MessageDigest.getInstance("SHA-256")
         return digest.digest(password.bytes).encodeHex().toString()
     }

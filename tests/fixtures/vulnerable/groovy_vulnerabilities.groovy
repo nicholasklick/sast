@@ -4,6 +4,9 @@ package com.example.vulnerabilities
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.Statement
+import java.security.MessageDigest
+import javax.crypto.Cipher
+import javax.crypto.spec.SecretKeySpec
 
 class GroovyVulnerabilities {
 
@@ -55,9 +58,6 @@ class GroovyVulnerabilities {
 
     // 8. Weak Cryptography - DES
     def weakCryptoDes(data) {
-        import javax.crypto.Cipher
-        import javax.crypto.spec.SecretKeySpec
-
         def key = new SecretKeySpec("12345678".bytes, "DES")
         def cipher = Cipher.getInstance("DES/ECB/PKCS5Padding")
         cipher.init(Cipher.ENCRYPT_MODE, key)
@@ -66,7 +66,6 @@ class GroovyVulnerabilities {
 
     // 9. Weak Cryptography - MD5
     def weakHashMd5(input) {
-        import java.security.MessageDigest
         def md = MessageDigest.getInstance("MD5")
         return md.digest(input.bytes).encodeHex().toString()
     }

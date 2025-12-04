@@ -12,6 +12,13 @@
 //! 3. **Load constraints**: `x = *y` → `∀z ∈ pts(y), pts(z) ⊆ pts(x)`
 //! 4. **Store constraints**: `*x = y` → `∀z ∈ pts(x), pts(y) ⊆ pts(z)`
 //!
+//! ## Type-Aware Analysis
+//!
+//! When type information is available (via `TypeContext`), the analysis uses it to:
+//! - Skip aliasing between incompatible types (e.g., `number` and `object`)
+//! - Filter out primitive types from points-to sets (primitives can't hold references)
+//! - Reduce points-to set sizes by filtering incompatible types
+//!
 //! ## Use Cases
 //!
 //! - Alias analysis (do two pointers point to the same location?)
@@ -57,6 +64,7 @@
 //! # }
 //! ```
 
+use crate::type_system::TypeContext;
 use gittera_parser::ast::{AstNode, AstNodeKind, NodeId};
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
@@ -220,6 +228,44 @@ impl PointsToAnalysis {
         !pts1.is_disjoint(&pts2)
     }
 
+    /// Check if two variables may alias with type-aware filtering
+    ///
+    /// This method uses type information to rule out aliasing between
+    /// incompatible types, reducing false positives in the analysis.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gittera_analyzer::{PointsToAnalysisBuilder, TypeContext};
+    /// # use gittera_parser::ast::{AstNode, AstNodeKind, Location, Span};
+    /// # let program = AstNode::new(0, AstNodeKind::Program,
+    /// #     Location { file_path: "test.ts".to_string(),
+    /// #                span: Span { start_line: 1, start_column: 0,
+    /// #                             end_line: 1, end_column: 10,
+    /// #                             start_byte: 0, end_byte: 10 } },
+    /// #     String::new());
+    ///
+    /// let type_ctx = TypeContext::from_ast(&program);
+    /// let pts = PointsToAnalysisBuilder::new().build(&program);
+    ///
+    /// // Type-aware alias check considers type compatibility
+    /// let may_alias = pts.may_alias_with_types("obj1", "obj2", &type_ctx);
+    /// ```
+    pub fn may_alias_with_types(
+        &self,
+        var1: &str,
+        var2: &str,
+        type_context: &TypeContext,
+    ) -> bool {
+        // First check type compatibility
+        if !type_context.could_alias(var1, var2) {
+            return false; // Types are incompatible - cannot alias
+        }
+
+        // Then check points-to sets
+        self.may_alias(var1, var2)
+    }
+
     /// Get all constraints
     pub fn constraints(&self) -> &[PointsToConstraint] {
         &self.constraints
@@ -271,6 +317,8 @@ pub struct PointsToStats {
 pub struct PointsToAnalysisBuilder {
     /// Maximum number of iterations for constraint solving
     max_iterations: usize,
+    /// Optional type context for type-aware analysis
+    type_context: Option<TypeContext>,
 }
 
 impl PointsToAnalysisBuilder {
@@ -278,12 +326,45 @@ impl PointsToAnalysisBuilder {
     pub fn new() -> Self {
         Self {
             max_iterations: 100,
+            type_context: None,
         }
     }
 
     /// Set the maximum number of iterations for constraint solving
     pub fn with_max_iterations(mut self, max: usize) -> Self {
         self.max_iterations = max;
+        self
+    }
+
+    /// Enable type-aware analysis
+    ///
+    /// When type context is provided, the analysis will:
+    /// - Skip aliasing between incompatible types
+    /// - Filter out primitive types that cannot hold references
+    /// - Produce smaller, more precise points-to sets
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use gittera_analyzer::{PointsToAnalysisBuilder, TypeContext};
+    /// # use gittera_parser::ast::{AstNode, AstNodeKind, Location, Span};
+    /// # let program = AstNode::new(0, AstNodeKind::Program,
+    /// #     Location { file_path: "test.ts".to_string(),
+    /// #                span: Span { start_line: 1, start_column: 0,
+    /// #                             end_line: 1, end_column: 10,
+    /// #                             start_byte: 0, end_byte: 10 } },
+    /// #     String::new());
+    ///
+    /// // Build type context from AST
+    /// let type_ctx = TypeContext::from_ast(&program);
+    ///
+    /// // Build type-aware points-to analysis
+    /// let pts = PointsToAnalysisBuilder::new()
+    ///     .with_type_context(type_ctx)
+    ///     .build(&program);
+    /// ```
+    pub fn with_type_context(mut self, type_context: TypeContext) -> Self {
+        self.type_context = Some(type_context);
         self
     }
 
@@ -300,11 +381,45 @@ impl PointsToAnalysisBuilder {
         analysis
     }
 
+    /// Check if a variable type can hold references (for type-aware filtering)
+    fn can_hold_reference(&self, var_name: &str) -> bool {
+        if let Some(ref ctx) = self.type_context {
+            if let Some(type_info) = ctx.get_variable_type(var_name) {
+                return type_info.can_hold_reference();
+            }
+        }
+        // Conservative: if no type info, assume it can hold references
+        true
+    }
+
+    /// Check if two types could be aliased based on type compatibility
+    fn types_could_alias(&self, var1: &str, var2: &str) -> bool {
+        if let Some(ref ctx) = self.type_context {
+            return ctx.could_alias(var1, var2);
+        }
+        // Conservative: if no type info, assume they could alias
+        true
+    }
+
     /// Collect constraints from the AST
     fn collect_constraints(&self, node: &AstNode, analysis: &mut PointsToAnalysis) {
         match &node.kind {
             // Variable declaration: let x = expr
-            AstNodeKind::VariableDeclaration { name, .. } => {
+            AstNodeKind::VariableDeclaration { name, var_type, .. } => {
+                // TYPE-AWARE: Skip variables with primitive types that can't hold references
+                if let Some(type_str) = var_type {
+                    use crate::type_system::TypeInfo;
+                    let type_info = TypeInfo::from_type_string(type_str);
+                    if !type_info.can_hold_reference() {
+                        // Primitive type - skip points-to tracking
+                        // Still recurse into children
+                        for child in &node.children {
+                            self.collect_constraints(child, analysis);
+                        }
+                        return;
+                    }
+                }
+
                 let var_loc = AbstractLocation::var(name);
                 analysis.variable_locations.insert(name.clone(), var_loc.clone());
 
@@ -325,6 +440,17 @@ impl PointsToAnalysisBuilder {
                 if node.children.len() >= 2 {
                     let left = &node.children[0];
                     let right = &node.children[1];
+
+                    // TYPE-AWARE: Check if LHS can hold references
+                    if let AstNodeKind::Identifier { name } = &left.kind {
+                        if !self.can_hold_reference(name) {
+                            // LHS is primitive type - skip constraint
+                            for child in &node.children {
+                                self.collect_constraints(child, analysis);
+                            }
+                            return;
+                        }
+                    }
 
                     if let Some(lhs_loc) = self.analyze_lvalue(left, analysis) {
                         if let Some(rhs_loc) = self.analyze_expression(right, analysis) {
