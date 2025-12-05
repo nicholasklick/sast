@@ -29,6 +29,7 @@ impl LanguageTaintConfig {
             Language::CSharp => Self::csharp_config(),
             Language::Swift => Self::swift_config(),
             Language::Rust => Self::rust_config(),
+            Language::Lua => Self::lua_config(),
             _ => Self::generic_config(language),
         }
     }
@@ -1410,6 +1411,250 @@ impl LanguageTaintConfig {
 
         Self {
             language: Language::Rust,
+            sources,
+            sinks,
+            sanitizers,
+        }
+    }
+
+    /// Lua configuration (comprehensive)
+    fn lua_config() -> Self {
+        let mut sources = Vec::new();
+        let mut sinks = Vec::new();
+        let mut sanitizers = Vec::new();
+
+        // ===== TAINT SOURCES (20+) =====
+
+        // User Input - Command Line & Standard Input
+        for name in &[
+            "arg",              // Command line arguments table
+            "io.read",          // Read from stdin
+            "io.stdin:read",
+            "io.input():read",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - HTTP/Web (OpenResty, Lapis, Lua-Resty)
+        for name in &[
+            "ngx.req.get_uri_args",
+            "ngx.req.get_post_args",
+            "ngx.req.get_headers",
+            "ngx.req.get_body_data",
+            "ngx.req.read_body",
+            "ngx.var",
+            "request.params",
+            "self.params",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // File Read
+        for name in &[
+            "io.open",
+            "io.input",
+            "io.lines",
+            "file:read",
+            "file:lines",
+            "io.read",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::FileRead,
+                node_id: 0,
+            });
+        }
+
+        // Environment Variables
+        for name in &[
+            "os.getenv",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::EnvironmentVariable,
+                node_id: 0,
+            });
+        }
+
+        // Network/HTTP (LuaSocket, lua-resty-http)
+        for name in &[
+            "socket.http.request",
+            "http.request",
+            "httpc:request_uri",
+            "ngx.location.capture",
+            "ngx.socket.tcp",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::NetworkRequest,
+                node_id: 0,
+            });
+        }
+
+        // Database Query Results (LuaSQL, pgmoon, lua-resty-mysql)
+        for name in &[
+            "cursor:fetch",
+            "conn:execute",
+            "db:query",
+            "mysql:query",
+            "pg:query",
+            "redis:get",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::DatabaseQuery,
+                node_id: 0,
+            });
+        }
+
+        // Debug/Reflection (dangerous sources)
+        for name in &[
+            "debug.getlocal",
+            "debug.getupvalue",
+            "debug.getinfo",
+            "debug.getregistry",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // ===== TAINT SINKS (25+) =====
+
+        // Command Execution
+        for name in &[
+            "os.execute",
+            "io.popen",
+            "os.spawn",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CommandExecution,
+                node_id: 0,
+            });
+        }
+
+        // Code Evaluation (Critical - Lua's most dangerous functions)
+        for name in &[
+            "load",
+            "loadstring",
+            "loadfile",
+            "dofile",
+            "require",          // Can load arbitrary modules
+            "package.loadlib",
+            "setfenv",
+            "rawset",
+            "rawget",
+            "setmetatable",     // Can override behavior
+            "debug.setlocal",
+            "debug.setupvalue",
+            "debug.sethook",
+            "debug.setmetatable",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CodeEval,
+                node_id: 0,
+            });
+        }
+
+        // SQL Injection (LuaSQL, pgmoon, lua-resty-mysql)
+        for name in &[
+            "conn:execute",
+            "cursor:execute",
+            "db:query",
+            "mysql:query",
+            "pg:query",
+            "ngx.quote_sql_str",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::SqlQuery,
+                node_id: 0,
+            });
+        }
+
+        // File Write
+        for name in &[
+            "io.open",          // With write mode
+            "io.output",
+            "file:write",
+            "io.write",
+            "os.rename",
+            "os.remove",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::FileWrite,
+                node_id: 0,
+            });
+        }
+
+        // HTML/XSS Output (OpenResty/nginx-lua)
+        for name in &[
+            "ngx.say",
+            "ngx.print",
+            "ngx.header",
+            "ngx.redirect",
+            "io.write",
+            "print",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::HtmlOutput,
+                node_id: 0,
+            });
+        }
+
+        // Logging (Information Disclosure)
+        for name in &[
+            "print",
+            "io.write",
+            "ngx.log",
+            "ngx.ERR",
+            "ngx.WARN",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::LogOutput,
+                node_id: 0,
+            });
+        }
+
+        // ===== SANITIZERS (12+) =====
+        sanitizers.extend(vec![
+            // HTML/URL Escaping
+            "ngx.escape_uri".to_string(),
+            "ngx.unescape_uri".to_string(),
+            "ngx.encode_base64".to_string(),
+            "ngx.quote_sql_str".to_string(),
+            // String validation
+            "tonumber".to_string(),
+            "tostring".to_string(),
+            "string.match".to_string(),     // When used for validation
+            "string.gsub".to_string(),      // When used for sanitization
+            // Type checking
+            "type".to_string(),
+            "assert".to_string(),
+            // Custom sanitizers
+            "escape".to_string(),
+            "sanitize".to_string(),
+            "validate".to_string(),
+            "encode".to_string(),
+        ]);
+
+        Self {
+            language: Language::Lua,
             sources,
             sinks,
             sanitizers,

@@ -1316,7 +1316,7 @@ impl ExtendedStandardLibrary {
                         property: "callee".to_string(),
                     },
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(exec|spawn|system|shell)".to_string()),
+                    right: Expression::String("(?i)(exec|spawn|system|shell|os\\.execute|io\\.popen|popen|Runtime\\.exec|ProcessBuilder|subprocess|Popen)".to_string()),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
@@ -1336,7 +1336,7 @@ impl ExtendedStandardLibrary {
                         property: "callee".to_string(),
                     },
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(exec|spawn|system|shell|sh|bash|cmd|powershell)".to_string()),
+                    right: Expression::String("(?i)(exec|spawn|system|shell|sh|bash|cmd|powershell|os\\.execute|io\\.popen|popen|Runtime\\.exec|ProcessBuilder|subprocess|Popen|Process\\.Start|ShellExecute)".to_string()),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
@@ -1396,7 +1396,7 @@ impl ExtendedStandardLibrary {
                         property: "callee".to_string(),
                     },
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(eval|Function|setTimeout|setInterval)".to_string()),
+                    right: Expression::String("(?i)(eval|Function|setTimeout|setInterval|loadstring|load|loadfile|dofile|compile|ScriptEngine|GroovyShell|Eval\\.me)".to_string()),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
@@ -1936,7 +1936,7 @@ impl ExtendedStandardLibrary {
                         property: "callee".to_string(),
                     },
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(readFile|writeFile|open|unlink)".to_string()),
+                    right: Expression::String("(?i)(readFile|writeFile|open|unlink|io\\.open|io\\.lines|os\\.remove|os\\.rename|File\\.read|File\\.write|fopen)".to_string()),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
@@ -2341,7 +2341,7 @@ impl ExtendedStandardLibrary {
                         property: "callee".to_string(),
                     },
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(deserialize|unserialize|pickle|yaml\\.)".to_string()),
+                    right: Expression::String("(?i)(deserialize|unserialize|pickle|yaml\\.|loadstring|readObject|ObjectInputStream|Marshal\\.load|Unmarshal)".to_string()),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {

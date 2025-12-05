@@ -212,8 +212,10 @@ impl Parser {
             // C#: invocation_expression
             // Groovy also: juxt_function_call
             // PHP: function_call_expression, member_call_expression, nullsafe_member_call_expression, scoped_call_expression
+            // Lua: function_call
             "call_expression" | "call" | "method_invocation" | "invocation_expression" | "juxt_function_call"
-            | "function_call_expression" | "member_call_expression" | "nullsafe_member_call_expression" | "scoped_call_expression" => {
+            | "function_call_expression" | "member_call_expression" | "nullsafe_member_call_expression" | "scoped_call_expression"
+            | "function_call" => {
                 self.parse_call_expression(node, source)
             }
             "member_expression" | "field_expression" => {

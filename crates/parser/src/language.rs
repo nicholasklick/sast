@@ -29,6 +29,7 @@ pub enum Language {
     Kotlin,
     Scala,
     Groovy,
+    Lua,
 }
 
 impl Language {
@@ -55,6 +56,7 @@ impl Language {
             "kt" | "kts" => Ok(Language::Kotlin),
             "scala" | "sc" => Ok(Language::Scala),
             "groovy" | "gradle" | "gvy" | "gy" | "gsh" => Ok(Language::Groovy),
+            "lua" => Ok(Language::Lua),
             _ => Err(LanguageError::UnsupportedLanguage(extension.to_string())),
         }
     }
@@ -77,6 +79,7 @@ impl Language {
             Language::Kotlin => tree_sitter_kotlin_ng::LANGUAGE.into(),
             Language::Scala => tree_sitter_scala::LANGUAGE.into(),
             Language::Groovy => tree_sitter_groovy::LANGUAGE.into(),
+            Language::Lua => tree_sitter_lua::LANGUAGE.into(),
         }
     }
 
@@ -97,6 +100,7 @@ impl Language {
             Language::Kotlin => "Kotlin",
             Language::Scala => "Scala",
             Language::Groovy => "Groovy",
+            Language::Lua => "Lua",
         }
     }
 
@@ -117,6 +121,7 @@ impl Language {
             Language::Kotlin => &["kt", "kts"],
             Language::Scala => &["scala", "sc"],
             Language::Groovy => &["groovy", "gradle", "gvy", "gy", "gsh"],
+            Language::Lua => &["lua"],
         }
     }
 }
