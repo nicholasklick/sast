@@ -32,6 +32,7 @@ impl LanguageTaintConfig {
             Language::Lua => Self::lua_config(),
             Language::Perl => Self::perl_config(),
             Language::Bash => Self::bash_config(),
+            Language::Dart => Self::dart_config(),
             _ => Self::generic_config(language),
         }
     }
@@ -1945,6 +1946,308 @@ impl LanguageTaintConfig {
 
         Self {
             language: Language::Perl,
+            sources,
+            sinks,
+            sanitizers,
+        }
+    }
+
+    /// Dart-specific taint configuration
+    fn dart_config() -> Self {
+        let mut sources = Vec::new();
+        let mut sinks = Vec::new();
+        let mut sanitizers = Vec::new();
+
+        // ============ DART TAINT SOURCES ============
+
+        // User Input - HTTP/Web (shelf, dio, http package)
+        for name in &[
+            "request.url",
+            "request.uri",
+            "request.headers",
+            "request.requestedUri",
+            "request.method",
+            "request.read",
+            "request.readAsString",
+            "Uri.queryParameters",
+            "Uri.queryParametersAll",
+            "Uri.pathSegments",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - Flutter/Mobile
+        for name in &[
+            "TextEditingController.text",
+            "TextField.controller",
+            "TextFormField.controller",
+            "FormFieldState.value",
+            "SharedPreferences.getString",
+            "SharedPreferences.get",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // Command Line Arguments
+        for name in &[
+            "args",             // main(List<String> args)
+            "arguments",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::CommandLineArgument,
+                node_id: 0,
+            });
+        }
+
+        // File Read
+        for name in &[
+            "File.readAsString",
+            "File.readAsStringSync",
+            "File.readAsBytes",
+            "File.readAsBytesSync",
+            "File.readAsLines",
+            "File.readAsLinesSync",
+            "File.openRead",
+            "stdin.readLineSync",
+            "stdin.readByteSync",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::FileRead,
+                node_id: 0,
+            });
+        }
+
+        // Environment Variables
+        for name in &[
+            "Platform.environment",
+            "Platform.environment[]",
+            "String.fromEnvironment",
+            "int.fromEnvironment",
+            "bool.fromEnvironment",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::EnvironmentVariable,
+                node_id: 0,
+            });
+        }
+
+        // Network/HTTP (dio, http package)
+        for name in &[
+            "http.get",
+            "http.post",
+            "http.read",
+            "http.readBytes",
+            "Dio.get",
+            "Dio.post",
+            "HttpClient.getUrl",
+            "HttpClient.postUrl",
+            "Response.body",
+            "Response.bodyBytes",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::NetworkRequest,
+                node_id: 0,
+            });
+        }
+
+        // Database Query Results
+        for name in &[
+            "Database.query",
+            "Database.rawQuery",
+            "sqflite.query",
+            "sqflite.rawQuery",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::DatabaseQuery,
+                node_id: 0,
+            });
+        }
+
+        // ============ DART TAINT SINKS ============
+
+        // Command Execution
+        for name in &[
+            "Process.run",
+            "Process.runSync",
+            "Process.start",
+            "shell",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CommandExecution,
+                node_id: 0,
+            });
+        }
+
+        // Code Evaluation (Dart doesn't have eval, but mirrors/reflection)
+        for name in &[
+            "Function.apply",
+            "InstanceMirror.invoke",
+            "ClassMirror.invoke",
+            "noSuchMethod",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CodeEval,
+                node_id: 0,
+            });
+        }
+
+        // SQL Injection (sqflite, moor/drift)
+        for name in &[
+            "Database.execute",
+            "Database.rawInsert",
+            "Database.rawUpdate",
+            "Database.rawDelete",
+            "Database.rawQuery",
+            "rawQuery",
+            "execute",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::SqlQuery,
+                node_id: 0,
+            });
+        }
+
+        // File Write
+        for name in &[
+            "File.writeAsString",
+            "File.writeAsStringSync",
+            "File.writeAsBytes",
+            "File.writeAsBytesSync",
+            "File.openWrite",
+            "IOSink.write",
+            "IOSink.writeln",
+            "File.create",
+            "File.delete",
+            "Directory.create",
+            "Directory.delete",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::FileWrite,
+                node_id: 0,
+            });
+        }
+
+        // HTML/XSS Output (Flutter WebView, shelf responses)
+        for name in &[
+            "Response",
+            "shelf.Response",
+            "WebViewController.loadHtmlString",
+            "WebView.initialUrl",
+            "Html.data",
+            "HtmlWidget",
+            "InAppWebViewController.loadData",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::HtmlOutput,
+                node_id: 0,
+            });
+        }
+
+        // Logging (Information Disclosure)
+        for name in &[
+            "print",
+            "debugPrint",
+            "log",
+            "Logger.info",
+            "Logger.warning",
+            "Logger.severe",
+            "stdout.write",
+            "stdout.writeln",
+            "stderr.write",
+            "stderr.writeln",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::LogOutput,
+                node_id: 0,
+            });
+        }
+
+        // Network (SSRF potential)
+        for name in &[
+            "http.get",
+            "http.post",
+            "http.put",
+            "http.delete",
+            "Dio.get",
+            "Dio.post",
+            "HttpClient.getUrl",
+            "HttpClient.postUrl",
+            "HttpClient.openUrl",
+            "Socket.connect",
+            "WebSocket.connect",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::NetworkSend,
+                node_id: 0,
+            });
+        }
+
+        // URL/Redirect (using NetworkSend as closest match)
+        for name in &[
+            "Uri.parse",
+            "launchUrl",
+            "launch",              // url_launcher
+            "openUrl",
+            "redirect",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::NetworkSend,
+                node_id: 0,
+            });
+        }
+
+        // ============ DART SANITIZERS ============
+
+        sanitizers.extend(vec![
+            // HTML Escaping
+            "htmlEscape".to_string(),
+            "HtmlEscape".to_string(),
+            "escape".to_string(),
+            // URL Encoding
+            "Uri.encodeComponent".to_string(),
+            "Uri.encodeQueryComponent".to_string(),
+            "Uri.encodeFull".to_string(),
+            // Validation
+            "int.parse".to_string(),
+            "int.tryParse".to_string(),
+            "double.parse".to_string(),
+            "double.tryParse".to_string(),
+            "num.parse".to_string(),
+            "num.tryParse".to_string(),
+            // Regex validation
+            "RegExp.hasMatch".to_string(),
+            // Path validation
+            "path.normalize".to_string(),
+            "path.canonicalize".to_string(),
+            // Type checking
+            "is".to_string(),
+            // SQL parameterization
+            "Database.query".to_string(),  // With positional args
+        ]);
+
+        Self {
+            language: Language::Dart,
             sources,
             sinks,
             sanitizers,

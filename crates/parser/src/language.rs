@@ -31,6 +31,7 @@ pub enum Language {
     Lua,
     Perl,
     Bash,
+    Dart,
 }
 
 impl Language {
@@ -59,6 +60,7 @@ impl Language {
             "lua" => Ok(Language::Lua),
             "pl" | "pm" | "t" | "cgi" => Ok(Language::Perl),
             "sh" | "bash" | "zsh" | "ksh" => Ok(Language::Bash),
+            "dart" => Ok(Language::Dart),
             _ => Err(LanguageError::UnsupportedLanguage(extension.to_string())),
         }
     }
@@ -83,6 +85,7 @@ impl Language {
             Language::Lua => tree_sitter_lua::LANGUAGE.into(),
             Language::Perl => tree_sitter_perl::LANGUAGE.into(),
             Language::Bash => tree_sitter_bash::LANGUAGE.into(),
+            Language::Dart => tree_sitter_dart::language().into(),
         }
     }
 
@@ -105,6 +108,7 @@ impl Language {
             Language::Lua => "Lua",
             Language::Perl => "Perl",
             Language::Bash => "Bash",
+            Language::Dart => "Dart",
         }
     }
 
@@ -127,6 +131,7 @@ impl Language {
             Language::Lua => &["lua"],
             Language::Perl => &["pl", "pm", "t", "cgi"],
             Language::Bash => &["sh", "bash", "zsh", "ksh"],
+            Language::Dart => &["dart"],
         }
     }
 }

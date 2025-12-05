@@ -144,12 +144,12 @@ run_test "Taint benchmark builds" "cargo build --bench taint_analysis_benchmark 
 run_test "Analyzer benchmark builds" "cargo build --bench analyzer_benchmark --quiet"
 
 echo ""
-echo "8. GEMINI TEST SUITE (100 VULNERABILITY TESTS)"
+echo "8. SMOKE TESTS (MULTI-LANGUAGE VULNERABILITY DETECTION)"
 echo "────────────────────────────────────────────────────────────────"
 
-# Check if gemini_tests directory exists
-if [ ! -d "gemini_tests" ]; then
-    echo -e "${YELLOW}⚠ Warning: gemini_tests directory not found, skipping gemini tests${NC}"
+# Check if smoke_tests directory exists
+if [ ! -d "smoke_tests" ]; then
+    echo -e "${YELLOW}⚠ Warning: smoke_tests directory not found, skipping smoke tests${NC}"
 else
     # Build the scanner binary
     echo -n "Building scanner binary... "
@@ -157,12 +157,12 @@ else
         echo -e "${GREEN}✓ Built${NC}"
 
         # Run scanner on each language directory
-        for lang in javascript python java go; do
-            if [ -d "gemini_tests/$lang" ]; then
-                echo -n "Testing: Scanning gemini_tests/$lang... "
+        for lang in bash c cpp csharp go java javascript kotlin lua perl php python ruby rust scala swift typescript; do
+            if [ -d "smoke_tests/$lang" ]; then
+                echo -n "Testing: Scanning smoke_tests/$lang... "
 
                 # Run scanner and check if it completes (exit code 0 or 1 is OK - 1 means findings were detected)
-                ./target/release/gittera-sast scan "gemini_tests/$lang" --format json > /dev/null 2>&1
+                ./target/release/gittera-sast scan "smoke_tests/$lang" --format json > /dev/null 2>&1
                 EXIT_CODE=$?
                 if [ $EXIT_CODE -eq 0 ] || [ $EXIT_CODE -eq 1 ]; then
                     echo -e "${GREEN}✓ PASSED${NC}"
@@ -174,9 +174,9 @@ else
             fi
         done
 
-        # Run full gemini test suite scan
-        echo -n "Testing: Full gemini test suite scan (100 tests)... "
-        ./target/release/gittera-sast scan gemini_tests --format json > /dev/null 2>&1
+        # Run full smoke test suite scan
+        echo -n "Testing: Full smoke test suite scan... "
+        ./target/release/gittera-sast scan smoke_tests --format json > /dev/null 2>&1
         EXIT_CODE=$?
 
         if [ $EXIT_CODE -eq 0 ] || [ $EXIT_CODE -eq 1 ]; then
@@ -187,7 +187,7 @@ else
             ((FAILED++))
         fi
     else
-        echo -e "${YELLOW}⚠ Build failed, skipping gemini tests${NC}"
+        echo -e "${YELLOW}⚠ Build failed, skipping smoke tests${NC}"
     fi
 fi
 
@@ -242,7 +242,7 @@ if [ $FAILED -eq 0 ]; then
     echo "  ✓ CLI Interface (22/22 tests passing)"
     echo "  ✓ Symbolic Execution (27/27 tests passing)"
     echo "  ✓ Call Graph (20/20 tests passing)"
-    echo "  ✓ Gemini Test Suite (100 vulnerability tests)"
+    echo "  ✓ Smoke Tests (17 languages)"
     echo "  ✓ Standard Library (12 OWASP queries)"
     echo ""
     echo "Ready for production use! 🚀"
