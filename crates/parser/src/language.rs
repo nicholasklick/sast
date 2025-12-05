@@ -28,9 +28,9 @@ pub enum Language {
     Swift,
     Kotlin,
     Scala,
-    Groovy,
     Lua,
     Perl,
+    Bash,
 }
 
 impl Language {
@@ -56,9 +56,9 @@ impl Language {
             "swift" => Ok(Language::Swift),
             "kt" | "kts" => Ok(Language::Kotlin),
             "scala" | "sc" => Ok(Language::Scala),
-            "groovy" | "gradle" | "gvy" | "gy" | "gsh" => Ok(Language::Groovy),
             "lua" => Ok(Language::Lua),
             "pl" | "pm" | "t" | "cgi" => Ok(Language::Perl),
+            "sh" | "bash" | "zsh" | "ksh" => Ok(Language::Bash),
             _ => Err(LanguageError::UnsupportedLanguage(extension.to_string())),
         }
     }
@@ -80,9 +80,9 @@ impl Language {
             Language::Swift => tree_sitter_swift::LANGUAGE.into(),
             Language::Kotlin => tree_sitter_kotlin_ng::LANGUAGE.into(),
             Language::Scala => tree_sitter_scala::LANGUAGE.into(),
-            Language::Groovy => tree_sitter_groovy::LANGUAGE.into(),
             Language::Lua => tree_sitter_lua::LANGUAGE.into(),
             Language::Perl => tree_sitter_perl::LANGUAGE.into(),
+            Language::Bash => tree_sitter_bash::LANGUAGE.into(),
         }
     }
 
@@ -102,9 +102,9 @@ impl Language {
             Language::Swift => "Swift",
             Language::Kotlin => "Kotlin",
             Language::Scala => "Scala",
-            Language::Groovy => "Groovy",
             Language::Lua => "Lua",
             Language::Perl => "Perl",
+            Language::Bash => "Bash",
         }
     }
 
@@ -124,9 +124,9 @@ impl Language {
             Language::Swift => &["swift"],
             Language::Kotlin => &["kt", "kts"],
             Language::Scala => &["scala", "sc"],
-            Language::Groovy => &["groovy", "gradle", "gvy", "gy", "gsh"],
             Language::Lua => &["lua"],
             Language::Perl => &["pl", "pm", "t", "cgi"],
+            Language::Bash => &["sh", "bash", "zsh", "ksh"],
         }
     }
 }

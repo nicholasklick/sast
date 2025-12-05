@@ -208,16 +208,17 @@ impl Parser {
             // Function/method calls - handle language-specific node types
             // JavaScript/TypeScript/Go/Rust/C/C++/Scala/Swift/Kotlin: call_expression
             // Python/Ruby: call
-            // Java/Groovy: method_invocation
+            // Java: method_invocation
             // C#: invocation_expression
-            // Groovy also: juxt_function_call
             // PHP: function_call_expression, member_call_expression, nullsafe_member_call_expression, scoped_call_expression
             // Lua: function_call
             // Perl: function_call_expression, method_call_expression, func0op_call_expression, func1op_call_expression, coderef_call_expression
-            "call_expression" | "call" | "method_invocation" | "invocation_expression" | "juxt_function_call"
+            // Bash: command
+            "call_expression" | "call" | "method_invocation" | "invocation_expression"
             | "function_call_expression" | "member_call_expression" | "nullsafe_member_call_expression" | "scoped_call_expression"
             | "function_call"
-            | "method_call_expression" | "func0op_call_expression" | "func1op_call_expression" | "coderef_call_expression" => {
+            | "method_call_expression" | "func0op_call_expression" | "func1op_call_expression" | "coderef_call_expression"
+            | "command" => {
                 self.parse_call_expression(node, source)
             }
             "member_expression" | "field_expression" => {

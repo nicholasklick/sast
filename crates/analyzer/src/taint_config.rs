@@ -31,6 +31,7 @@ impl LanguageTaintConfig {
             Language::Rust => Self::rust_config(),
             Language::Lua => Self::lua_config(),
             Language::Perl => Self::perl_config(),
+            Language::Bash => Self::bash_config(),
             _ => Self::generic_config(language),
         }
     }
@@ -1957,6 +1958,210 @@ impl LanguageTaintConfig {
             sources: Vec::new(),
             sinks: Vec::new(),
             sanitizers: Vec::new(),
+        }
+    }
+
+    /// Bash/Shell-specific taint configuration
+    fn bash_config() -> Self {
+        let mut sources = Vec::new();
+        let mut sinks = Vec::new();
+        let mut sanitizers = Vec::new();
+
+        // ============ BASH TAINT SOURCES ============
+
+        // User Input / Arguments
+        for name in &[
+            "$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9",
+            "$@",           // All positional parameters
+            "$*",           // All positional parameters as single string
+            "$#",           // Number of arguments
+            "read",         // Read from stdin
+            "REPLY",        // Default read variable
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::CommandLineArgument,
+                node_id: 0,
+            });
+        }
+
+        // Environment Variables
+        for name in &[
+            "$ENV",
+            "$HOME",
+            "$USER",
+            "$PATH",
+            "$PWD",
+            "$SHELL",
+            "$TERM",
+            "$LANG",
+            "$HTTP_PROXY",
+            "$HTTPS_PROXY",
+            "$NO_PROXY",
+            "printenv",
+            "env",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::EnvironmentVariable,
+                node_id: 0,
+            });
+        }
+
+        // File/Network Input
+        for name in &[
+            "cat",
+            "head",
+            "tail",
+            "less",
+            "more",
+            "curl",
+            "wget",
+            "nc",
+            "netcat",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::FileRead,
+                node_id: 0,
+            });
+        }
+
+        // ============ BASH TAINT SINKS ============
+
+        // Command Execution (Critical)
+        for name in &[
+            "eval",
+            "exec",
+            "source",
+            ".",              // source alias
+            "bash",
+            "sh",
+            "zsh",
+            "ksh",
+            "csh",
+            "tcsh",
+            "dash",
+            "xargs",
+            "nohup",
+            "sudo",
+            "su",
+            "ssh",
+            "sshpass",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CommandExecution,
+                node_id: 0,
+            });
+        }
+
+        // File Operations
+        for name in &[
+            "rm",
+            "rmdir",
+            "mv",
+            "cp",
+            "ln",
+            "chmod",
+            "chown",
+            "chgrp",
+            "touch",
+            "mkdir",
+            "mktemp",
+            "tee",
+            "dd",
+            "install",
+            "shred",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::FileWrite,
+                node_id: 0,
+            });
+        }
+
+        // Network Operations (SSRF potential)
+        for name in &[
+            "curl",
+            "wget",
+            "nc",
+            "netcat",
+            "socat",
+            "telnet",
+            "ftp",
+            "sftp",
+            "scp",
+            "rsync",
+            "ping",
+            "nmap",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::NetworkSend,
+                node_id: 0,
+            });
+        }
+
+        // Output (potential information disclosure)
+        for name in &[
+            "echo",
+            "printf",
+            "cat",
+            "logger",
+            "wall",
+            "write",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::LogOutput,
+                node_id: 0,
+            });
+        }
+
+        // SQL/Database
+        for name in &[
+            "mysql",
+            "psql",
+            "sqlite3",
+            "mongosh",
+            "redis-cli",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::SqlQuery,
+                node_id: 0,
+            });
+        }
+
+        // ============ BASH SANITIZERS ============
+
+        sanitizers.extend(vec![
+            // Quoting
+            "printf '%q'".to_string(),
+            // Validation
+            "[[ -f".to_string(),
+            "[[ -d".to_string(),
+            "[[ -e".to_string(),
+            "[[ -r".to_string(),
+            "[[ -w".to_string(),
+            "test".to_string(),
+            // Path normalization
+            "realpath".to_string(),
+            "readlink".to_string(),
+            "basename".to_string(),
+            "dirname".to_string(),
+            // Type checking
+            "declare -i".to_string(),
+            // Escaping
+            "sed 's/[^a-zA-Z0-9]//g'".to_string(),
+        ]);
+
+        Self {
+            language: Language::Bash,
+            sources,
+            sinks,
+            sanitizers,
         }
     }
 }
