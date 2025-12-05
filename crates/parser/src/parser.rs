@@ -213,9 +213,11 @@ impl Parser {
             // Groovy also: juxt_function_call
             // PHP: function_call_expression, member_call_expression, nullsafe_member_call_expression, scoped_call_expression
             // Lua: function_call
+            // Perl: function_call_expression, method_call_expression, func0op_call_expression, func1op_call_expression, coderef_call_expression
             "call_expression" | "call" | "method_invocation" | "invocation_expression" | "juxt_function_call"
             | "function_call_expression" | "member_call_expression" | "nullsafe_member_call_expression" | "scoped_call_expression"
-            | "function_call" => {
+            | "function_call"
+            | "method_call_expression" | "func0op_call_expression" | "func1op_call_expression" | "coderef_call_expression" => {
                 self.parse_call_expression(node, source)
             }
             "member_expression" | "field_expression" => {
@@ -1452,11 +1454,17 @@ impl Parser {
         }
 
         // Ruby: combine "receiver" and "method" fields
+        // Perl method_call_expression: combine "invocant" and "method" fields
         if let Some(method_node) = node.child_by_field_name("method") {
             let method = method_node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
             if let Some(recv_node) = node.child_by_field_name("receiver") {
                 let recv = recv_node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
                 return Some(format!("{}.{}", recv, method));
+            }
+            // Perl: invocant field (e.g., $obj->method())
+            if let Some(inv_node) = node.child_by_field_name("invocant") {
+                let inv = inv_node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+                return Some(format!("{}->{}", inv, method));
             }
             return Some(method);
         }

@@ -30,6 +30,7 @@ pub enum Language {
     Scala,
     Groovy,
     Lua,
+    Perl,
 }
 
 impl Language {
@@ -57,6 +58,7 @@ impl Language {
             "scala" | "sc" => Ok(Language::Scala),
             "groovy" | "gradle" | "gvy" | "gy" | "gsh" => Ok(Language::Groovy),
             "lua" => Ok(Language::Lua),
+            "pl" | "pm" | "t" | "cgi" => Ok(Language::Perl),
             _ => Err(LanguageError::UnsupportedLanguage(extension.to_string())),
         }
     }
@@ -80,6 +82,7 @@ impl Language {
             Language::Scala => tree_sitter_scala::LANGUAGE.into(),
             Language::Groovy => tree_sitter_groovy::LANGUAGE.into(),
             Language::Lua => tree_sitter_lua::LANGUAGE.into(),
+            Language::Perl => tree_sitter_perl::LANGUAGE.into(),
         }
     }
 
@@ -101,6 +104,7 @@ impl Language {
             Language::Scala => "Scala",
             Language::Groovy => "Groovy",
             Language::Lua => "Lua",
+            Language::Perl => "Perl",
         }
     }
 
@@ -122,6 +126,7 @@ impl Language {
             Language::Scala => &["scala", "sc"],
             Language::Groovy => &["groovy", "gradle", "gvy", "gy", "gsh"],
             Language::Lua => &["lua"],
+            Language::Perl => &["pl", "pm", "t", "cgi"],
         }
     }
 }

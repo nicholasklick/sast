@@ -30,6 +30,7 @@ impl LanguageTaintConfig {
             Language::Swift => Self::swift_config(),
             Language::Rust => Self::rust_config(),
             Language::Lua => Self::lua_config(),
+            Language::Perl => Self::perl_config(),
             _ => Self::generic_config(language),
         }
     }
@@ -1655,6 +1656,294 @@ impl LanguageTaintConfig {
 
         Self {
             language: Language::Lua,
+            sources,
+            sinks,
+            sanitizers,
+        }
+    }
+
+    /// Perl-specific taint configuration
+    fn perl_config() -> Self {
+        let mut sources = Vec::new();
+        let mut sinks = Vec::new();
+        let mut sanitizers = Vec::new();
+
+        // ============ PERL TAINT SOURCES ============
+
+        // CGI/Web Input
+        for name in &[
+            "param",            // CGI.pm param()
+            "Vars",             // CGI->Vars()
+            "url_param",        // CGI url_param()
+            "query_string",
+            "path_info",
+            "cookie",           // CGI cookie()
+            "header",
+            "request_uri",
+            "remote_host",
+            "remote_addr",
+            "user_agent",
+            "referer",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // Standard Input/File
+        for name in &[
+            "<STDIN>",
+            "<>",               // Diamond operator
+            "readline",
+            "getc",
+            "read",
+            "<ARGV>",
+            "readdir",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // Environment
+        for name in &[
+            "%ENV",
+            "$ENV",
+            "getenv",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::EnvironmentVariable,
+                node_id: 0,
+            });
+        }
+
+        // Database Results (DBI)
+        for name in &[
+            "fetchrow_array",
+            "fetchrow_arrayref",
+            "fetchrow_hashref",
+            "fetchall_arrayref",
+            "fetchall_hashref",
+            "selectrow_array",
+            "selectrow_arrayref",
+            "selectrow_hashref",
+            "selectall_arrayref",
+            "selectall_hashref",
+            "selectcol_arrayref",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::DatabaseQuery,
+                node_id: 0,
+            });
+        }
+
+        // HTTP Clients (LWP, HTTP::Tiny, Mojo)
+        for name in &[
+            "get",              // LWP::Simple get()
+            "getprint",
+            "getstore",
+            "request",          // HTTP::Request
+            "decoded_content",
+            "content",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::NetworkRequest,
+                node_id: 0,
+            });
+        }
+
+        // ============ PERL TAINT SINKS ============
+
+        // Command Execution (Critical)
+        for name in &[
+            "system",
+            "exec",
+            "qx",               // Backticks equivalent
+            "`",                // Backticks
+            "open",             // Pipe open
+            "open2",
+            "open3",
+            "IPC::Open2::open2",
+            "IPC::Open3::open3",
+            "readpipe",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CommandExecution,
+                node_id: 0,
+            });
+        }
+
+        // Code Evaluation (Critical)
+        for name in &[
+            "eval",
+            "do",               // do FILE
+            "require",
+            "use",
+            "BEGIN",
+            "INIT",
+            "CHECK",
+            "UNITCHECK",
+            "END",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CodeEval,
+                node_id: 0,
+            });
+        }
+
+        // SQL Injection (DBI)
+        for name in &[
+            "prepare",
+            "do",               // DBI do()
+            "execute",
+            "selectrow_array",
+            "selectrow_arrayref",
+            "selectrow_hashref",
+            "selectall_arrayref",
+            "selectall_hashref",
+            "selectcol_arrayref",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::SqlQuery,
+                node_id: 0,
+            });
+        }
+
+        // File Operations
+        for name in &[
+            "open",
+            "sysopen",
+            "unlink",
+            "rmdir",
+            "mkdir",
+            "rename",
+            "link",
+            "symlink",
+            "chmod",
+            "chown",
+            "truncate",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::FileWrite,
+                node_id: 0,
+            });
+        }
+
+        // XSS/HTML Output
+        for name in &[
+            "print",
+            "say",
+            "printf",
+            "sprintf",
+            "write",
+            "header",           // CGI header
+            "start_html",
+            "end_html",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::HtmlOutput,
+                node_id: 0,
+            });
+        }
+
+        // Network/SSRF
+        for name in &[
+            "get",              // LWP::Simple
+            "getprint",
+            "getstore",
+            "request",
+            "IO::Socket::INET->new",
+            "IO::Socket::SSL->new",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::NetworkSend,
+                node_id: 0,
+            });
+        }
+
+        // Deserialization (use CodeEval since it can lead to code execution)
+        for name in &[
+            "thaw",             // Storable
+            "retrieve",         // Storable
+            "fd_retrieve",
+            "YAML::Load",
+            "YAML::LoadFile",
+            "JSON::decode_json",
+            "decode_json",
+            "from_json",
+            "XMLin",            // XML::Simple
+            "Data::Dumper",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CodeEval,
+                node_id: 0,
+            });
+        }
+
+        // Log Injection
+        for name in &[
+            "warn",
+            "die",
+            "carp",
+            "croak",
+            "cluck",
+            "confess",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::LogOutput,
+                node_id: 0,
+            });
+        }
+
+        // ============ PERL SANITIZERS ============
+
+        sanitizers.extend(vec![
+            // Taint-mode untainting
+            "untaint".to_string(),
+            // HTML/URL encoding
+            "escapeHTML".to_string(),
+            "escape".to_string(),
+            "encode_entities".to_string(),
+            "uri_escape".to_string(),
+            "url_encode".to_string(),
+            "CGI::escape".to_string(),
+            "HTML::Entities::encode_entities".to_string(),
+            "URI::Escape::uri_escape".to_string(),
+            // SQL
+            "quote".to_string(),        // DBI quote()
+            "quote_identifier".to_string(),
+            "placeholder".to_string(),
+            // Validation
+            "looks_like_number".to_string(),
+            "defined".to_string(),
+            "length".to_string(),
+            // Type coercion
+            "int".to_string(),
+            "sprintf".to_string(),      // When used for type coercion
+            // Path validation
+            "abs_path".to_string(),
+            "canonpath".to_string(),
+            "File::Spec->canonpath".to_string(),
+            "File::Spec->rel2abs".to_string(),
+        ]);
+
+        Self {
+            language: Language::Perl,
             sources,
             sinks,
             sanitizers,
