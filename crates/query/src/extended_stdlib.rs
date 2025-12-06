@@ -1856,39 +1856,53 @@ impl ExtendedStandardLibrary {
     // Cryptography queries (continued in next part due to length)
     fn weak_hash_query() -> Query {
         // Note: Pattern should NOT match SHA1PRNG (PRNG algorithm, not hash) or SecureRandom
-        // It should only match actual hash function calls
-        // We need to check both:
-        // 1. Callee for direct calls (hashlib.md5(), createHash('md5'))
-        // 2. Full text for cases where hash type is an argument (hashlib.new('md5'))
+        // It should only match actual weak hash function calls (MD5, SHA-1)
+        // Strong hashes (SHA-256, SHA-384, SHA-512, SHA-3) should NOT be flagged
+        //
+        // We check the full text to ensure the argument specifies a weak hash algorithm
+        // Note: Rust regex crate doesn't support lookahead, so we exclude SHA1PRNG separately
         Query::new(
             FromClause::new(EntityType::CallExpression, "call".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Or {
-                    left: Box::new(Predicate::Comparison {
-                        left: Expression::PropertyAccess {
-                            object: Box::new(Expression::Variable("call".to_string())),
-                            property: "callee".to_string(),
-                        },
-                        operator: ComparisonOp::Matches,
-                        // Match hash function callee patterns (direct calls)
-                        // - md5, sha1 as function names
-                        // - hashlib.md5(), hashlib.sha1() - Python direct
-                        // - MessageDigest.getInstance - Java (getInstance itself)
-                        // Exclude: SHA1PRNG, SecureRandom
-                        right: Expression::String("(?i)(\\bmd5\\b|\\bsha1\\b(?!prng)|hashlib\\.md5|hashlib\\.sha1|MessageDigest\\.getInstance|createHash)".to_string()),
+                Predicate::And {
+                    left: Box::new(Predicate::Or {
+                        left: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "callee".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            // Match direct calls to weak hash functions (function name IS the algorithm)
+                            // - hashlib.md5(), hashlib.sha1() - Python direct (note: callee is hashlib.md5)
+                            // - md5(), sha1() - standalone calls
+                            // Note: Do NOT match MessageDigest.getInstance here - algorithm is in argument
+                            right: Expression::String("(?i)(\\bmd5\\b|\\bsha-?1\\b|hashlib\\.md5|hashlib\\.sha1)".to_string()),
+                        }),
+                        right: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            // Match full text patterns where hash type is an argument
+                            // Only match MD5 or SHA-1 as the algorithm argument
+                            // - hashlib.new('md5'), hashlib.new('sha1') - Python
+                            // - createHash('md5'), createHash('sha1') - Node.js
+                            // - MessageDigest.getInstance("MD5"), MessageDigest.getInstance("SHA-1") - Java
+                            // Note: SHA-1 can be written as "SHA1", "SHA-1", "sha1", "sha-1"
+                            right: Expression::String("(?i)(hashlib\\.new.*['\"]md5['\"]|hashlib\\.new.*['\"]sha-?1['\"]|createHash.*['\"]md5['\"]|createHash.*['\"]sha-?1['\"]|getInstance\\s*\\(\\s*['\"]MD5['\"]|getInstance\\s*\\(\\s*['\"]SHA-?1['\"])".to_string()),
+                        }),
                     }),
-                    right: Box::new(Predicate::Comparison {
-                        left: Expression::PropertyAccess {
-                            object: Box::new(Expression::Variable("call".to_string())),
-                            property: "text".to_string(),
-                        },
-                        operator: ComparisonOp::Matches,
-                        // Match full text patterns where hash type is an argument
-                        // - hashlib.new('md5'), hashlib.new('sha1') - Python
-                        // - createHash('md5'), createHash('sha1') - Node.js
-                        // - MessageDigest.getInstance("MD5") - Java
-                        // Exclude: SHA1PRNG
-                        right: Expression::String("(?i)(hashlib\\.new\\s*\\(\\s*['\"](?:md5|sha1)['\"]|createHash\\s*\\(\\s*['\"](?:md5|sha1)['\"]|getInstance\\s*\\(\\s*['\"](?:MD5|SHA-?1)['\"](?!PRNG))".to_string()),
+                    // Exclude SHA1PRNG (secure random number generator, not a hash)
+                    right: Box::new(Predicate::Not {
+                        predicate: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            right: Expression::String("(?i)SHA1PRNG".to_string()),
+                        }),
                     }),
                 },
             ])),

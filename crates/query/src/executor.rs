@@ -304,12 +304,7 @@ impl QueryExecutor {
                 let pattern = right.as_string();
                 let text = left.as_string();
                 if let Ok(regex) = Regex::new(&pattern) {
-                    let result = regex.is_match(&text);
-                    // Debug: trace pattern matching for hashlib/md5 detection
-                    if pattern.contains("md5") || pattern.contains("sha1") || text.contains("hashlib") {
-                        eprintln!("DEBUG Regex match: pattern='{}' text='{}' result={}", pattern, text, result);
-                    }
-                    result
+                    regex.is_match(&text)
                 } else {
                     false
                 }
