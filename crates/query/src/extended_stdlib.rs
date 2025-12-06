@@ -1353,13 +1353,18 @@ impl ExtendedStandardLibrary {
     }
 
     fn nosql_injection_query() -> Query {
+        // Note: Only match NoSQL-specific method names
+        // Generic "find", "update" methods should NOT be matched
         Query::new(
             FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
                 Predicate::MethodName {
                     variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    value: "(?i)(find|findOne|update|remove|aggregate)".to_string(),
+                    // More specific NoSQL/MongoDB methods:
+                    // - findOne, findOneAndUpdate are MongoDB-specific
+                    // - Generic "find" matches too many APIs (List.find, Stream.find, etc.)
+                    value: "(?i)(findOne|findOneAndUpdate|findOneAndDelete|updateOne|updateMany|deleteOne|deleteMany|\\$where)".to_string(),
                 },
                 Predicate::FunctionCall {
                     variable: "mc".to_string(),
@@ -1850,6 +1855,8 @@ impl ExtendedStandardLibrary {
 
     // Cryptography queries (continued in next part due to length)
     fn weak_hash_query() -> Query {
+        // Note: Pattern should NOT match SHA1PRNG (PRNG algorithm, not hash) or SecureRandom
+        // It should only match actual hash function calls
         Query::new(
             FromClause::new(EntityType::CallExpression, "call".to_string()),
             Some(WhereClause::new(vec![
@@ -1859,7 +1866,12 @@ impl ExtendedStandardLibrary {
                         property: "callee".to_string(),
                     },
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(md5|sha1|createHash.*md5|createHash.*sha1)".to_string()),
+                    // Match hash function calls but NOT PRNG algorithms
+                    // - md5, sha1 as function names
+                    // - createHash('md5'), createHash('sha1')
+                    // - MessageDigest.getInstance("MD5"), MessageDigest.getInstance("SHA-1")
+                    // Exclude: SHA1PRNG, SecureRandom
+                    right: Expression::String("(?i)(\\bmd5\\b|\\bsha1\\b(?!prng)|createHash.*md5|createHash.*sha1|MessageDigest.*MD5|MessageDigest.*SHA-1)".to_string()),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
@@ -1928,6 +1940,10 @@ impl ExtendedStandardLibrary {
     }
 
     fn hardcoded_crypto_key_query() -> Query {
+        // Match variables that look like hardcoded cryptographic keys
+        // Avoid false positives for:
+        // - rememberMeKey, cookieKey (session identifiers, not crypto keys)
+        // - secretaryName, secretValue (not crypto secrets)
         Query::new(
             FromClause::new(EntityType::VariableDeclaration, "vd".to_string()),
             Some(WhereClause::new(vec![
@@ -1937,7 +1953,10 @@ impl ExtendedStandardLibrary {
                         property: "name".to_string(),
                     },
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(key|encryptionKey|secret)".to_string()),
+                    // More specific: look for actual crypto key patterns
+                    // - aesKey, desKey, rsaKey, encryptionKey, secretKey, privateKey, apiKey
+                    // Exclude common FPs: rememberMeKey, secretaryName, etc.
+                    right: Expression::String("(?i)(^(aes|des|rsa|encryption|private|api|jwt|signing|crypto|auth)_?key$|^secret_?key$|^(ENCRYPTION|PRIVATE|SECRET|API)_KEY$)".to_string()),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
@@ -2590,6 +2609,8 @@ impl ExtendedStandardLibrary {
 
     // Framework-specific queries
     fn express_weak_session_secret_query() -> Query {
+        // Match Express.js session middleware patterns, NOT Java's getSession()
+        // Express patterns: express-session, session({ secret: ... })
         Query::new(
             FromClause::new(EntityType::CallExpression, "call".to_string()),
             Some(WhereClause::new(vec![
@@ -2598,8 +2619,12 @@ impl ExtendedStandardLibrary {
                         object: Box::new(Expression::Variable("call".to_string())),
                         property: "callee".to_string(),
                     },
-                    operator: ComparisonOp::Contains,
-                    right: Expression::String("session".to_string()),
+                    operator: ComparisonOp::Matches,
+                    // Match Express-specific session patterns:
+                    // - session({ ... }) - the express-session middleware
+                    // - app.use(session(...))
+                    // Exclude Java's getSession(), HttpSession, etc.
+                    right: Expression::String("^session$|express-session|cookieSession".to_string()),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
@@ -2630,13 +2655,18 @@ impl ExtendedStandardLibrary {
     }
 
     fn mongodb_injection_query() -> Query {
+        // Note: Only match MongoDB-specific method names, not generic ones like "update"
+        // MessageDigest.update() should NOT be flagged as MongoDB injection
         Query::new(
             FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
                 Predicate::MethodName {
                     variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    value: "(?i)(find|findOne|findOneAndUpdate|findOneAndDelete|update|updateOne|updateMany|delete|deleteOne|deleteMany|aggregate|where)".to_string(),
+                    // More specific MongoDB methods to avoid FPs:
+                    // - findOne, findOneAndUpdate, findOneAndDelete are MongoDB-specific
+                    // - Generic "find", "update", "delete" should be avoided as they match other APIs
+                    value: "(?i)(collection\\.find|findOne|findOneAndUpdate|findOneAndDelete|updateOne|updateMany|deleteOne|deleteMany|insertOne|insertMany|aggregate|\\$where)".to_string(),
                 },
                 Predicate::FunctionCall {
                     variable: "mc".to_string(),

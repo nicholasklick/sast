@@ -840,9 +840,10 @@ impl LanguageTaintConfig {
         }
 
         // XSS/HTML Output
+        // Note: Markup is NOT a sink - markupsafe.escape() returns Markup which is safe
+        // mark_safe is a Django function that marks untrusted input as safe WITHOUT escaping
         for name in &[
             "render_template_string",
-            "Markup",
             "mark_safe",
             "format_html",
             "innerHTML",

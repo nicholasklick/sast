@@ -875,8 +875,9 @@ impl OwaspRuleLibrary {
             ));
         }
 
-        // Python/Django XSS (5 rules)
-        let py_xss_funcs = vec!["mark_safe", "format_html", "Markup", "HttpResponse", "render"];
+        // Python/Django XSS (4 rules)
+        // Note: Markup is NOT a sink - markupsafe.escape() returns Markup which is safe
+        let py_xss_funcs = vec!["mark_safe", "format_html", "HttpResponse", "render"];
         for (idx, func) in py_xss_funcs.iter().enumerate() {
             rules.push((
                 RuleMetadata {

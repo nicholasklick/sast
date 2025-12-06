@@ -32,6 +32,8 @@ pub enum SafeSinkPattern {
     SubprocessWithList,
     /// Compiled XPath expression
     CompiledXPath,
+    /// Input sanitized (e.g., quote escaping)
+    SanitizedInput,
     /// No safe pattern detected
     None,
 }
@@ -162,7 +164,17 @@ impl LanguageTaintHandler for PythonTaintHandler {
             AstNodeKind::Literal { value } => match value {
                 LiteralValue::Number(n) => n.parse::<i64>().ok().map(SymbolicValue::Concrete),
                 LiteralValue::Boolean(b) => Some(SymbolicValue::ConcreteBool(*b)),
-                LiteralValue::String(s) => Some(SymbolicValue::ConcreteString(s.clone())),
+                LiteralValue::String(s) => {
+                    // Strip outer quotes if present (Python AST often includes them)
+                    let text = s.trim();
+                    let content = if (text.starts_with('"') && text.ends_with('"')) ||
+                                   (text.starts_with('\'') && text.ends_with('\'')) {
+                        text[1..text.len()-1].to_string()
+                    } else {
+                        text.to_string()
+                    };
+                    Some(SymbolicValue::ConcreteString(content))
+                }
                 LiteralValue::Null => Some(SymbolicValue::Null),
                 LiteralValue::Undefined => Some(SymbolicValue::Undefined),
             },
@@ -269,6 +281,13 @@ impl LanguageTaintHandler for PythonTaintHandler {
         if method == "run" || method == "popen" || method == "call" {
             if self.is_subprocess_with_list(node) {
                 return SafeSinkPattern::SubprocessWithList;
+            }
+        }
+
+        // Check for XPath with quote escaping (.replace('\'', '&apos;'))
+        if method == "xpath" || method == "select" {
+            if self.has_xpath_quote_escaping(node) {
+                return SafeSinkPattern::SanitizedInput;
             }
         }
 
@@ -387,6 +406,25 @@ impl PythonTaintHandler {
         }
         false
     }
+
+    /// Check if XPath query has quote escaping (e.g., .replace('\'', '&apos;'))
+    /// This is a safe pattern for XPath injection
+    fn has_xpath_quote_escaping(&self, node: &AstNode) -> bool {
+        // Recursively search the node text for quote escaping patterns
+        let text = &node.text;
+
+        // Check for .replace('\'', '&apos;') or .replace("'", "&apos;") patterns
+        if text.contains(".replace") && text.contains("&apos;") {
+            return true;
+        }
+
+        // Check for .replace('\'', "'") or similar quote escaping
+        if text.contains(".replace") && (text.contains("\\'") || text.contains("\"'\"")) {
+            return true;
+        }
+
+        false
+    }
 }
 
 // ============================================================================
@@ -441,7 +479,17 @@ impl LanguageTaintHandler for JavaTaintHandler {
             AstNodeKind::Literal { value } => match value {
                 LiteralValue::Number(n) => n.parse::<i64>().ok().map(SymbolicValue::Concrete),
                 LiteralValue::Boolean(b) => Some(SymbolicValue::ConcreteBool(*b)),
-                LiteralValue::String(s) => Some(SymbolicValue::ConcreteString(s.clone())),
+                LiteralValue::String(s) => {
+                    // Strip outer quotes if present (AST often includes them)
+                    let text = s.trim();
+                    let content = if (text.starts_with('"') && text.ends_with('"')) ||
+                                   (text.starts_with('\'') && text.ends_with('\'')) {
+                        text[1..text.len()-1].to_string()
+                    } else {
+                        text.to_string()
+                    };
+                    Some(SymbolicValue::ConcreteString(content))
+                }
                 LiteralValue::Null => Some(SymbolicValue::Null),
                 LiteralValue::Undefined => Some(SymbolicValue::Undefined),
             },

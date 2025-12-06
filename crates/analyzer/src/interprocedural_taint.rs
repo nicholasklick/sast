@@ -921,6 +921,126 @@ impl InterproceduralTaintAnalysis {
                 return;
             }
 
+            // Handle Python match statement with constant propagation
+            AstNodeKind::Other { node_type } if node_type == "match_statement" => {
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[DEBUG] match_statement with {} children:", node.children.len());
+                    for (i, child) in node.children.iter().enumerate() {
+                        eprintln!("[DEBUG]   child[{}]: {:?}", i, child.kind);
+                    }
+                }
+
+                // Find the subject (first identifier or expression after "match")
+                let subject_node = node.children.iter().find(|c| {
+                    matches!(&c.kind, AstNodeKind::Identifier { .. }) ||
+                    matches!(&c.kind, AstNodeKind::Other { node_type } if node_type != "match" && node_type != ":" && node_type != "case_clause" && node_type != "block")
+                });
+
+                if let Some(subject) = subject_node {
+                    let subject_value = self.evaluate_symbolic(subject, sym_state);
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG]   match subject = {:?}", subject_value);
+
+                    // If we have a concrete value, try to find the matching case
+                    if let SymbolicValue::ConcreteString(ref val) = subject_value {
+                        // Find the block containing case clauses (tree-sitter puts cases inside a block)
+                        let block_node = node.children.iter().find(|c| {
+                            matches!(&c.kind, AstNodeKind::Block)
+                        });
+
+                        #[cfg(debug_assertions)]
+                        if let Some(ref block) = block_node {
+                            eprintln!("[DEBUG]   Found block with {} children:", block.children.len());
+                            for (i, c) in block.children.iter().enumerate() {
+                                eprintln!("[DEBUG]     block_child[{}]: {:?}", i, c.kind);
+                            }
+                        }
+
+                        // Get case clauses from the block or directly from match_statement
+                        // They appear as SwitchCase nodes in our AST
+                        let case_clauses: Vec<_> = if let Some(block) = block_node {
+                            block.children.iter()
+                                .filter(|c| matches!(&c.kind, AstNodeKind::SwitchCase { .. }) ||
+                                           matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "case_clause"))
+                                .collect()
+                        } else {
+                            node.children.iter()
+                                .filter(|c| matches!(&c.kind, AstNodeKind::SwitchCase { .. }) ||
+                                           matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "case_clause"))
+                                .collect()
+                        };
+
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG]   Found {} case clauses", case_clauses.len());
+
+                        for case_clause in &case_clauses {
+                            #[cfg(debug_assertions)]
+                            {
+                                eprintln!("[DEBUG]   case_clause: {:?}", case_clause.kind);
+                                for (i, c) in case_clause.children.iter().enumerate() {
+                                    eprintln!("[DEBUG]     [{}]: {:?} = '{}'", i, c.kind, c.text.lines().next().unwrap_or(""));
+                                }
+                            }
+
+                            // Check if this case's pattern matches
+                            let pattern_matches = case_clause.children.iter().any(|pattern_child| {
+                                // Look for string literal patterns like 'B' or "B"
+                                if let Some(pattern_val) = self.language_handler.evaluate_literal(pattern_child) {
+                                    if let SymbolicValue::ConcreteString(ref pattern_str) = pattern_val {
+                                        #[cfg(debug_assertions)]
+                                        eprintln!("[DEBUG]     Comparing pattern '{}' with subject '{}'", pattern_str, val);
+                                        return pattern_str == val;
+                                    }
+                                }
+                                // Also check for case_pattern nodes
+                                if let AstNodeKind::Other { node_type } = &pattern_child.kind {
+                                    if node_type == "case_pattern" {
+                                        // Look for string literals inside the pattern
+                                        for inner in &pattern_child.children {
+                                            if let Some(pattern_val) = self.language_handler.evaluate_literal(inner) {
+                                                if let SymbolicValue::ConcreteString(ref pattern_str) = pattern_val {
+                                                    #[cfg(debug_assertions)]
+                                                    eprintln!("[DEBUG]     Comparing inner pattern '{}' with subject '{}'", pattern_str, val);
+                                                    return pattern_str == val;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                false
+                            });
+
+                            // Check for default case (typically has "_" pattern)
+                            let is_default = case_clause.children.iter().any(|c| c.text.trim() == "_");
+
+                            if pattern_matches {
+                                // This case matches - analyze only this branch at current depth
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG]   Found matching case for '{}'", val);
+                                for case_child in &case_clause.children {
+                                    // Skip the pattern itself, just process the body (block)
+                                    if matches!(&case_child.kind, AstNodeKind::Block) ||
+                                       matches!(&case_child.kind, AstNodeKind::Other { node_type } if node_type == "block") {
+                                        self.track_taint_in_ast_with_depth(case_child, tainted_vars, vulnerabilities, branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
+                                    }
+                                }
+                                return;
+                            } else if is_default {
+                                // Default case - only use if no other case matched
+                                // (handled by falling through if no pattern_matches)
+                            }
+                        }
+                    }
+                }
+
+                // If we can't determine the match, analyze all branches conservatively
+                for child in &node.children {
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
+                }
+                return;
+            }
+
             AstNodeKind::WhileStatement | AstNodeKind::ForStatement { .. } | AstNodeKind::DoWhileStatement => {
                 // Inside a loop, we can't do strong updates
                 for child in &node.children {
@@ -1057,6 +1177,46 @@ impl InterproceduralTaintAnalysis {
                 } else {
                     SymbolicValue::Unknown
                 }
+            }
+
+            // Handle Python subscript (string/list indexing): possible[1]
+            // This is critical for match statement constant propagation
+            AstNodeKind::Other { node_type } if node_type == "subscript" => {
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[DEBUG] Subscript with {} children:", node.children.len());
+                    for (i, child) in node.children.iter().enumerate() {
+                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
+                    }
+                }
+                // Python subscript structure: base[index]
+                // children are typically: [base, "[", index, "]"] or [base, index]
+                if let Some(base_node) = node.children.first() {
+                    let base_val = self.evaluate_symbolic(base_node, sym_state);
+
+                    // Find the index - skip "[" brackets
+                    let index_node = node.children.iter().find(|c| {
+                        !matches!(&c.kind, AstNodeKind::Other { node_type }
+                            if node_type == "[" || node_type == "]")
+                        && c.id != base_node.id
+                    });
+
+                    if let Some(idx_node) = index_node {
+                        let idx_val = self.evaluate_symbolic(idx_node, sym_state);
+
+                        // If we have a concrete string and concrete index, extract the character
+                        if let (SymbolicValue::ConcreteString(s), SymbolicValue::Concrete(idx)) = (&base_val, &idx_val) {
+                            let idx = *idx as usize;
+                            if idx < s.len() {
+                                let ch = s.chars().nth(idx).unwrap_or('\0');
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG]   Subscript result: '{}'[{}] = '{}'", s, idx, ch);
+                                return SymbolicValue::ConcreteString(ch.to_string());
+                            }
+                        }
+                    }
+                }
+                SymbolicValue::Unknown
             }
 
             // For call expressions, function results, etc. - return Unknown
@@ -1331,6 +1491,16 @@ impl InterproceduralTaintAnalysis {
                         return self.analyze_method_return_taint(&method, &tainted_param_indices);
                     }
                     return false;
+                }
+
+                // Check for XPath/SQL quote escaping pattern: .replace("'", "&apos;")
+                // This is a common sanitization pattern that prevents injection
+                if callee.ends_with(".replace") {
+                    if self.is_quote_escaping_pattern(node) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG]   .replace with quote escaping pattern - treating as sanitizer");
+                        return false;
+                    }
                 }
 
                 // Fallback: If this is NOT a sanitizer and ANY argument is tainted,
@@ -1620,6 +1790,29 @@ impl InterproceduralTaintAnalysis {
             let sanitizer_lower = s.to_lowercase();
             name_lower.contains(&sanitizer_lower)
         })
+    }
+
+    /// Check if a .replace() call is a quote escaping pattern that sanitizes injection
+    /// Examples: .replace("'", "&apos;"), .replace("'", "''"), .replace("\"", "&quot;")
+    fn is_quote_escaping_pattern(&self, node: &AstNode) -> bool {
+        let text = &node.text;
+
+        // Check for XPath/XML quote escaping: .replace("'", "&apos;") or .replace('\'', '&apos;')
+        if text.contains("&apos;") || text.contains("&quot;") {
+            return true;
+        }
+
+        // Check for SQL quote doubling: .replace("'", "''")
+        if text.contains("''") {
+            return true;
+        }
+
+        // Check for backslash escaping: .replace("'", "\\'")
+        if text.contains("\\\\'") || text.contains("\\\\\"") {
+            return true;
+        }
+
+        false
     }
 
     /// Detect validation guard patterns in if statements.
