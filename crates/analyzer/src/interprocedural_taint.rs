@@ -1728,10 +1728,14 @@ impl InterproceduralTaintAnalysis {
         }
 
         // Common method names that should NOT match by method name alone
+        // These are too generic and cause false positives when matching specific sinks
+        // Note: Do NOT add "digest" here - needed for hash detection (MessageDigest.digest)
+        // Note: Do NOT add "query", "select", "insert", "delete" - needed for SQL detection
         let common_methods = [
             "get", "set", "put", "add", "remove", "contains", "size", "length",
             "open", "close", "read", "write", "run", "call", "send", "recv",
             "parse", "format", "str", "int", "float", "list", "dict",
+            "append", // Common non-security method
         ];
         let method_name_lower = method_name.to_lowercase();
         let is_common_method = common_methods.contains(&method_name_lower.as_str());

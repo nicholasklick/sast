@@ -1857,21 +1857,39 @@ impl ExtendedStandardLibrary {
     fn weak_hash_query() -> Query {
         // Note: Pattern should NOT match SHA1PRNG (PRNG algorithm, not hash) or SecureRandom
         // It should only match actual hash function calls
+        // We need to check both:
+        // 1. Callee for direct calls (hashlib.md5(), createHash('md5'))
+        // 2. Full text for cases where hash type is an argument (hashlib.new('md5'))
         Query::new(
             FromClause::new(EntityType::CallExpression, "call".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
-                    operator: ComparisonOp::Matches,
-                    // Match hash function calls but NOT PRNG algorithms
-                    // - md5, sha1 as function names
-                    // - createHash('md5'), createHash('sha1')
-                    // - MessageDigest.getInstance("MD5"), MessageDigest.getInstance("SHA-1")
-                    // Exclude: SHA1PRNG, SecureRandom
-                    right: Expression::String("(?i)(\\bmd5\\b|\\bsha1\\b(?!prng)|createHash.*md5|createHash.*sha1|MessageDigest.*MD5|MessageDigest.*SHA-1)".to_string()),
+                Predicate::Or {
+                    left: Box::new(Predicate::Comparison {
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("call".to_string())),
+                            property: "callee".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        // Match hash function callee patterns (direct calls)
+                        // - md5, sha1 as function names
+                        // - hashlib.md5(), hashlib.sha1() - Python direct
+                        // - MessageDigest.getInstance - Java (getInstance itself)
+                        // Exclude: SHA1PRNG, SecureRandom
+                        right: Expression::String("(?i)(\\bmd5\\b|\\bsha1\\b(?!prng)|hashlib\\.md5|hashlib\\.sha1|MessageDigest\\.getInstance|createHash)".to_string()),
+                    }),
+                    right: Box::new(Predicate::Comparison {
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("call".to_string())),
+                            property: "text".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        // Match full text patterns where hash type is an argument
+                        // - hashlib.new('md5'), hashlib.new('sha1') - Python
+                        // - createHash('md5'), createHash('sha1') - Node.js
+                        // - MessageDigest.getInstance("MD5") - Java
+                        // Exclude: SHA1PRNG
+                        right: Expression::String("(?i)(hashlib\\.new\\s*\\(\\s*['\"](?:md5|sha1)['\"]|createHash\\s*\\(\\s*['\"](?:md5|sha1)['\"]|getInstance\\s*\\(\\s*['\"](?:MD5|SHA-?1)['\"](?!PRNG))".to_string()),
+                    }),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
