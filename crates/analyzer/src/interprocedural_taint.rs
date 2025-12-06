@@ -264,8 +264,12 @@ impl InterproceduralTaintAnalysis {
         // Track list sizes for precise index-based taint tracking
         let mut list_sizes: HashMap<String, usize> = HashMap::new();
 
+        // Track variables that have been validated for path traversal
+        // (e.g., after `if '../' in var: return` guard)
+        let mut path_sanitized_vars: HashSet<String> = HashSet::new();
+
         // Traverse AST and track taint with symbolic evaluation
-        self.track_taint_in_ast(ast, &mut tainted_vars, &mut vulnerabilities, &mut sym_state, &mut list_sizes);
+        self.track_taint_in_ast(ast, &mut tainted_vars, &mut vulnerabilities, &mut sym_state, &mut list_sizes, &mut path_sanitized_vars);
 
         TaintAnalysisResult { vulnerabilities }
     }
@@ -276,6 +280,7 @@ impl InterproceduralTaintAnalysis {
     /// - STRONG UPDATES for assignments that are unconditionally executed
     /// - CONSTANT PROPAGATION to eliminate infeasible branches
     /// - INDEX-AWARE LIST TRACKING for ArrayList operations
+    /// - PATH TRAVERSAL VALIDATION GUARDS (detecting '../' in var checks)
     fn track_taint_in_ast(
         &self,
         node: &AstNode,
@@ -283,8 +288,9 @@ impl InterproceduralTaintAnalysis {
         vulnerabilities: &mut Vec<TaintVulnerability>,
         sym_state: &mut SymbolicState,
         list_sizes: &mut HashMap<String, usize>,
+        path_sanitized_vars: &mut HashSet<String>,
     ) {
-        self.track_taint_in_ast_with_depth(node, tainted_vars, vulnerabilities, 0, sym_state, list_sizes);
+        self.track_taint_in_ast_with_depth(node, tainted_vars, vulnerabilities, 0, 0, sym_state, list_sizes, path_sanitized_vars);
     }
 
     /// Internal taint tracking with depth tracking for strong updates
@@ -293,20 +299,34 @@ impl InterproceduralTaintAnalysis {
     /// we're currently inside. When branch_depth == 0, we can safely
     /// perform strong updates (kill taint on clean assignments).
     ///
+    /// The `ast_depth` parameter tracks recursion depth to prevent stack overflow.
+    ///
     /// The `sym_state` parameter tracks symbolic values for constant propagation,
     /// allowing us to eliminate infeasible branches.
     ///
     /// The `list_sizes` parameter tracks the current size of each ArrayList
     /// for precise index-based taint tracking.
+    ///
+    /// The `path_sanitized_vars` parameter tracks variables validated for path traversal
+    /// through patterns like `if '../' in var: return` - after such a guard, the variable
+    /// is known to NOT contain path traversal sequences.
     fn track_taint_in_ast_with_depth(
         &self,
         node: &AstNode,
         tainted_vars: &mut HashSet<String>,
         vulnerabilities: &mut Vec<TaintVulnerability>,
         branch_depth: usize,
+        ast_depth: usize,
         sym_state: &mut SymbolicState,
         list_sizes: &mut HashMap<String, usize>,
+        path_sanitized_vars: &mut HashSet<String>,
     ) {
+        // Prevent stack overflow on deeply nested ASTs
+        const MAX_AST_DEPTH: usize = 500;
+        if ast_depth > MAX_AST_DEPTH {
+            return;
+        }
+
         match &node.kind {
             // Variable declaration with initialization
             AstNodeKind::VariableDeclaration { name, .. } => {
@@ -322,7 +342,7 @@ impl InterproceduralTaintAnalysis {
                 // First, process all children to handle nested declarations and expressions
                 // This ensures ternaries are evaluated before we check for taint
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth, sym_state, list_sizes);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
                 }
 
                 // Track the symbolic value of this variable
@@ -642,8 +662,9 @@ impl InterproceduralTaintAnalysis {
                 let mut local_tainted = HashSet::new();
                 let mut local_sym_state = SymbolicState::new();
                 let mut local_list_sizes = HashMap::new();
+                let mut local_path_sanitized = HashSet::new();
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, &mut local_tainted, vulnerabilities, 0, &mut local_sym_state, &mut local_list_sizes);
+                    self.track_taint_in_ast_with_depth(child, &mut local_tainted, vulnerabilities, 0, ast_depth + 1, &mut local_sym_state, &mut local_list_sizes, &mut local_path_sanitized);
                 }
                 return; // Don't propagate local taint to parent scope
             }
@@ -683,7 +704,7 @@ impl InterproceduralTaintAnalysis {
                                 eprintln!("[DEBUG]   True branch: {:?} = '{}'", true_branch.kind, true_branch.text.lines().next().unwrap_or(""));
                                 self.track_taint_in_ast_with_depth(
                                     true_branch, tainted_vars, vulnerabilities,
-                                    branch_depth, sym_state, list_sizes
+                                    branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
                                 );
                             }
                             return;
@@ -693,7 +714,7 @@ impl InterproceduralTaintAnalysis {
                             if let Some(false_branch) = node.children.get(2) {
                                 self.track_taint_in_ast_with_depth(
                                     false_branch, tainted_vars, vulnerabilities,
-                                    branch_depth, sym_state, list_sizes
+                                    branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
                                 );
                             }
                             return;
@@ -704,7 +725,7 @@ impl InterproceduralTaintAnalysis {
                             for child in &node.children {
                                 self.track_taint_in_ast_with_depth(
                                     child, tainted_vars, vulnerabilities,
-                                    branch_depth + 1, sym_state, list_sizes
+                                    branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
                                 );
                             }
                             return;
@@ -713,7 +734,7 @@ impl InterproceduralTaintAnalysis {
                 }
                 // Fallback: analyze all children with incremented depth
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, sym_state, list_sizes);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
                 }
                 return;
             }
@@ -731,7 +752,7 @@ impl InterproceduralTaintAnalysis {
                             if let Some(then_branch) = node.children.get(2) {
                                 self.track_taint_in_ast_with_depth(
                                     then_branch, tainted_vars, vulnerabilities,
-                                    branch_depth, sym_state, list_sizes
+                                    branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
                                 );
                             }
                             return;
@@ -745,7 +766,7 @@ impl InterproceduralTaintAnalysis {
                                     if !matches!(&else_branch.kind, AstNodeKind::Other { node_type } if node_type == "else") {
                                         self.track_taint_in_ast_with_depth(
                                             else_branch, tainted_vars, vulnerabilities,
-                                            branch_depth, sym_state, list_sizes
+                                            branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
                                         );
                                     }
                                 }
@@ -757,7 +778,7 @@ impl InterproceduralTaintAnalysis {
                             for child in &node.children {
                                 self.track_taint_in_ast_with_depth(
                                     child, tainted_vars, vulnerabilities,
-                                    branch_depth + 1, sym_state, list_sizes
+                                    branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
                                 );
                             }
                             return;
@@ -766,7 +787,7 @@ impl InterproceduralTaintAnalysis {
                 }
                 // Fallback
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, sym_state, list_sizes);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
                 }
                 return;
             }
@@ -774,7 +795,7 @@ impl InterproceduralTaintAnalysis {
             AstNodeKind::SwitchStatement { .. } | AstNodeKind::SwitchCase { .. } => {
                 // Inside a switch, we can't do strong updates
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, sym_state, list_sizes);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
                 }
                 return;
             }
@@ -782,7 +803,7 @@ impl InterproceduralTaintAnalysis {
             AstNodeKind::WhileStatement | AstNodeKind::ForStatement { .. } | AstNodeKind::DoWhileStatement => {
                 // Inside a loop, we can't do strong updates
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, sym_state, list_sizes);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
                 }
                 return;
             }
@@ -790,7 +811,7 @@ impl InterproceduralTaintAnalysis {
             AstNodeKind::TryStatement | AstNodeKind::CatchClause { .. } => {
                 // Inside try/catch, we can't do strong updates
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, sym_state, list_sizes);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
                 }
                 return;
             }
@@ -800,7 +821,7 @@ impl InterproceduralTaintAnalysis {
 
         // Recursively process children (preserving branch depth)
         for child in &node.children {
-            self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth, sym_state, list_sizes);
+            self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
         }
     }
 
@@ -1227,9 +1248,10 @@ impl InterproceduralTaintAnalysis {
 
         // Analyze the method body to track taint flow
         let mut vulnerabilities = Vec::new();
+        let mut local_path_sanitized: HashSet<String> = HashSet::new();
         for child in &method.children {
             self.track_taint_in_ast_with_depth(
-                child, &mut local_tainted, &mut vulnerabilities, 0, &mut local_sym_state, &mut local_list_sizes
+                child, &mut local_tainted, &mut vulnerabilities, 0, 0, &mut local_sym_state, &mut local_list_sizes, &mut local_path_sanitized
             );
         }
 
@@ -1643,9 +1665,10 @@ mod tests {
         let mut vulnerabilities = Vec::new();
         let mut sym_state = SymbolicState::new();
         let mut list_sizes: HashMap<String, usize> = HashMap::new();
+        let mut path_sanitized_vars: HashSet<String> = HashSet::new();
 
         // Process at branch_depth 0 - should do strong update
-        analysis.track_taint_in_ast_with_depth(&assignment, &mut tainted_vars, &mut vulnerabilities, 0, &mut sym_state, &mut list_sizes);
+        analysis.track_taint_in_ast_with_depth(&assignment, &mut tainted_vars, &mut vulnerabilities, 0, 0, &mut sym_state, &mut list_sizes, &mut path_sanitized_vars);
 
         // x should no longer be tainted
         assert!(!tainted_vars.contains("x"), "Strong update should kill taint for x");
@@ -1696,9 +1719,10 @@ mod tests {
         let mut vulnerabilities = Vec::new();
         let mut sym_state = SymbolicState::new();
         let mut list_sizes: HashMap<String, usize> = HashMap::new();
+        let mut path_sanitized_vars: HashSet<String> = HashSet::new();
 
         // Process at branch_depth 1 - should NOT do strong update
-        analysis.track_taint_in_ast_with_depth(&assignment, &mut tainted_vars, &mut vulnerabilities, 1, &mut sym_state, &mut list_sizes);
+        analysis.track_taint_in_ast_with_depth(&assignment, &mut tainted_vars, &mut vulnerabilities, 1, 0, &mut sym_state, &mut list_sizes, &mut path_sanitized_vars);
 
         // x should STILL be tainted (conservative behavior)
         assert!(tainted_vars.contains("x"), "Should NOT do strong update inside a branch");
