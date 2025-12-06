@@ -406,6 +406,45 @@ impl InterproceduralTaintAnalysis {
                     // Check if RHS is tainted (use symbolic evaluation for ternaries)
                     let rhs_tainted = self.is_node_tainted_with_sym(rhs, tainted_vars, sym_state);
 
+                    // Handle Python dictionary subscript assignment: map['key'] = value
+                    // LHS is Other { node_type: "subscript" }
+                    if matches!(&lhs.kind, AstNodeKind::Other { node_type } if node_type == "subscript") {
+                        // Extract base variable and key from subscript
+                        // Python subscript structure: base[key] -> children are [base, "[", key, "]"] or [base, key]
+                        let base_var = lhs.children.first().map(|n| {
+                            if let AstNodeKind::Identifier { name } = &n.kind {
+                                name.clone()
+                            } else {
+                                n.text.trim().to_string()
+                            }
+                        });
+
+                        // Extract key - look for string literal in children
+                        let key = lhs.children.iter().find_map(|child| {
+                            match &child.kind {
+                                AstNodeKind::Literal { value: LiteralValue::String(s) } => {
+                                    Some(s.trim_matches(|c| c == '\'' || c == '"').to_string())
+                                }
+                                _ if child.text.starts_with('\'') || child.text.starts_with('"') => {
+                                    let text = child.text.trim_matches(|c| c == '\'' || c == '"');
+                                    Some(text.to_string())
+                                }
+                                _ => None
+                            }
+                        });
+
+                        if let (Some(base), Some(key)) = (base_var, key) {
+                            let map_key = format!("{}[{}]", base, key);
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG] Subscript assignment: {} = rhs_tainted={}", map_key, rhs_tainted);
+                            if rhs_tainted {
+                                tainted_vars.insert(map_key);
+                            } else {
+                                tainted_vars.remove(&map_key);
+                            }
+                        }
+                    }
+
                     // Extract LHS variable name
                     if let AstNodeKind::Identifier { name } = &lhs.kind {
                         #[cfg(debug_assertions)]
@@ -611,13 +650,11 @@ impl InterproceduralTaintAnalysis {
                     }
                 }
 
-                // Check if this is a source - if so, mark result as tainted
-                if self.is_source_function(callee) {
-                    // The result of this call is tainted
-                    // We need to find what variable it's assigned to
-                    // For now, we track the callee name as tainted
-                    tainted_vars.insert(callee.clone());
-                }
+                // Note: Source function detection is now handled in AssignmentExpression
+                // and VariableDeclaration handlers via is_node_tainted_with_sym().
+                // We don't add the callee name directly to tainted_vars here because
+                // that would incorrectly treat the function NAME as tainted rather than
+                // its RESULT.
 
                 // Check if this is a sink with tainted data
                 if self.is_sink_function(callee) {
@@ -670,6 +707,8 @@ impl InterproceduralTaintAnalysis {
             }
 
             // Conditional expression (ternary) - use constant propagation!
+            // Python: `value if condition else other` → [true_val, "if", condition, "else", false_val]
+            // Java/C: `condition ? value : other` → [condition, "?", true_val, ":", false_val]
             AstNodeKind::ConditionalExpression { test, .. } => {
                 // Debug: log the ternary expression
                 #[cfg(debug_assertions)]
@@ -683,8 +722,24 @@ impl InterproceduralTaintAnalysis {
                     }
                 }
 
+                // Detect Python vs Java/C ternary by checking child[1]
+                let is_python_ternary = node.children.get(1).map_or(false, |c| {
+                    matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "if")
+                });
+
+                // Get correct indices based on ternary style
+                let (condition_idx, true_idx, false_idx) = if is_python_ternary {
+                    (2, 0, 4) // Python: condition at 2, true at 0, false at 4
+                } else {
+                    (0, 2, 4) // Java/C: condition at 0, true at 2, false at 4
+                };
+
+                #[cfg(debug_assertions)]
+                eprintln!("[DEBUG]   is_python_ternary={}, indices: cond={}, true={}, false={}",
+                         is_python_ternary, condition_idx, true_idx, false_idx);
+
                 // Try to evaluate the condition symbolically
-                if let Some(condition_node) = node.children.first() {
+                if let Some(condition_node) = node.children.get(condition_idx) {
                     let condition = self.evaluate_symbolic(condition_node, sym_state);
                     #[cfg(debug_assertions)]
                     eprintln!("[DEBUG]   Evaluated condition: {:?}", condition);
@@ -693,13 +748,9 @@ impl InterproceduralTaintAnalysis {
                     match condition.as_definite_bool() {
                         Some(true) => {
                             // Condition is DEFINITELY TRUE - only analyze true branch
-                            // This handles patterns like: (7*18)+106 > 200 ? "safe" : tainted
-                            // For Java ternary with 5 children: [condition, ?, true_expr, :, false_expr]
-                            // true_expr is at index 2, not 1
-                            let true_branch_idx = if node.children.len() == 5 { 2 } else { 1 };
                             #[cfg(debug_assertions)]
-                            eprintln!("[DEBUG]   Condition is TRUE, using true branch at index {}", true_branch_idx);
-                            if let Some(true_branch) = node.children.get(true_branch_idx) {
+                            eprintln!("[DEBUG]   Condition is TRUE, using true branch at index {}", true_idx);
+                            if let Some(true_branch) = node.children.get(true_idx) {
                                 #[cfg(debug_assertions)]
                                 eprintln!("[DEBUG]   True branch: {:?} = '{}'", true_branch.kind, true_branch.text.lines().next().unwrap_or(""));
                                 self.track_taint_in_ast_with_depth(
@@ -711,7 +762,7 @@ impl InterproceduralTaintAnalysis {
                         }
                         Some(false) => {
                             // Condition is DEFINITELY FALSE - only analyze false branch
-                            if let Some(false_branch) = node.children.get(2) {
+                            if let Some(false_branch) = node.children.get(false_idx) {
                                 self.track_taint_in_ast_with_depth(
                                     false_branch, tainted_vars, vulnerabilities,
                                     branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
@@ -742,8 +793,62 @@ impl InterproceduralTaintAnalysis {
             // If statement - also use constant propagation
             // Java if_statement structure: "if" parenthesized_expression then_clause [else_clause]
             AstNodeKind::IfStatement => {
-                // Find the condition (parenthesized_expression) - it's at index 1 (after "if" keyword)
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[DEBUG] IfStatement found with {} children:", node.children.len());
+                    for (i, child) in node.children.iter().enumerate() {
+                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
+                    }
+                }
+                // Find the condition - at index 1 (after "if" keyword)
+                // Then branch varies by language:
+                // - Java/C: index 2 (if_statement structure: if parenthesized_expression statement)
+                // - Python: index 3 (if_statement structure: if condition : block)
+                let then_branch_idx = if node.children.len() == 4 &&
+                    matches!(&node.children.get(2).map(|c| &c.kind), Some(AstNodeKind::Other { node_type }) if node_type == ":") {
+                    3 // Python style
+                } else {
+                    2 // Java/C style
+                };
+
                 if let Some(condition_node) = node.children.get(1) {
+                    // Check for validation guard pattern BEFORE evaluating condition
+                    // Pattern: if '<dangerous>' in var: return
+                    // This means after the if, the variable is guaranteed NOT to contain the dangerous pattern
+                    if let Some(then_branch) = node.children.get(then_branch_idx) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] Checking validation guard: condition='{}' then_branch={:?}", condition_node.text, then_branch.kind);
+                        if let Some(sanitized_var) = self.detect_validation_guard(condition_node, then_branch) {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG] Found validation guard for variable '{}' - will sanitize after if block", sanitized_var);
+                            // Found a validation guard!
+                            // Process the then-branch (it might have findings)
+                            self.track_taint_in_ast_with_depth(
+                                then_branch, tainted_vars, vulnerabilities,
+                                branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
+                            );
+                            // Process any else branch
+                            for i in 3..node.children.len() {
+                                if let Some(else_branch) = node.children.get(i) {
+                                    if !matches!(&else_branch.kind, AstNodeKind::Other { node_type } if node_type == "else") {
+                                        self.track_taint_in_ast_with_depth(
+                                            else_branch, tainted_vars, vulnerabilities,
+                                            branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
+                                        );
+                                    }
+                                }
+                            }
+                            // Mark the variable as sanitized
+                            // Code AFTER this if statement knows the dangerous pattern is not in the var
+                            // Remove from tainted_vars since it has been validated
+                            path_sanitized_vars.insert(sanitized_var.clone());
+                            tainted_vars.remove(&sanitized_var);
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG] Removed '{}' from tainted_vars after validation guard", sanitized_var);
+                            return;
+                        }
+                    }
+
                     let condition = self.evaluate_symbolic(condition_node, sym_state);
 
                     match condition.as_definite_bool() {
@@ -845,6 +950,70 @@ impl InterproceduralTaintAnalysis {
             AstNodeKind::Identifier { name } => {
                 // Look up in symbolic state
                 sym_state.get(name)
+            }
+
+            // Handle Python integer/float types that aren't recognized as Literal
+            AstNodeKind::Other { node_type } if node_type == "integer" || node_type == "float" => {
+                node.text.trim().parse::<i64>()
+                    .map(SymbolicValue::Concrete)
+                    .unwrap_or(SymbolicValue::Unknown)
+            }
+
+            // Handle Python comparison_operator (like "7 * 18 + num > 200")
+            AstNodeKind::Other { node_type } if node_type == "comparison_operator" => {
+                // Python comparison has children: [left, operator, right]
+                // e.g., "7 * 18 + num > 200" -> [expression, ">", 200]
+                if node.children.len() >= 3 {
+                    let left = self.evaluate_symbolic(&node.children[0], sym_state);
+                    let right = self.evaluate_symbolic(&node.children[2], sym_state);
+
+                    // Find the operator (middle child is usually a token like ">", "<", etc.)
+                    let op_text = node.children.get(1).map(|c| c.text.trim()).unwrap_or("");
+
+                    let op = match op_text {
+                        "==" => BinaryOperator::Equal,
+                        "!=" => BinaryOperator::NotEqual,
+                        "<" => BinaryOperator::LessThan,
+                        "<=" => BinaryOperator::LessThanOrEqual,
+                        ">" => BinaryOperator::GreaterThan,
+                        ">=" => BinaryOperator::GreaterThanOrEqual,
+                        _ => return SymbolicValue::Unknown,
+                    };
+
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] Python comparison: left={:?} {} right={:?}", left, op_text, right);
+
+                    SymbolicValue::binary(op, left, right).simplify()
+                } else {
+                    SymbolicValue::Unknown
+                }
+            }
+
+            // Handle Python binary_operator (like "7 * 18 + num")
+            AstNodeKind::Other { node_type } if node_type == "binary_operator" => {
+                // Python binary_operator has children: [left, operator, right]
+                if node.children.len() >= 3 {
+                    let left = self.evaluate_symbolic(&node.children[0], sym_state);
+                    let right = self.evaluate_symbolic(&node.children[2], sym_state);
+
+                    let op_text = node.children.get(1).map(|c| c.text.trim()).unwrap_or("");
+
+                    let op = match op_text {
+                        "+" => BinaryOperator::Add,
+                        "-" => BinaryOperator::Subtract,
+                        "*" => BinaryOperator::Multiply,
+                        "/" => BinaryOperator::Divide,
+                        "%" => BinaryOperator::Modulo,
+                        _ => return SymbolicValue::Unknown,
+                    };
+
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] Python binary_operator: left={:?} {} right={:?}", left, op_text, right);
+
+                    SymbolicValue::binary(op, left, right).simplify()
+                } else {
+                    SymbolicValue::Unknown
+                }
             }
 
             AstNodeKind::BinaryExpression { operator } => {
@@ -983,23 +1152,34 @@ impl InterproceduralTaintAnalysis {
             AstNodeKind::Identifier { name } => tainted_vars.contains(name),
 
             // Handle conditional expressions (ternaries) with symbolic evaluation
+            // Python: `value if condition else other` → [true_val, "if", condition, "else", false_val]
+            // Java/C: `condition ? value : other` → [condition, "?", true_val, ":", false_val]
             AstNodeKind::ConditionalExpression { .. } => {
-                if let Some(condition_node) = node.children.first() {
+                // Detect Python vs Java/C ternary by checking child[1]
+                let is_python_ternary = node.children.get(1).map_or(false, |c| {
+                    matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "if")
+                });
+
+                // Get correct indices based on ternary style
+                let (condition_idx, true_idx, false_idx) = if is_python_ternary {
+                    (2, 0, 4) // Python: condition at 2, true at 0, false at 4
+                } else {
+                    (0, 2, 4) // Java/C: condition at 0, true at 2, false at 4
+                };
+
+                if let Some(condition_node) = node.children.get(condition_idx) {
                     let condition = self.evaluate_symbolic(condition_node, sym_state);
                     match condition.as_definite_bool() {
                         Some(true) => {
                             // Condition is definitely TRUE - only check true branch
-                            // For 5 children: [cond, ?, true_expr, :, false_expr]
-                            let true_branch_idx = if node.children.len() == 5 { 2 } else { 1 };
-                            if let Some(true_branch) = node.children.get(true_branch_idx) {
+                            if let Some(true_branch) = node.children.get(true_idx) {
                                 return self.is_node_tainted_with_sym(true_branch, tainted_vars, sym_state);
                             }
                             false
                         }
                         Some(false) => {
                             // Condition is definitely FALSE - only check false branch
-                            let false_branch_idx = if node.children.len() == 5 { 4 } else { 2 };
-                            if let Some(false_branch) = node.children.get(false_branch_idx) {
+                            if let Some(false_branch) = node.children.get(false_idx) {
                                 return self.is_node_tainted_with_sym(false_branch, tainted_vars, sym_state);
                             }
                             false
@@ -1027,6 +1207,52 @@ impl InterproceduralTaintAnalysis {
                     return true;
                 }
                 // Check children for nested member expressions
+                node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
+            }
+
+            // Handle Python subscript access: map['key'] or arr[index]
+            AstNodeKind::Other { node_type } if node_type == "subscript" => {
+                // Extract base variable and key from subscript
+                // Python subscript structure: base[key] -> children are [base, key] or [base, "[", key, "]"]
+                let base_var: Option<String> = node.children.first().map(|n| {
+                    if let AstNodeKind::Identifier { name } = &n.kind {
+                        name.clone()
+                    } else {
+                        n.text.trim().to_string()
+                    }
+                });
+
+                // Extract key - look for string literal in children
+                let key = node.children.iter().find_map(|child| {
+                    match &child.kind {
+                        AstNodeKind::Literal { value: LiteralValue::String(s) } => {
+                            Some(s.trim_matches(|c| c == '\'' || c == '"').to_string())
+                        }
+                        _ if child.text.starts_with('\'') || child.text.starts_with('"') => {
+                            let text = child.text.trim_matches(|c| c == '\'' || c == '"');
+                            Some(text.to_string())
+                        }
+                        _ => None
+                    }
+                });
+
+                if let (Some(base), Some(key)) = (base_var.as_ref(), key) {
+                    let map_key = format!("{}[{}]", base, key);
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] is_node_tainted: checking subscript '{}', result={}", map_key, tainted_vars.contains(&map_key));
+                    if tainted_vars.contains(&map_key) {
+                        return true;
+                    }
+                }
+
+                // Also check if the base variable itself is tainted
+                if let Some(base) = base_var.as_ref() {
+                    if tainted_vars.contains(base) {
+                        return true;
+                    }
+                }
+
+                // Fall through to check children
                 node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
             }
 
@@ -1179,7 +1405,28 @@ impl InterproceduralTaintAnalysis {
 
     /// Check if function call has tainted arguments
     fn has_tainted_arguments(&self, node: &AstNode, tainted_vars: &HashSet<String>, sym_state: &SymbolicState) -> bool {
-        for child in &node.children {
+        // For CallExpression, we only want to check the ARGUMENTS, not the callee
+        // Structure is typically: [callee, argument_list] or [callee, "(", arg1, arg2, ..., ")"]
+        // The callee is the receiver object (e.g., root.xpath) and should NOT be considered
+        // when determining if the arguments are tainted.
+
+        for (idx, child) in node.children.iter().enumerate() {
+            // Skip the first child if it's the callee (attribute or identifier)
+            // Callees are typically: Identifier, MemberExpression, attribute, etc.
+            if idx == 0 {
+                let is_callee = match &child.kind {
+                    AstNodeKind::Identifier { .. } => true,
+                    AstNodeKind::MemberExpression { .. } => true,
+                    AstNodeKind::Other { node_type } => {
+                        node_type == "attribute" || node_type == "identifier"
+                    }
+                    _ => false,
+                };
+                if is_callee {
+                    continue;
+                }
+            }
+
             if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
                 #[cfg(debug_assertions)]
                 eprintln!("[DEBUG]   Found tainted child: {:?} = '{}'", child.kind, child.text.lines().next().unwrap_or(""));
@@ -1321,10 +1568,17 @@ impl InterproceduralTaintAnalysis {
 
         // Fall back to legacy sources
         let name_lower = name.to_lowercase();
-        self.sources.iter().any(|s| {
+        let result = self.sources.iter().any(|s| {
             let source_lower = s.name.to_lowercase();
-            name_lower.contains(&source_lower) || source_lower.contains(&name_lower)
-        })
+            let matches = name_lower.contains(&source_lower) || source_lower.contains(&name_lower);
+            #[cfg(debug_assertions)]
+            if matches {
+                eprintln!("[DEBUG] is_source_function: '{}' matched source '{}' (name_contains_src={}, src_contains_name={})",
+                    name, s.name, name_lower.contains(&source_lower), source_lower.contains(&name_lower));
+            }
+            matches
+        });
+        result
     }
 
     /// Check if a member expression path matches a source pattern
@@ -1364,7 +1618,11 @@ impl InterproceduralTaintAnalysis {
         }
 
         // Common method names that should NOT match by method name alone
-        let common_methods = ["get", "set", "put", "add", "remove", "contains", "size", "length"];
+        let common_methods = [
+            "get", "set", "put", "add", "remove", "contains", "size", "length",
+            "open", "close", "read", "write", "run", "call", "send", "recv",
+            "parse", "format", "str", "int", "float", "list", "dict",
+        ];
         let method_name_lower = method_name.to_lowercase();
         let is_common_method = common_methods.contains(&method_name_lower.as_str());
 
@@ -1374,9 +1632,22 @@ impl InterproceduralTaintAnalysis {
             let sink_lower = s.name.to_lowercase();
             let sink_method = s.name.split('.').last().unwrap_or(&s.name).to_lowercase();
 
-            // Match by full name or partial name
-            if name_lower.contains(&sink_lower) || sink_lower.contains(&name_lower) {
+            // Exact match (most reliable)
+            if name_lower == sink_lower {
                 return true;
+            }
+
+            // Match by full name (name contains sink or vice versa)
+            // But only if it's not a common method causing a false match
+            if !is_common_method {
+                // Check if name contains the sink (e.g., "my.execute" contains "execute")
+                if name_lower.contains(&sink_lower) {
+                    return true;
+                }
+                // Check if sink contains name - but be careful with substrings
+                if sink_lower.ends_with(&format!(".{}", name_lower)) || sink_lower == name_lower {
+                    return true;
+                }
             }
 
             // Match by method name only if it's not a common method
@@ -1411,6 +1682,100 @@ impl InterproceduralTaintAnalysis {
         })
     }
 
+    /// Detect validation guard patterns in if statements.
+    /// Returns Some(var_name) if the condition is checking for a dangerous pattern in a variable
+    /// and the then-branch contains an early return/exit.
+    /// Pattern: `if '<dangerous_pattern>' in var: return`
+    fn detect_validation_guard(&self, condition: &AstNode, then_branch: &AstNode) -> Option<String> {
+        // First check if the then-branch has an early return
+        if !self.has_early_return(then_branch) {
+            return None;
+        }
+
+        // Check for patterns like:
+        // - Python: if '<dangerous>' in var
+        // - Java: if (str.contains("<dangerous>"))
+        // The dangerous patterns we care about:
+        // - '../' or '..' for path traversal
+        // - "'" for SQL/XPath injection
+        // - '<' or '>' for XSS
+
+        let condition_text = condition.text.to_lowercase();
+
+        // Python pattern: 'pattern' in var or "pattern" in var
+        // Also handles: if '../' in bar, if '\'' in bar
+        if condition_text.contains(" in ") {
+            // Extract the variable being checked
+            // Pattern: <something> in <var>
+            if let Some(in_pos) = condition_text.find(" in ") {
+                let after_in = &condition_text[in_pos + 4..];
+                // Extract variable name (might have trailing : or other chars)
+                let var_name: String = after_in
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+
+                if !var_name.is_empty() {
+                    // Check if the pattern being searched is a dangerous one
+                    let before_in = &condition_text[..in_pos];
+                    let is_path_guard = before_in.contains("../") || before_in.contains("..");
+                    let is_injection_guard = before_in.contains("'") || before_in.contains("\"");
+                    let is_xss_guard = before_in.contains("<") || before_in.contains(">");
+
+                    if is_path_guard || is_injection_guard || is_xss_guard {
+                        return Some(var_name);
+                    }
+                }
+            }
+        }
+
+        // Java pattern: str.contains("pattern") or var.indexOf("pattern") >= 0
+        if condition_text.contains(".contains(") || condition_text.contains(".indexof(") {
+            // Extract the object the method is called on
+            if let Some(dot_pos) = condition_text.find('.') {
+                let var_name: String = condition_text[..dot_pos]
+                    .chars()
+                    .rev()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect();
+
+                if !var_name.is_empty() {
+                    // Check for dangerous patterns in the argument
+                    let is_path_guard = condition_text.contains("../") || condition_text.contains("..");
+                    let is_injection_guard = condition_text.contains("'") || condition_text.contains("\\\"");
+
+                    if is_path_guard || is_injection_guard {
+                        return Some(var_name);
+                    }
+                }
+            }
+        }
+
+        // Python: var.startswith('safe') pattern - inverse guard
+        // If startswith check passes AND doesn't return, the var is safe
+        // But this is opposite - we handle the case where startswith fails
+        // For now, skip this more complex pattern
+
+        None
+    }
+
+    /// Check if a node or any of its descendants contains a return statement
+    fn has_early_return(&self, node: &AstNode) -> bool {
+        match &node.kind {
+            AstNodeKind::ReturnStatement => true,
+            AstNodeKind::ThrowStatement { .. } => true,
+            // Also consider raise in Python (represented as CallExpression to "raise")
+            AstNodeKind::CallExpression { callee, .. } if callee == "raise" => true,
+            _ => {
+                // Check children
+                node.children.iter().any(|c| self.has_early_return(c))
+            }
+        }
+    }
+
     fn find_sink_by_name(&self, name: &str) -> Option<&TaintSink> {
         let name_lower = name.to_lowercase();
         // Extract just the method name (after last .)
@@ -1418,16 +1783,38 @@ impl InterproceduralTaintAnalysis {
 
         // Common method names that should NOT match by method name alone
         // These require class/object context to match
-        let common_methods = ["get", "set", "put", "add", "remove", "contains", "size", "length"];
+        let common_methods = [
+            "get", "set", "put", "add", "remove", "contains", "size", "length",
+            "open", "close", "read", "write", "run", "call", "send", "recv",
+            "parse", "format", "str", "int", "float", "list", "dict",
+        ];
         let is_common_method = common_methods.contains(&method_name.as_str());
+
+        // Also check if the sink would match via substring and that's problematic
+        // e.g., "open" should not match "os.popen" just because popen contains open
 
         let result = self.sinks.iter().find(|s| {
             let sink_lower = s.name.to_lowercase();
             let sink_method = s.name.split('.').last().unwrap_or(&s.name).to_lowercase();
 
-            // Match by full name or partial name
-            if name_lower.contains(&sink_lower) || sink_lower.contains(&name_lower) {
+            // Exact match (most reliable)
+            if name_lower == sink_lower {
                 return true;
+            }
+
+            // Match by full name (name contains sink or vice versa)
+            // But only if it's not a common method causing a false match
+            // e.g., "open" should not match "os.popen" just because popen contains open
+            if !is_common_method {
+                // Check if name contains the sink (e.g., "my.execute" contains "execute")
+                if name_lower.contains(&sink_lower) {
+                    return true;
+                }
+                // Check if sink contains name - but be careful with substrings
+                // Only match if the name appears as a complete word in the sink
+                if sink_lower.ends_with(&format!(".{}", name_lower)) || sink_lower == name_lower {
+                    return true;
+                }
             }
 
             // Match by method name only if it's not a common method
