@@ -324,6 +324,9 @@ impl AstBasedTaintTransferFunction {
                     variable: var,
                     source: taint.source.clone(),
                     sanitized: false,
+                    flow_state: taint.flow_state,
+                    sanitized_for: taint.sanitized_for.clone(),
+                    content_path: taint.content_path.clone(),
                     taint_condition: taint.taint_condition.clone(),
                     sanitized_condition: taint.sanitized_condition.clone(),
                 });
@@ -359,6 +362,9 @@ impl AstBasedTaintTransferFunction {
                             variable: taint.variable,
                             source: taint.source,
                             sanitized: true,
+                            flow_state: taint.flow_state,
+                            sanitized_for: taint.sanitized_for.clone(),
+                            content_path: taint.content_path.clone(),
                             taint_condition: taint.taint_condition.clone(),
                             sanitized_condition: taint.sanitized_condition.clone(),
                         });
@@ -393,6 +399,9 @@ impl AstBasedTaintTransferFunction {
                         variable: name.clone(),
                         source: taint.source,
                         sanitized: false,
+                        flow_state: taint.flow_state,
+                        sanitized_for: taint.sanitized_for.clone(),
+                        content_path: taint.content_path.clone(),
                         taint_condition: taint.taint_condition.clone(),
                         sanitized_condition: taint.sanitized_condition.clone(),
                     });

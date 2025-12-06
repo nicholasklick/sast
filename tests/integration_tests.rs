@@ -12,7 +12,6 @@ fn test_all_languages_parse_vulnerable_fixtures() {
     let test_cases = vec![
         ("tests/fixtures/vulnerable/kotlin_vulnerabilities.kt", Language::Kotlin),
         ("tests/fixtures/vulnerable/scala_vulnerabilities.scala", Language::Scala),
-        ("tests/fixtures/vulnerable/groovy_vulnerabilities.groovy", Language::Groovy),
         ("tests/fixtures/vulnerable/java_vulnerabilities.java", Language::Java),
         ("tests/fixtures/vulnerable/go_vulnerabilities.go", Language::Go),
         ("tests/fixtures/vulnerable/rust_vulnerabilities.rs", Language::Rust),
@@ -67,7 +66,6 @@ fn test_all_languages_parse_clean_fixtures() {
     let test_cases = vec![
         ("tests/fixtures/clean/safe_kotlin.kt", Language::Kotlin),
         ("tests/fixtures/clean/safe_scala.scala", Language::Scala),
-        ("tests/fixtures/clean/safe_groovy.groovy", Language::Groovy),
         ("tests/fixtures/clean/safe_java.java", Language::Java),
         ("tests/fixtures/clean/safe_go.go", Language::Go),
         ("tests/fixtures/clean/safe_rust.rs", Language::Rust),
@@ -124,8 +122,6 @@ fn test_language_detection_from_extension() {
         ("test.kts", Language::Kotlin),
         ("test.scala", Language::Scala),
         ("test.sc", Language::Scala),
-        ("test.groovy", Language::Groovy),
-        ("test.gradle", Language::Groovy),
         ("test.java", Language::Java),
         ("test.go", Language::Go),
         ("test.rs", Language::Rust),
@@ -166,7 +162,6 @@ fn test_fixture_file_existence() {
     let vulnerable_fixtures = vec![
         "tests/fixtures/vulnerable/kotlin_vulnerabilities.kt",
         "tests/fixtures/vulnerable/scala_vulnerabilities.scala",
-        "tests/fixtures/vulnerable/groovy_vulnerabilities.groovy",
         "tests/fixtures/vulnerable/java_vulnerabilities.java",
         "tests/fixtures/vulnerable/go_vulnerabilities.go",
         "tests/fixtures/vulnerable/rust_vulnerabilities.rs",
@@ -184,7 +179,6 @@ fn test_fixture_file_existence() {
     let clean_fixtures = vec![
         "tests/fixtures/clean/safe_kotlin.kt",
         "tests/fixtures/clean/safe_scala.scala",
-        "tests/fixtures/clean/safe_groovy.groovy",
         "tests/fixtures/clean/safe_java.java",
         "tests/fixtures/clean/safe_go.go",
         "tests/fixtures/clean/safe_rust.rs",

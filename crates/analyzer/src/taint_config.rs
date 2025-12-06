@@ -557,7 +557,12 @@ impl LanguageTaintConfig {
         let mut sanitizers = Vec::new();
 
         // User Input
-        for name in &["request.body", "request.query", "request.params", "process.argv"] {
+        for name in &[
+            "request.body", "request.query", "request.params", "process.argv",
+            "req.body", "req.query", "req.params",  // Express shorthand
+            "ctx.request.body", "ctx.request.query",  // Koa
+            "event.body", "event.queryStringParameters",  // AWS Lambda
+        ] {
             sources.push(TaintSource {
                 name: name.to_string(),
                 kind: TaintSourceKind::UserInput,
@@ -641,18 +646,86 @@ impl LanguageTaintConfig {
         let mut sinks = Vec::new();
         let mut sanitizers = Vec::new();
 
-        // ===== TAINT SOURCES (20+) =====
+        // ===== TAINT SOURCES (40+) =====
 
-        // User Input - Servlet API
+        // User Input - Servlet API (javax.servlet.ServletRequest)
         for name in &[
+            // Core parameter methods
+            "getParameter",
+            "getParameterValues",
+            "getParameterMap",
+            "getParameterNames",
             "request.getParameter",
             "request.getParameterValues",
+            "request.getParameterMap",
+            "request.getParameterNames",
+            // Request body
+            "getInputStream",
+            "getReader",
+            "request.getInputStream",
+            "request.getReader",
+            // ServletRequest qualified names
+            "ServletRequest.getParameter",
+            "ServletRequest.getParameterValues",
+            "ServletRequest.getParameterMap",
+            "ServletRequest.getParameterNames",
+            "ServletRequest.getInputStream",
+            "ServletRequest.getReader",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - HTTP Servlet API (javax.servlet.http.HttpServletRequest)
+        for name in &[
+            // Headers
+            "getHeader",
+            "getHeaders",
+            "getHeaderNames",
             "request.getHeader",
             "request.getHeaders",
-            "request.getQueryString",
-            "HttpServletRequest.getParameter",
+            "request.getHeaderNames",
             "HttpServletRequest.getHeader",
-            "ServletRequest.getParameter",
+            "HttpServletRequest.getHeaders",
+            "HttpServletRequest.getHeaderNames",
+            // URL/Path
+            "getQueryString",
+            "getPathInfo",
+            "getRequestURI",
+            "getRequestURL",
+            "getServletPath",
+            "request.getQueryString",
+            "request.getPathInfo",
+            "request.getRequestURI",
+            "request.getRequestURL",
+            "HttpServletRequest.getQueryString",
+            "HttpServletRequest.getPathInfo",
+            "HttpServletRequest.getRequestURI",
+            "HttpServletRequest.getRequestURL",
+            // User info
+            "getRemoteUser",
+            "request.getRemoteUser",
+            "HttpServletRequest.getRemoteUser",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - Cookies (javax.servlet.http.Cookie)
+        for name in &[
+            "Cookie.getValue",
+            "Cookie.getName",
+            "Cookie.getComment",
+            "cookie.getValue",
+            "cookie.getName",
+            "getCookies",
+            "request.getCookies",
         ] {
             sources.push(TaintSource {
                 name: name.to_string(),
@@ -694,8 +767,9 @@ impl LanguageTaintConfig {
             });
         }
 
-        // Environment Variables
-        for name in &["System.getenv", "System.getProperty"] {
+        // Environment Variables (note: System.getProperty returns system-controlled
+        // properties like "user.dir", "os.name", etc. which are NOT user input)
+        for name in &["System.getenv"] {
             sources.push(TaintSource {
                 name: name.to_string(),
                 kind: TaintSourceKind::EnvironmentVariable,
@@ -729,11 +803,24 @@ impl LanguageTaintConfig {
 
         // Command Execution
         for name in &[
+            // java.lang.Runtime
             "Runtime.exec",
             "Runtime.getRuntime().exec",
-            "ProcessBuilder.start",
+            "runtime.exec",
+            "getRuntime().exec",
+            // java.lang.ProcessBuilder
+            "ProcessBuilder",
             "ProcessBuilder.command",
-            "Process.start",
+            "ProcessBuilder.start",
+            "new ProcessBuilder",
+            "processBuilder.command",
+            // Apache Commons Exec
+            "CommandLine.parse",
+            "CommandLine.addArguments",
+            "Executor.execute",
+            "DefaultExecutor.execute",
+            // Spring ProcessBuilder
+            "ProcessBuilder.directory",
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
@@ -757,17 +844,85 @@ impl LanguageTaintConfig {
             });
         }
 
+        // XPath Injection (javax.xml.xpath)
+        for name in &[
+            // XPath compilation and evaluation
+            "XPath.compile",
+            "XPath.evaluate",
+            "xp.compile",
+            "xp.evaluate",
+            "xpath.compile",
+            "xpath.evaluate",
+            "XPathExpression.evaluate",
+            // XPath factory
+            "XPathFactory.newXPath",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CodeEval, // Using CodeEval as closest match
+                node_id: 0,
+            });
+        }
+
+        // LDAP Injection (javax.naming)
+        for name in &[
+            "DirContext.search",
+            "InitialDirContext.search",
+            "LdapContext.search",
+            "ctx.search",
+            "dirContext.search",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CodeEval, // Using CodeEval as closest match
+                node_id: 0,
+            });
+        }
+
         // SQL Injection
         for name in &[
+            // java.sql.Statement (all execute methods)
             "Statement.execute",
             "Statement.executeQuery",
             "Statement.executeUpdate",
+            "Statement.executeLargeUpdate",
+            "Statement.addBatch",
+            "execute",
+            "executeQuery",
+            "executeUpdate",
+            "executeLargeUpdate",
+            "addBatch",
+            // java.sql.Connection (prepared statement creation)
+            "Connection.prepareStatement",
+            "Connection.prepareCall",
             "Connection.createStatement",
+            "Connection.nativeSQL",
+            "prepareStatement",
+            "prepareCall",
+            "createStatement",
+            "nativeSQL",
+            "conn.prepareStatement",
+            "conn.prepareCall",
+            // Spring JdbcTemplate
             "JdbcTemplate.execute",
             "JdbcTemplate.query",
+            "JdbcTemplate.queryForObject",
+            "JdbcTemplate.queryForList",
+            "JdbcTemplate.queryForMap",
             "JdbcTemplate.update",
+            "JdbcTemplate.batchUpdate",
+            // JPA/Hibernate EntityManager
+            "EntityManager.createQuery",
             "EntityManager.createNativeQuery",
-            "Query.executeUpdate",
+            "createQuery",
+            "createNativeQuery",
+            // MyBatis
+            "SqlSession.selectOne",
+            "SqlSession.selectList",
+            "SqlSession.selectMap",
+            "SqlSession.insert",
+            "SqlSession.update",
+            "SqlSession.delete",
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
@@ -817,6 +972,63 @@ impl LanguageTaintConfig {
             sinks.push(TaintSink {
                 name: name.to_string(),
                 kind: TaintSinkKind::LogOutput,
+                node_id: 0,
+            });
+        }
+
+        // XSS/HTML Output (response writers)
+        for name in &[
+            // HttpServletResponse
+            "response.getWriter",
+            "getWriter",
+            "response.getOutputStream",
+            "getOutputStream",
+            // PrintWriter methods
+            "PrintWriter.print",
+            "PrintWriter.println",
+            "PrintWriter.write",
+            "writer.print",
+            "writer.println",
+            "writer.write",
+            // JSP implicit objects
+            "out.print",
+            "out.println",
+            "out.write",
+            // Direct response
+            "response.sendRedirect",
+            "sendRedirect",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::HtmlOutput,
+                node_id: 0,
+            });
+        }
+
+        // Path Traversal
+        for name in &[
+            // File operations
+            "new File",
+            "File",
+            "Paths.get",
+            "Path.of",
+            "FileInputStream",
+            "FileOutputStream",
+            "FileReader",
+            "FileWriter",
+            // NIO
+            "Files.readAllBytes",
+            "Files.readString",
+            "Files.write",
+            "Files.newInputStream",
+            "Files.newOutputStream",
+            // Servlet context
+            "getResourceAsStream",
+            "getRealPath",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::FileWrite, // Using FileWrite as closest match for path traversal
                 node_id: 0,
             });
         }

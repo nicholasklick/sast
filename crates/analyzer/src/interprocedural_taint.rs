@@ -2,10 +2,24 @@
 //!
 //! This module extends the intraprocedural taint analysis to track taint
 //! through function calls using the call graph.
+//!
+//! ## Constant Propagation for Precision
+//!
+//! This module integrates symbolic execution for constant propagation to
+//! eliminate false positives from infeasible branches. For example:
+//!
+//! ```java
+//! int num = 106;
+//! String bar = (7 * 18) + num > 200 ? "safe" : taintedParam;
+//! // Since 126 + 106 = 232 > 200 is ALWAYS TRUE, bar = "safe"
+//! sink(bar);  // NOT a vulnerability
+//! ```
 
 use crate::call_graph::CallGraph;
+use crate::flow_summary::FlowSummaryRegistry;
+use crate::symbolic::{SymbolicValue, SymbolicState, BinaryOperator, UnaryOperator};
 use crate::taint::{TaintAnalysisResult, TaintSink, TaintSource, TaintSourceKind, TaintValue, TaintVulnerability, Severity, TaintSinkKind};
-use gittera_parser::ast::{AstNode, AstNodeKind};
+use gittera_parser::ast::{AstNode, AstNodeKind, LiteralValue};
 use std::collections::{HashMap, HashSet};
 
 /// Summary of taint behavior for a function
@@ -42,6 +56,10 @@ pub struct InterproceduralTaintAnalysis {
     sanitizers: HashSet<String>,
     /// Function summaries computed during analysis
     summaries: HashMap<String, FunctionTaintSummary>,
+    /// Flow summary registry for library functions
+    flow_registry: FlowSummaryRegistry,
+    /// Cache of method definitions indexed by method name for inter-procedural analysis
+    method_cache: HashMap<String, AstNode>,
 }
 
 impl InterproceduralTaintAnalysis {
@@ -51,6 +69,28 @@ impl InterproceduralTaintAnalysis {
             sinks: Vec::new(),
             sanitizers: HashSet::new(),
             summaries: HashMap::new(),
+            flow_registry: FlowSummaryRegistry::java_stdlib(),
+            method_cache: HashMap::new(),
+        }
+    }
+
+    /// Build a cache of method definitions from the AST for inter-procedural analysis
+    fn build_method_cache(&mut self, ast: &AstNode) {
+        self.method_cache.clear();
+        self.collect_methods(ast);
+    }
+
+    fn collect_methods(&mut self, node: &AstNode) {
+        match &node.kind {
+            AstNodeKind::MethodDeclaration { name, .. } |
+            AstNodeKind::FunctionDeclaration { name, .. } => {
+                // Store the method by its name
+                self.method_cache.insert(name.clone(), node.clone());
+            }
+            _ => {}
+        }
+        for child in &node.children {
+            self.collect_methods(child);
         }
     }
 
@@ -206,62 +246,378 @@ impl InterproceduralTaintAnalysis {
 
     /// Find vulnerabilities using interprocedural analysis
     fn find_vulnerabilities_interprocedural(
-        &self,
+        &mut self,
         ast: &AstNode,
         _call_graph: &CallGraph,
     ) -> TaintAnalysisResult {
+        // Build method cache for inter-procedural analysis of helper methods
+        self.build_method_cache(ast);
+
         let mut vulnerabilities = Vec::new();
 
         // Track taint through the program using summaries
         let mut tainted_vars: HashSet<String> = HashSet::new();
 
-        // Traverse AST and track taint
-        self.track_taint_in_ast(ast, &mut tainted_vars, &mut vulnerabilities);
+        // Initialize symbolic state for constant propagation
+        let mut sym_state = SymbolicState::new();
+
+        // Track list sizes for precise index-based taint tracking
+        let mut list_sizes: HashMap<String, usize> = HashMap::new();
+
+        // Traverse AST and track taint with symbolic evaluation
+        self.track_taint_in_ast(ast, &mut tainted_vars, &mut vulnerabilities, &mut sym_state, &mut list_sizes);
 
         TaintAnalysisResult { vulnerabilities }
     }
 
     /// Track taint through AST using function summaries
+    ///
+    /// This method now supports:
+    /// - STRONG UPDATES for assignments that are unconditionally executed
+    /// - CONSTANT PROPAGATION to eliminate infeasible branches
+    /// - INDEX-AWARE LIST TRACKING for ArrayList operations
     fn track_taint_in_ast(
         &self,
         node: &AstNode,
         tainted_vars: &mut HashSet<String>,
         vulnerabilities: &mut Vec<TaintVulnerability>,
+        sym_state: &mut SymbolicState,
+        list_sizes: &mut HashMap<String, usize>,
+    ) {
+        self.track_taint_in_ast_with_depth(node, tainted_vars, vulnerabilities, 0, sym_state, list_sizes);
+    }
+
+    /// Internal taint tracking with depth tracking for strong updates
+    ///
+    /// The `branch_depth` parameter tracks how many conditional branches
+    /// we're currently inside. When branch_depth == 0, we can safely
+    /// perform strong updates (kill taint on clean assignments).
+    ///
+    /// The `sym_state` parameter tracks symbolic values for constant propagation,
+    /// allowing us to eliminate infeasible branches.
+    ///
+    /// The `list_sizes` parameter tracks the current size of each ArrayList
+    /// for precise index-based taint tracking.
+    fn track_taint_in_ast_with_depth(
+        &self,
+        node: &AstNode,
+        tainted_vars: &mut HashSet<String>,
+        vulnerabilities: &mut Vec<TaintVulnerability>,
+        branch_depth: usize,
+        sym_state: &mut SymbolicState,
+        list_sizes: &mut HashMap<String, usize>,
     ) {
         match &node.kind {
             // Variable declaration with initialization
             AstNodeKind::VariableDeclaration { name, .. } => {
+                // Debug: show all children for variable declarations
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[DEBUG] VariableDeclaration '{}' has {} children:", name, node.children.len());
+                    for (i, child) in node.children.iter().enumerate() {
+                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
+                    }
+                }
+
+                // First, process all children to handle nested declarations and expressions
+                // This ensures ternaries are evaluated before we check for taint
+                for child in &node.children {
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth, sym_state, list_sizes);
+                }
+
+                // Track the symbolic value of this variable
+                // Recursively search children for a concrete value
+                fn find_first_value(node: &AstNode, analyzer: &InterproceduralTaintAnalysis, sym_state: &SymbolicState) -> SymbolicValue {
+                    for child in &node.children {
+                        let eval = analyzer.evaluate_symbolic(child, sym_state);
+                        if !matches!(eval, SymbolicValue::Unknown) {
+                            return eval;
+                        }
+                        // Recursively check children
+                        let nested = find_first_value(child, analyzer, sym_state);
+                        if !matches!(nested, SymbolicValue::Unknown) {
+                            return nested;
+                        }
+                    }
+                    SymbolicValue::Unknown
+                }
+                let sym_value = find_first_value(node, self, sym_state);
+                #[cfg(debug_assertions)]
+                eprintln!("[DEBUG] VariableDeclaration: {} = {:?}", name, sym_value);
+                sym_state.set(name.clone(), sym_value);
+
                 // Check if initializer is tainted
                 if self.is_initializer_tainted(node, tainted_vars) {
                     tainted_vars.insert(name.clone());
+                } else if branch_depth == 0 {
+                    // STRONG UPDATE: If not in a branch and initializer is clean,
+                    // this declaration shadows any previous taint
+                    tainted_vars.remove(name);
                 }
+                // Children already processed above, don't process again
+                return;
             }
 
             // Assignment expression (x = taintedValue)
-            AstNodeKind::AssignmentExpression { .. } => {
-                // Track assignments where right-hand side is tainted
-                if node.children.len() >= 2 {
-                    let lhs = &node.children[0];
-                    let rhs = &node.children[1];
+            AstNodeKind::AssignmentExpression { operator, .. } => {
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[DEBUG] AssignmentExpression op='{}' with {} children:", operator, node.children.len());
+                    for (i, child) in node.children.iter().enumerate() {
+                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
+                    }
+                }
+                // AST structure: [LHS, "=", RHS] - so RHS is at index 2
+                // Or sometimes: [LHS, RHS] - so RHS is at index 1
+                let lhs = node.children.first();
+                let rhs = if node.children.len() == 3 {
+                    node.children.get(2) // Skip the "=" operator
+                } else {
+                    node.children.get(1)
+                };
 
-                    // Check if RHS is tainted
-                    if self.is_node_tainted(rhs, tainted_vars) {
-                        // Extract LHS variable name
-                        if let AstNodeKind::Identifier { name } = &lhs.kind {
+                if let (Some(lhs), Some(rhs)) = (lhs, rhs) {
+                    // Track symbolic value of the assignment
+                    if let AstNodeKind::Identifier { name } = &lhs.kind {
+                        let sym_value = self.evaluate_symbolic(rhs, sym_state);
+                        sym_state.set(name.clone(), sym_value);
+                    }
+
+                    // Check if RHS is tainted (use symbolic evaluation for ternaries)
+                    let rhs_tainted = self.is_node_tainted_with_sym(rhs, tainted_vars, sym_state);
+
+                    // Extract LHS variable name
+                    if let AstNodeKind::Identifier { name } = &lhs.kind {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG]   Assignment to '{}': rhs_tainted={}, branch_depth={}", name, rhs_tainted, branch_depth);
+                        if rhs_tainted {
+                            // Add taint if RHS is tainted
                             tainted_vars.insert(name.clone());
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG]     -> Added taint to '{}'", name);
+                        } else if branch_depth == 0 {
+                            // STRONG UPDATE: If not inside a branch and RHS is clean,
+                            // we can safely remove taint from LHS.
+                            // This is the key fix for precision - when we see:
+                            //   x = tainted;
+                            //   x = "safe";  // <-- this kills the taint
+                            //   sink(x);     // <-- should NOT report
+                            tainted_vars.remove(name);
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG]     -> Removed taint from '{}' (strong update)", name);
                         }
+                        // NOTE: When branch_depth > 0, we're inside a conditional
+                        // (if/else/switch/loop), so we can't do strong updates
+                        // because the assignment might not always execute.
                     }
                 }
             }
 
             // Function call
             AstNodeKind::CallExpression { callee, .. } => {
+                #[cfg(debug_assertions)]
+                {
+                    if callee.contains(".put") || callee.contains(".get") {
+                        eprintln!("[DEBUG] CallExpression: callee='{}' with {} children", callee, node.children.len());
+                        for (i, child) in node.children.iter().enumerate() {
+                            eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
+                        }
+                    }
+                }
+                // Track map.put() operations for content tracking
+                // Pattern: mapVar.put("key", value)
+                if callee.ends_with(".put") {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] Processing map.put() for content tracking");
+                    let parts: Vec<&str> = callee.rsplitn(2, '.').collect();
+                    if parts.len() == 2 {
+                        let map_var = parts[1]; // Variable name before .put
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG]   map_var='{}', looking for argument_list", map_var);
+                        // Look for arguments: first is key, second is value
+                        // Children structure: [receiver, arguments] or [arguments]
+                        // Find the argument list
+                        for (idx, child) in node.children.iter().enumerate() {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG]   child[{}]: kind={:?} text='{}'", idx, child.kind, child.text.lines().next().unwrap_or(""));
+                            if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list") {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG]   Found argument_list with {} children", child.children.len());
+                                let args: Vec<&AstNode> = child.children.iter()
+                                    .filter(|c| !matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "(" || node_type == ")" || node_type == ","))
+                                    .collect();
+                                #[cfg(debug_assertions)]
+                                {
+                                    eprintln!("[DEBUG]   Filtered args: {} items", args.len());
+                                    for (i, arg) in args.iter().enumerate() {
+                                        eprintln!("[DEBUG]     arg[{}]: kind={:?} text='{}'", i, arg.kind, arg.text.lines().next().unwrap_or(""));
+                                    }
+                                }
+                                if args.len() >= 2 {
+                                    // Get the key (first arg) - handle both String literal and string with quotes
+                                    let key_opt = match &args[0].kind {
+                                        AstNodeKind::Literal { value: LiteralValue::String(key) } => {
+                                            // Strip quotes if present
+                                            let k = key.trim_matches('"');
+                                            Some(k.to_string())
+                                        }
+                                        _ => {
+                                            // Try to extract from text (for Java string_literal parsed as Other)
+                                            let text = args[0].text.trim();
+                                            if text.starts_with('"') && text.ends_with('"') {
+                                                Some(text[1..text.len()-1].to_string())
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                    };
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("[DEBUG]   Extracted key: {:?}", key_opt);
+                                    if let Some(key) = key_opt {
+                                        // Get the value (second arg) symbolically
+                                        let val_sym = self.evaluate_symbolic(args[1], sym_state);
+                                        let val_tainted = self.is_node_tainted_with_sym(args[1], tainted_vars, sym_state);
+
+                                        // Store in symbolic state as mapVar["key"]
+                                        let map_key = format!("{}[{}]", map_var, key);
+                                        sym_state.set(map_key, val_sym);
+
+                                        // Track taint for the map key
+                                        let map_key_taint = format!("{}[{}]", map_var, key);
+                                        #[cfg(debug_assertions)]
+                                        eprintln!("[DEBUG]   Setting map_key='{}', val_tainted={}", map_key_taint, val_tainted);
+                                        if val_tainted {
+                                            tainted_vars.insert(map_key_taint);
+                                        } else {
+                                            tainted_vars.remove(&map_key_taint);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Track list.add() operations for ArrayList content tracking with index precision
+                // Pattern: listVar.add(value) - track taint at specific index
+                if callee.ends_with(".add") {
+                    let parts: Vec<&str> = callee.rsplitn(2, '.').collect();
+                    if parts.len() == 2 {
+                        let list_var = parts[1];
+                        // Find the argument
+                        for child in &node.children {
+                            if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list") {
+                                let args: Vec<&AstNode> = child.children.iter()
+                                    .filter(|c| !matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "(" || node_type == ")" || node_type == ","))
+                                    .collect();
+                                if !args.is_empty() {
+                                    let val_tainted = self.is_node_tainted_with_sym(args[0], tainted_vars, sym_state);
+                                    // Get current list size and increment
+                                    let current_size = list_sizes.get(list_var).copied().unwrap_or(0);
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("[DEBUG] list.add() - list_var='{}', index={}, val_tainted={}", list_var, current_size, val_tainted);
+                                    if val_tainted {
+                                        // Track taint at specific index: listVar@index
+                                        tainted_vars.insert(format!("{}@{}", list_var, current_size));
+                                    }
+                                    // Increment list size
+                                    list_sizes.insert(list_var.to_string(), current_size + 1);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Track list.remove(index) operations - shift tainted indices
+                // Pattern: listVar.remove(index) - shift all taint markers above index down by 1
+                if callee.ends_with(".remove") {
+                    let parts: Vec<&str> = callee.rsplitn(2, '.').collect();
+                    if parts.len() == 2 {
+                        let list_var = parts[1];
+                        // Find the index argument
+                        for child in &node.children {
+                            if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list") {
+                                let args: Vec<&AstNode> = child.children.iter()
+                                    .filter(|c| !matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "(" || node_type == ")" || node_type == ","))
+                                    .collect();
+                                if !args.is_empty() {
+                                    // Try to get the index value
+                                    let removed_index: Option<usize> = match &args[0].kind {
+                                        AstNodeKind::Literal { value: LiteralValue::Number(n) } => {
+                                            n.parse::<usize>().ok()
+                                        }
+                                        _ => {
+                                            // Try to evaluate symbolically
+                                            match self.evaluate_symbolic(args[0], sym_state) {
+                                                SymbolicValue::Concrete(n) if n >= 0 => Some(n as usize),
+                                                _ => None,
+                                            }
+                                        }
+                                    };
+
+                                    if let Some(idx) = removed_index {
+                                        let current_size = list_sizes.get(list_var).copied().unwrap_or(0);
+                                        #[cfg(debug_assertions)]
+                                        eprintln!("[DEBUG] list.remove({}) - list_var='{}', shifting indices", idx, list_var);
+
+                                        // Remove taint at removed index
+                                        tainted_vars.remove(&format!("{}@{}", list_var, idx));
+
+                                        // Shift all indices above the removed one down by 1
+                                        // Collect indices to shift first
+                                        let mut to_shift: Vec<usize> = Vec::new();
+                                        for i in (idx + 1)..current_size {
+                                            if tainted_vars.contains(&format!("{}@{}", list_var, i)) {
+                                                to_shift.push(i);
+                                            }
+                                        }
+
+                                        // Now perform the shifts
+                                        for i in to_shift {
+                                            tainted_vars.remove(&format!("{}@{}", list_var, i));
+                                            tainted_vars.insert(format!("{}@{}", list_var, i - 1));
+                                            #[cfg(debug_assertions)]
+                                            eprintln!("[DEBUG]   Shifted {}@{} to {}@{}", list_var, i, list_var, i - 1);
+                                        }
+
+                                        // Decrement list size
+                                        if current_size > 0 {
+                                            list_sizes.insert(list_var.to_string(), current_size - 1);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Check if this is a source - if so, mark result as tainted
+                if self.is_source_function(callee) {
+                    // The result of this call is tainted
+                    // We need to find what variable it's assigned to
+                    // For now, we track the callee name as tainted
+                    tainted_vars.insert(callee.clone());
+                }
+
                 // Check if this is a sink with tainted data
                 if self.is_sink_function(callee) {
-                    // Check if any arguments are tainted
-                    if self.has_tainted_arguments(node, tainted_vars) {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] Checking sink '{}' at branch_depth={}", callee, branch_depth);
+                    // Check if any arguments are tainted (use symbolic evaluation)
+                    let has_tainted = self.has_tainted_arguments(node, tainted_vars, sym_state);
+                    #[cfg(debug_assertions)]
+                    {
+                        eprintln!("[DEBUG]   has_tainted_arguments={}", has_tainted);
+                        eprintln!("[DEBUG]   Current tainted_vars: {:?}", tainted_vars);
+                    }
+                    if has_tainted {
                         // Create vulnerability
-                        if let Some(sink) = self.find_sink_by_name(callee) {
+                        let sink_found = self.find_sink_by_name(callee);
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG]   find_sink_by_name('{}') = {:?}", callee, sink_found.is_some());
+                        if let Some(sink) = sink_found {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG]   Creating vulnerability for sink: {}", sink.name);
                             vulnerabilities.push(TaintVulnerability {
                                 sink: sink.clone(),
                                 tainted_value: TaintValue::new(
@@ -281,20 +637,286 @@ impl InterproceduralTaintAnalysis {
             }
 
             AstNodeKind::FunctionDeclaration { .. } | AstNodeKind::MethodDeclaration { .. } => {
-                // Enter new scope - analyze function body with fresh taint set
+                // Enter new scope - analyze function body with fresh taint set and symbolic state
+                // Reset branch_depth to 0 since we're in a new function scope
                 let mut local_tainted = HashSet::new();
+                let mut local_sym_state = SymbolicState::new();
+                let mut local_list_sizes = HashMap::new();
                 for child in &node.children {
-                    self.track_taint_in_ast(child, &mut local_tainted, vulnerabilities);
+                    self.track_taint_in_ast_with_depth(child, &mut local_tainted, vulnerabilities, 0, &mut local_sym_state, &mut local_list_sizes);
                 }
                 return; // Don't propagate local taint to parent scope
+            }
+
+            // Conditional expression (ternary) - use constant propagation!
+            AstNodeKind::ConditionalExpression { test, .. } => {
+                // Debug: log the ternary expression
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!(
+                        "[DEBUG] ConditionalExpression found: test='{}', {} children",
+                        test, node.children.len()
+                    );
+                    for (i, child) in node.children.iter().enumerate() {
+                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
+                    }
+                }
+
+                // Try to evaluate the condition symbolically
+                if let Some(condition_node) = node.children.first() {
+                    let condition = self.evaluate_symbolic(condition_node, sym_state);
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG]   Evaluated condition: {:?}", condition);
+
+                    // Check if condition is definitely true or false
+                    match condition.as_definite_bool() {
+                        Some(true) => {
+                            // Condition is DEFINITELY TRUE - only analyze true branch
+                            // This handles patterns like: (7*18)+106 > 200 ? "safe" : tainted
+                            // For Java ternary with 5 children: [condition, ?, true_expr, :, false_expr]
+                            // true_expr is at index 2, not 1
+                            let true_branch_idx = if node.children.len() == 5 { 2 } else { 1 };
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG]   Condition is TRUE, using true branch at index {}", true_branch_idx);
+                            if let Some(true_branch) = node.children.get(true_branch_idx) {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG]   True branch: {:?} = '{}'", true_branch.kind, true_branch.text.lines().next().unwrap_or(""));
+                                self.track_taint_in_ast_with_depth(
+                                    true_branch, tainted_vars, vulnerabilities,
+                                    branch_depth, sym_state, list_sizes
+                                );
+                            }
+                            return;
+                        }
+                        Some(false) => {
+                            // Condition is DEFINITELY FALSE - only analyze false branch
+                            if let Some(false_branch) = node.children.get(2) {
+                                self.track_taint_in_ast_with_depth(
+                                    false_branch, tainted_vars, vulnerabilities,
+                                    branch_depth, sym_state, list_sizes
+                                );
+                            }
+                            return;
+                        }
+                        None => {
+                            // Condition is symbolic/unknown - analyze both branches (conservative)
+                            // We still increment branch_depth to prevent strong updates
+                            for child in &node.children {
+                                self.track_taint_in_ast_with_depth(
+                                    child, tainted_vars, vulnerabilities,
+                                    branch_depth + 1, sym_state, list_sizes
+                                );
+                            }
+                            return;
+                        }
+                    }
+                }
+                // Fallback: analyze all children with incremented depth
+                for child in &node.children {
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, sym_state, list_sizes);
+                }
+                return;
+            }
+
+            // If statement - also use constant propagation
+            // Java if_statement structure: "if" parenthesized_expression then_clause [else_clause]
+            AstNodeKind::IfStatement => {
+                // Find the condition (parenthesized_expression) - it's at index 1 (after "if" keyword)
+                if let Some(condition_node) = node.children.get(1) {
+                    let condition = self.evaluate_symbolic(condition_node, sym_state);
+
+                    match condition.as_definite_bool() {
+                        Some(true) => {
+                            // Condition is DEFINITELY TRUE - only analyze then branch (index 2)
+                            if let Some(then_branch) = node.children.get(2) {
+                                self.track_taint_in_ast_with_depth(
+                                    then_branch, tainted_vars, vulnerabilities,
+                                    branch_depth, sym_state, list_sizes
+                                );
+                            }
+                            return;
+                        }
+                        Some(false) => {
+                            // Condition is DEFINITELY FALSE - only analyze else branch if present
+                            // Else branch could be at index 3 or 4 depending on structure
+                            for i in 3..node.children.len() {
+                                if let Some(else_branch) = node.children.get(i) {
+                                    // Skip the "else" keyword
+                                    if !matches!(&else_branch.kind, AstNodeKind::Other { node_type } if node_type == "else") {
+                                        self.track_taint_in_ast_with_depth(
+                                            else_branch, tainted_vars, vulnerabilities,
+                                            branch_depth, sym_state, list_sizes
+                                        );
+                                    }
+                                }
+                            }
+                            return;
+                        }
+                        None => {
+                            // Condition is symbolic/unknown - analyze both branches (conservative)
+                            for child in &node.children {
+                                self.track_taint_in_ast_with_depth(
+                                    child, tainted_vars, vulnerabilities,
+                                    branch_depth + 1, sym_state, list_sizes
+                                );
+                            }
+                            return;
+                        }
+                    }
+                }
+                // Fallback
+                for child in &node.children {
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, sym_state, list_sizes);
+                }
+                return;
+            }
+
+            AstNodeKind::SwitchStatement { .. } | AstNodeKind::SwitchCase { .. } => {
+                // Inside a switch, we can't do strong updates
+                for child in &node.children {
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, sym_state, list_sizes);
+                }
+                return;
+            }
+
+            AstNodeKind::WhileStatement | AstNodeKind::ForStatement { .. } | AstNodeKind::DoWhileStatement => {
+                // Inside a loop, we can't do strong updates
+                for child in &node.children {
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, sym_state, list_sizes);
+                }
+                return;
+            }
+
+            AstNodeKind::TryStatement | AstNodeKind::CatchClause { .. } => {
+                // Inside try/catch, we can't do strong updates
+                for child in &node.children {
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, sym_state, list_sizes);
+                }
+                return;
             }
 
             _ => {}
         }
 
-        // Recursively process children
+        // Recursively process children (preserving branch depth)
         for child in &node.children {
-            self.track_taint_in_ast(child, tainted_vars, vulnerabilities);
+            self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth, sym_state, list_sizes);
+        }
+    }
+
+    /// Evaluate an AST node to a symbolic value for constant propagation
+    fn evaluate_symbolic(&self, node: &AstNode, sym_state: &SymbolicState) -> SymbolicValue {
+        match &node.kind {
+            AstNodeKind::Literal { value } => {
+                match value {
+                    LiteralValue::Number(n) => {
+                        n.parse::<i64>()
+                            .map(SymbolicValue::Concrete)
+                            .unwrap_or(SymbolicValue::Unknown)
+                    }
+                    LiteralValue::Boolean(b) => SymbolicValue::ConcreteBool(*b),
+                    LiteralValue::String(s) => SymbolicValue::ConcreteString(s.clone()),
+                    LiteralValue::Null => SymbolicValue::Null,
+                    LiteralValue::Undefined => SymbolicValue::Undefined,
+                }
+            }
+
+            AstNodeKind::Identifier { name } => {
+                // Look up in symbolic state
+                sym_state.get(name)
+            }
+
+            AstNodeKind::BinaryExpression { operator } => {
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[DEBUG] BinaryExpression op='{}' with {} children:", operator, node.children.len());
+                    for (i, child) in node.children.iter().enumerate() {
+                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
+                    }
+                }
+                // Handle both 2-child (left, right) and 3-child (left, op, right) formats
+                // Java/C often use 3 children: left, operator, right
+                let (left_idx, right_idx) = if node.children.len() == 3 {
+                    (0, 2) // Skip the operator node in the middle
+                } else {
+                    (0, 1)
+                };
+                if node.children.len() >= 2 {
+                    let left = self.evaluate_symbolic(&node.children[left_idx], sym_state);
+                    let right = self.evaluate_symbolic(&node.children[right_idx], sym_state);
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG]   left={:?}, right={:?}", left, right);
+
+                    let op = match operator.as_str() {
+                        "+" => BinaryOperator::Add,
+                        "-" => BinaryOperator::Subtract,
+                        "*" => BinaryOperator::Multiply,
+                        "/" => BinaryOperator::Divide,
+                        "%" => BinaryOperator::Modulo,
+                        "==" | "===" => BinaryOperator::Equal,
+                        "!=" | "!==" => BinaryOperator::NotEqual,
+                        "<" => BinaryOperator::LessThan,
+                        "<=" => BinaryOperator::LessThanOrEqual,
+                        ">" => BinaryOperator::GreaterThan,
+                        ">=" => BinaryOperator::GreaterThanOrEqual,
+                        "&&" => BinaryOperator::And,
+                        "||" => BinaryOperator::Or,
+                        "&" => BinaryOperator::BitwiseAnd,
+                        "|" => BinaryOperator::BitwiseOr,
+                        "^" => BinaryOperator::BitwiseXor,
+                        "<<" => BinaryOperator::LeftShift,
+                        ">>" => BinaryOperator::RightShift,
+                        _ => return SymbolicValue::Unknown,
+                    };
+
+                    SymbolicValue::binary(op, left, right).simplify()
+                } else {
+                    SymbolicValue::Unknown
+                }
+            }
+
+            AstNodeKind::UnaryExpression { operator } => {
+                if let Some(operand_node) = node.children.first() {
+                    let operand = self.evaluate_symbolic(operand_node, sym_state);
+
+                    let op = match operator.as_str() {
+                        "!" => UnaryOperator::Not,
+                        "-" => UnaryOperator::Negate,
+                        "~" => UnaryOperator::BitwiseNot,
+                        _ => return SymbolicValue::Unknown,
+                    };
+
+                    SymbolicValue::UnaryOp {
+                        operator: op,
+                        operand: Box::new(operand),
+                    }.simplify()
+                } else {
+                    SymbolicValue::Unknown
+                }
+            }
+
+            AstNodeKind::ParenthesizedExpression => {
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[DEBUG] ParenthesizedExpression with {} children:", node.children.len());
+                    for (i, child) in node.children.iter().enumerate() {
+                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
+                    }
+                }
+                // The inner expression - skip leading ( and trailing )
+                // For 3 children: (expr), the expression is at index 1
+                // For 1 child: just the expression
+                let inner_idx = if node.children.len() == 3 { 1 } else { 0 };
+                if let Some(inner) = node.children.get(inner_idx) {
+                    self.evaluate_symbolic(inner, sym_state)
+                } else {
+                    SymbolicValue::Unknown
+                }
+            }
+
+            // For call expressions, function results, etc. - return Unknown
+            // (we don't know what they return without executing them)
+            _ => SymbolicValue::Unknown,
         }
     }
 
@@ -329,31 +951,217 @@ impl InterproceduralTaintAnalysis {
     }
 
     /// Check if a node contains tainted data
+    /// Uses symbolic evaluation to handle ternary expressions properly
     fn is_node_tainted(&self, node: &AstNode, tainted_vars: &HashSet<String>) -> bool {
+        self.is_node_tainted_with_sym(node, tainted_vars, &SymbolicState::new())
+    }
+
+    /// Check if a node contains tainted data, using symbolic state
+    fn is_node_tainted_with_sym(&self, node: &AstNode, tainted_vars: &HashSet<String>, sym_state: &SymbolicState) -> bool {
         match &node.kind {
             AstNodeKind::Identifier { name } => tainted_vars.contains(name),
+
+            // Handle conditional expressions (ternaries) with symbolic evaluation
+            AstNodeKind::ConditionalExpression { .. } => {
+                if let Some(condition_node) = node.children.first() {
+                    let condition = self.evaluate_symbolic(condition_node, sym_state);
+                    match condition.as_definite_bool() {
+                        Some(true) => {
+                            // Condition is definitely TRUE - only check true branch
+                            // For 5 children: [cond, ?, true_expr, :, false_expr]
+                            let true_branch_idx = if node.children.len() == 5 { 2 } else { 1 };
+                            if let Some(true_branch) = node.children.get(true_branch_idx) {
+                                return self.is_node_tainted_with_sym(true_branch, tainted_vars, sym_state);
+                            }
+                            false
+                        }
+                        Some(false) => {
+                            // Condition is definitely FALSE - only check false branch
+                            let false_branch_idx = if node.children.len() == 5 { 4 } else { 2 };
+                            if let Some(false_branch) = node.children.get(false_branch_idx) {
+                                return self.is_node_tainted_with_sym(false_branch, tainted_vars, sym_state);
+                            }
+                            false
+                        }
+                        None => {
+                            // Unknown condition - conservatively check both branches
+                            node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
+                        }
+                    }
+                } else {
+                    // Fallback to checking all children
+                    node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
+                }
+            }
+
+            // Handle member expressions like req.body.code, request.query.id
+            AstNodeKind::MemberExpression { object, property, .. } => {
+                // Build the full path and check if it matches a source pattern
+                let full_path = format!("{}.{}", object, property);
+                if self.is_source_expression(&full_path) {
+                    return true;
+                }
+                // Also check if the object itself is tainted (for chained access)
+                if tainted_vars.contains(object) {
+                    return true;
+                }
+                // Check children for nested member expressions
+                node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
+            }
+
             AstNodeKind::CallExpression { callee, .. } => {
+                // Handle map.get() or list.get() - check if specific key/index is tainted
+                if callee.ends_with(".get") {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] is_node_tainted: Checking .get() callee='{}'", callee);
+                    let parts: Vec<&str> = callee.rsplitn(2, '.').collect();
+                    if parts.len() == 2 {
+                        let container_var = parts[1];
+                        // Find the argument (the key or index)
+                        for child in &node.children {
+                            if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list") {
+                                let args: Vec<&AstNode> = child.children.iter()
+                                    .filter(|c| !matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "(" || node_type == ")" || node_type == ","))
+                                    .collect();
+                                if !args.is_empty() {
+                                    // Try to get as integer index first (for ArrayList.get(index))
+                                    let index_opt: Option<usize> = match &args[0].kind {
+                                        AstNodeKind::Literal { value: LiteralValue::Number(n) } => {
+                                            n.parse::<usize>().ok()
+                                        }
+                                        _ => {
+                                            // Try to evaluate symbolically
+                                            match self.evaluate_symbolic(args[0], sym_state) {
+                                                SymbolicValue::Concrete(n) if n >= 0 => Some(n as usize),
+                                                _ => None,
+                                            }
+                                        }
+                                    };
+
+                                    if let Some(idx) = index_opt {
+                                        // This is a list.get(index) - check if specific index is tainted
+                                        let list_idx_key = format!("{}@{}", container_var, idx);
+                                        #[cfg(debug_assertions)]
+                                        eprintln!("[DEBUG]   list.get({}) - checking '{}', tainted={}", idx, list_idx_key, tainted_vars.contains(&list_idx_key));
+                                        if tainted_vars.contains(&list_idx_key) {
+                                            return true;
+                                        }
+                                        // Check if any index is tracked for this list (meaning we're tracking it)
+                                        let any_tracked = tainted_vars.iter().any(|v| v.starts_with(&format!("{}@", container_var)));
+                                        if any_tracked {
+                                            // We are tracking this list - return false since this specific index is not tainted
+                                            #[cfg(debug_assertions)]
+                                            eprintln!("[DEBUG]   List is tracked, index {} not tainted, returning false", idx);
+                                            return false;
+                                        }
+                                    } else {
+                                        // Try to get as string key (for Map.get(key))
+                                        let key_opt = match &args[0].kind {
+                                            AstNodeKind::Literal { value: LiteralValue::String(key) } => {
+                                                // Strip quotes if present
+                                                Some(key.trim_matches('"').to_string())
+                                            }
+                                            _ => {
+                                                // Try to extract from text
+                                                let text = args[0].text.trim();
+                                                if text.starts_with('"') && text.ends_with('"') {
+                                                    Some(text[1..text.len()-1].to_string())
+                                                } else {
+                                                    None
+                                                }
+                                            }
+                                        };
+                                        if let Some(key) = key_opt {
+                                            // Check if this specific key is tainted
+                                            let map_key = format!("{}[{}]", container_var, key);
+                                            #[cfg(debug_assertions)]
+                                            eprintln!("[DEBUG]   map_key='{}', tainted_vars contains? {}", map_key, tainted_vars.contains(&map_key));
+                                            if tainted_vars.contains(&map_key) {
+                                                return true;
+                                            }
+                                            // If we tracked this key and it's not tainted, it's safe
+                                            // Check if we have any symbolic info about this key
+                                            if sym_state.get(&map_key) != SymbolicValue::Unknown {
+                                                // We have tracked this key - use our tracked taint status
+                                                #[cfg(debug_assertions)]
+                                                eprintln!("[DEBUG]   Key was tracked, returning false (not tainted)");
+                                                return false;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // If we can't determine the key/index, fall through to default behavior
+                    }
+                }
+
+                // Check if this is a source function
                 if self.is_source_function(callee) {
                     return true;
                 }
+
+                // Check if the callee has a summary that returns taint
                 if let Some(summary) = self.summaries.get(callee) {
                     if summary.generates_taint || summary.returns_taint {
                         return true;
                     }
                 }
+
+                // Check if we have the method definition cached for inter-procedural analysis
+                // This handles inner class helper methods like Test.doSomething()
+                let method_name = callee.split('.').last().unwrap_or(callee);
+                if let Some(method) = self.method_cache.get(method_name).cloned() {
+                    // Find which argument positions are tainted
+                    let mut tainted_param_indices = HashSet::new();
+                    for child in &node.children {
+                        if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list") {
+                            let args: Vec<&AstNode> = child.children.iter()
+                                .filter(|c| !matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "(" || node_type == ")" || node_type == ","))
+                                .collect();
+                            for (idx, arg) in args.iter().enumerate() {
+                                if self.is_node_tainted_with_sym(arg, tainted_vars, sym_state) {
+                                    // For Java inner class methods, first param is often HttpServletRequest
+                                    // We want param at index 1 for the tainted data
+                                    tainted_param_indices.insert(idx);
+                                }
+                            }
+                        }
+                    }
+
+                    if !tainted_param_indices.is_empty() {
+                        // Use inter-procedural analysis to determine if return is tainted
+                        return self.analyze_method_return_taint(&method, &tainted_param_indices);
+                    }
+                    return false;
+                }
+
+                // Fallback: If this is NOT a sanitizer and ANY argument is tainted,
+                // the return value should also be tainted (taint propagation).
+                // This handles cases like URLDecoder.decode(tainted, ...) -> tainted
+                if !self.is_sanitizer_function(callee) {
+                    for child in &node.children {
+                        if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                            return true;
+                        }
+                    }
+                }
+
                 false
             }
             _ => {
                 // Check children
-                node.children.iter().any(|c| self.is_node_tainted(c, tainted_vars))
+                node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
             }
         }
     }
 
     /// Check if function call has tainted arguments
-    fn has_tainted_arguments(&self, node: &AstNode, tainted_vars: &HashSet<String>) -> bool {
+    fn has_tainted_arguments(&self, node: &AstNode, tainted_vars: &HashSet<String>, sym_state: &SymbolicState) -> bool {
         for child in &node.children {
-            if self.is_node_tainted(child, tainted_vars) {
+            if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                #[cfg(debug_assertions)]
+                eprintln!("[DEBUG]   Found tainted child: {:?} = '{}'", child.kind, child.text.lines().next().unwrap_or(""));
                 return true;
             }
         }
@@ -397,6 +1205,69 @@ impl InterproceduralTaintAnalysis {
         }
     }
 
+    /// Analyze a method to determine if it returns tainted data given tainted parameters.
+    /// This implements basic inter-procedural taint analysis for helper methods.
+    fn analyze_method_return_taint(
+        &self,
+        method: &AstNode,
+        tainted_param_indices: &HashSet<usize>,
+    ) -> bool {
+        let params = self.extract_parameters(method);
+
+        // Build initial tainted set from tainted parameter indices
+        let mut local_tainted: HashSet<String> = HashSet::new();
+        let mut local_sym_state = SymbolicState::new();
+        let mut local_list_sizes: HashMap<String, usize> = HashMap::new();
+
+        for idx in tainted_param_indices {
+            if let Some(param_name) = params.get(*idx) {
+                local_tainted.insert(param_name.clone());
+            }
+        }
+
+        // Analyze the method body to track taint flow
+        let mut vulnerabilities = Vec::new();
+        for child in &method.children {
+            self.track_taint_in_ast_with_depth(
+                child, &mut local_tainted, &mut vulnerabilities, 0, &mut local_sym_state, &mut local_list_sizes
+            );
+        }
+
+        // Find return statements and check if returned value is tainted
+        self.find_return_taint(method, &local_tainted, &local_sym_state)
+    }
+
+    /// Check if any return statement in the method returns tainted data
+    fn find_return_taint(&self, node: &AstNode, tainted_vars: &HashSet<String>, sym_state: &SymbolicState) -> bool {
+        match &node.kind {
+            AstNodeKind::ReturnStatement => {
+                // Check if the returned expression is tainted
+                #[cfg(debug_assertions)]
+                eprintln!("[DEBUG] find_return_taint: ReturnStatement found, checking children");
+                for child in &node.children {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG]   Checking return child: {:?} = '{}'", child.kind, child.text.lines().next().unwrap_or(""));
+                    let is_tainted = self.is_node_tainted_with_sym(child, tainted_vars, sym_state);
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG]   is_tainted = {}, tainted_vars = {:?}", is_tainted, tainted_vars);
+                    if is_tainted {
+                        return true;
+                    }
+                }
+                false
+            }
+            _ => {
+                // Recurse into children
+                for child in &node.children {
+                    if self.find_return_taint(child, tainted_vars, sym_state) {
+                        return true;
+                    }
+                }
+                false
+            }
+        }
+    }
+
     fn extract_identifier(&self, node: &AstNode) -> Option<String> {
         match &node.kind {
             AstNodeKind::Identifier { name } => Some(name.clone()),
@@ -412,6 +1283,21 @@ impl InterproceduralTaintAnalysis {
     }
 
     fn is_source_function(&self, name: &str) -> bool {
+        // Check flow registry first
+        if let Some(summary) = self.flow_registry.get(name) {
+            if summary.is_source {
+                return true;
+            }
+        }
+        // Also check by just the method name (e.g., "getParameter" from "request.getParameter")
+        let method_name = name.split('.').last().unwrap_or(name);
+        if let Some(summary) = self.flow_registry.get(method_name) {
+            if summary.is_source {
+                return true;
+            }
+        }
+
+        // Fall back to legacy sources
         let name_lower = name.to_lowercase();
         self.sources.iter().any(|s| {
             let source_lower = s.name.to_lowercase();
@@ -419,15 +1305,83 @@ impl InterproceduralTaintAnalysis {
         })
     }
 
+    /// Check if a member expression path matches a source pattern
+    /// Handles patterns like "req.body", "request.query", "req.body.code"
+    fn is_source_expression(&self, path: &str) -> bool {
+        // Check flow registry
+        if let Some(summary) = self.flow_registry.get(path) {
+            if summary.is_source {
+                return true;
+            }
+        }
+
+        let path_lower = path.to_lowercase();
+        self.sources.iter().any(|s| {
+            let source_lower = s.name.to_lowercase();
+            // Check if path starts with or contains the source pattern
+            // e.g., "req.body.code" matches "req.body" source
+            path_lower.starts_with(&source_lower)
+                || path_lower.contains(&source_lower)
+                || source_lower.contains(&path_lower)
+        })
+    }
+
     fn is_sink_function(&self, name: &str) -> bool {
+        // Check flow registry first
+        if let Some(summary) = self.flow_registry.get(name) {
+            if summary.is_sink.is_some() {
+                return true;
+            }
+        }
+        // Also check by just the method name
+        let method_name = name.split('.').last().unwrap_or(name);
+        if let Some(summary) = self.flow_registry.get(method_name) {
+            if summary.is_sink.is_some() {
+                return true;
+            }
+        }
+
+        // Common method names that should NOT match by method name alone
+        let common_methods = ["get", "set", "put", "add", "remove", "contains", "size", "length"];
+        let method_name_lower = method_name.to_lowercase();
+        let is_common_method = common_methods.contains(&method_name_lower.as_str());
+
+        // Fall back to legacy sinks
         let name_lower = name.to_lowercase();
         self.sinks.iter().any(|s| {
             let sink_lower = s.name.to_lowercase();
-            name_lower.contains(&sink_lower) || sink_lower.contains(&name_lower)
+            let sink_method = s.name.split('.').last().unwrap_or(&s.name).to_lowercase();
+
+            // Match by full name or partial name
+            if name_lower.contains(&sink_lower) || sink_lower.contains(&name_lower) {
+                return true;
+            }
+
+            // Match by method name only if it's not a common method
+            if !is_common_method && method_name_lower == sink_method {
+                return true;
+            }
+
+            false
         })
     }
 
     fn is_sanitizer_function(&self, name: &str) -> bool {
+        // Check flow registry first
+        if let Some(summary) = self.flow_registry.get(name) {
+            if summary.is_sanitizer {
+                return true;
+            }
+        }
+        // Also check by just the method name
+        let method_name = name.split('.').last().unwrap_or(name);
+        if let Some(summary) = self.flow_registry.get(method_name) {
+            if summary.is_sanitizer {
+                return true;
+            }
+        }
+
+        // Fall back to legacy sanitizers
         let name_lower = name.to_lowercase();
         self.sanitizers.iter().any(|s| {
             let sanitizer_lower = s.to_lowercase();
@@ -437,10 +1391,38 @@ impl InterproceduralTaintAnalysis {
 
     fn find_sink_by_name(&self, name: &str) -> Option<&TaintSink> {
         let name_lower = name.to_lowercase();
-        self.sinks.iter().find(|s| {
+        // Extract just the method name (after last .)
+        let method_name = name.split('.').last().unwrap_or(name).to_lowercase();
+
+        // Common method names that should NOT match by method name alone
+        // These require class/object context to match
+        let common_methods = ["get", "set", "put", "add", "remove", "contains", "size", "length"];
+        let is_common_method = common_methods.contains(&method_name.as_str());
+
+        let result = self.sinks.iter().find(|s| {
             let sink_lower = s.name.to_lowercase();
-            name_lower.contains(&sink_lower) || sink_lower.contains(&name_lower)
-        })
+            let sink_method = s.name.split('.').last().unwrap_or(&s.name).to_lowercase();
+
+            // Match by full name or partial name
+            if name_lower.contains(&sink_lower) || sink_lower.contains(&name_lower) {
+                return true;
+            }
+
+            // Match by method name only if it's not a common method
+            // (to avoid map.get matching Paths.get)
+            if !is_common_method && method_name == sink_method {
+                return true;
+            }
+
+            false
+        });
+
+        #[cfg(debug_assertions)]
+        if result.is_none() && self.is_sink_function(name) {
+            eprintln!("[DEBUG] find_sink_by_name('{}') = None, but is_sink_function=true", name);
+        }
+
+        result
     }
 
     /// Configure default sources
@@ -615,5 +1597,110 @@ mod tests {
 
         let params = analysis.extract_parameters(&func);
         assert_eq!(params, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn test_strong_update_kills_taint_at_top_level() {
+        // Test that taint is killed when a variable is reassigned at top level
+        // (not inside a branch)
+        //
+        // x = getUserInput();  // x is tainted
+        // x = "safe";          // STRONG UPDATE: x should no longer be tainted
+        // sink(x);             // Should NOT be a vulnerability
+        let analysis = InterproceduralTaintAnalysis::new()
+            .with_default_sources()
+            .with_default_sinks();
+
+        let mut tainted_vars: HashSet<String> = HashSet::new();
+        tainted_vars.insert("x".to_string());
+
+        // Simulate: x = "safe" (clean assignment at branch_depth 0)
+        let clean_rhs = AstNode::new(
+            10,
+            AstNodeKind::Literal {
+                value: gittera_parser::ast::LiteralValue::String("safe".to_string()),
+            },
+            test_location(),
+            "\"safe\"".to_string(),
+        );
+
+        let lhs = AstNode::new(
+            11,
+            AstNodeKind::Identifier { name: "x".to_string() },
+            test_location(),
+            "x".to_string(),
+        );
+
+        let mut assignment = AstNode::new(
+            12,
+            AstNodeKind::AssignmentExpression { operator: "=".to_string() },
+            test_location(),
+            "x = \"safe\"".to_string(),
+        );
+        assignment.children.push(lhs);
+        assignment.children.push(clean_rhs);
+
+        let mut vulnerabilities = Vec::new();
+        let mut sym_state = SymbolicState::new();
+        let mut list_sizes: HashMap<String, usize> = HashMap::new();
+
+        // Process at branch_depth 0 - should do strong update
+        analysis.track_taint_in_ast_with_depth(&assignment, &mut tainted_vars, &mut vulnerabilities, 0, &mut sym_state, &mut list_sizes);
+
+        // x should no longer be tainted
+        assert!(!tainted_vars.contains("x"), "Strong update should kill taint for x");
+    }
+
+    #[test]
+    fn test_no_strong_update_inside_branch() {
+        // Test that taint is NOT killed when inside a branch
+        //
+        // x = getUserInput();   // x is tainted
+        // if (cond) {
+        //   x = "safe";         // NO strong update - branch_depth > 0
+        // }
+        // sink(x);              // SHOULD be a vulnerability (x might still be tainted)
+        let analysis = InterproceduralTaintAnalysis::new()
+            .with_default_sources()
+            .with_default_sinks();
+
+        let mut tainted_vars: HashSet<String> = HashSet::new();
+        tainted_vars.insert("x".to_string());
+
+        // Simulate: x = "safe" inside a branch (branch_depth > 0)
+        let clean_rhs = AstNode::new(
+            20,
+            AstNodeKind::Literal {
+                value: gittera_parser::ast::LiteralValue::String("safe".to_string()),
+            },
+            test_location(),
+            "\"safe\"".to_string(),
+        );
+
+        let lhs = AstNode::new(
+            21,
+            AstNodeKind::Identifier { name: "x".to_string() },
+            test_location(),
+            "x".to_string(),
+        );
+
+        let mut assignment = AstNode::new(
+            22,
+            AstNodeKind::AssignmentExpression { operator: "=".to_string() },
+            test_location(),
+            "x = \"safe\"".to_string(),
+        );
+        assignment.children.push(lhs);
+        assignment.children.push(clean_rhs);
+
+        let mut vulnerabilities = Vec::new();
+        let mut sym_state = SymbolicState::new();
+        let mut list_sizes: HashMap<String, usize> = HashMap::new();
+
+        // Process at branch_depth 1 - should NOT do strong update
+        analysis.track_taint_in_ast_with_depth(&assignment, &mut tainted_vars, &mut vulnerabilities, 1, &mut sym_state, &mut list_sizes);
+
+        // x should STILL be tainted (conservative behavior)
+        assert!(tainted_vars.contains("x"), "Should NOT do strong update inside a branch");
     }
 }

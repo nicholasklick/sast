@@ -214,6 +214,17 @@ impl QueryMetadata {
     pub fn primary_cwe(&self) -> Option<u32> {
         self.cwes.first().copied()
     }
+
+    /// Check if this query supports the given language
+    pub fn supports_language(&self, language: &str) -> bool {
+        let lang_lower = language.to_lowercase();
+        self.languages.iter().any(|l| l.to_lowercase() == lang_lower)
+    }
+
+    /// Check if this query supports any of the given languages
+    pub fn supports_any_language(&self, languages: &[&str]) -> bool {
+        languages.iter().any(|l| self.supports_language(l))
+    }
 }
 
 /// Builder for query metadata

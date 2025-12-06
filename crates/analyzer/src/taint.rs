@@ -45,12 +45,214 @@ pub enum TaintSinkKind {
     NetworkSend,
 }
 
+/// The flow state tracks what kind of sink the taint is flowing toward.
+/// This enables context-specific sanitization - e.g., `escapeHtml()` sanitizes
+/// for HTML but NOT for SQL injection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum FlowState {
+    /// Data flowing to SQL queries (SQL injection risk)
+    Sql,
+    /// Data flowing to HTML output (XSS risk)
+    Html,
+    /// Data flowing to command execution (command injection risk)
+    Shell,
+    /// Data flowing to file paths (path traversal risk)
+    Path,
+    /// Data flowing to LDAP queries (LDAP injection risk)
+    Ldap,
+    /// Data flowing to XML/XPath (XML injection risk)
+    Xml,
+    /// Data flowing to regex (ReDoS risk)
+    Regex,
+    /// Generic taint state (matches any sink)
+    Generic,
+}
+
+impl FlowState {
+    /// Get the flow state that corresponds to a sink kind
+    pub fn from_sink_kind(kind: &TaintSinkKind) -> Self {
+        match kind {
+            TaintSinkKind::SqlQuery => FlowState::Sql,
+            TaintSinkKind::CommandExecution => FlowState::Shell,
+            TaintSinkKind::FileWrite => FlowState::Path,
+            TaintSinkKind::CodeEval => FlowState::Shell, // Code eval is similar to shell
+            TaintSinkKind::HtmlOutput => FlowState::Html,
+            TaintSinkKind::LogOutput => FlowState::Generic, // Log can leak any data
+            TaintSinkKind::NetworkSend => FlowState::Generic,
+        }
+    }
+
+    /// Check if this flow state is compatible with (could flow to) a sink
+    pub fn matches_sink(&self, sink: &TaintSinkKind) -> bool {
+        match self {
+            FlowState::Generic => true, // Generic matches any sink
+            FlowState::Sql => matches!(sink, TaintSinkKind::SqlQuery),
+            FlowState::Html => matches!(sink, TaintSinkKind::HtmlOutput),
+            FlowState::Shell => matches!(sink, TaintSinkKind::CommandExecution | TaintSinkKind::CodeEval),
+            FlowState::Path => matches!(sink, TaintSinkKind::FileWrite),
+            FlowState::Ldap => false, // No LDAP sink kind yet
+            FlowState::Xml => false,  // No XML sink kind yet
+            FlowState::Regex => false, // No Regex sink kind yet
+        }
+    }
+
+    /// Parse a flow state from a string (used in MaD format)
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "sql" | "sqli" => Some(FlowState::Sql),
+            "html" | "xss" => Some(FlowState::Html),
+            "shell" | "command" | "cmd" | "os" => Some(FlowState::Shell),
+            "path" | "file" | "traversal" => Some(FlowState::Path),
+            "ldap" => Some(FlowState::Ldap),
+            "xml" | "xpath" => Some(FlowState::Xml),
+            "regex" | "redos" => Some(FlowState::Regex),
+            "generic" | "*" | "" => Some(FlowState::Generic),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for FlowState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FlowState::Sql => write!(f, "sql"),
+            FlowState::Html => write!(f, "html"),
+            FlowState::Shell => write!(f, "shell"),
+            FlowState::Path => write!(f, "path"),
+            FlowState::Ldap => write!(f, "ldap"),
+            FlowState::Xml => write!(f, "xml"),
+            FlowState::Regex => write!(f, "regex"),
+            FlowState::Generic => write!(f, "generic"),
+        }
+    }
+}
+
+/// A sanitizer that can be universal or context-specific
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Sanitizer {
+    /// Sanitizes all taint types (e.g., validation that rejects bad input)
+    Universal {
+        pattern: String,
+    },
+    /// Sanitizes only specific flow states (e.g., escapeHtml only for HTML)
+    ForStates {
+        pattern: String,
+        states: Vec<FlowState>,
+    },
+    /// Sanitizes only for specific sink kinds
+    ForSinks {
+        pattern: String,
+        sink_kinds: Vec<TaintSinkKind>,
+    },
+}
+
+impl Sanitizer {
+    /// Create a universal sanitizer
+    pub fn universal(pattern: impl Into<String>) -> Self {
+        Sanitizer::Universal { pattern: pattern.into() }
+    }
+
+    /// Create a sanitizer for specific flow states
+    pub fn for_states(pattern: impl Into<String>, states: Vec<FlowState>) -> Self {
+        Sanitizer::ForStates { pattern: pattern.into(), states }
+    }
+
+    /// Create a sanitizer for HTML/XSS
+    pub fn for_html(pattern: impl Into<String>) -> Self {
+        Sanitizer::ForStates {
+            pattern: pattern.into(),
+            states: vec![FlowState::Html]
+        }
+    }
+
+    /// Create a sanitizer for SQL
+    pub fn for_sql(pattern: impl Into<String>) -> Self {
+        Sanitizer::ForStates {
+            pattern: pattern.into(),
+            states: vec![FlowState::Sql]
+        }
+    }
+
+    /// Create a sanitizer for shell/command
+    pub fn for_shell(pattern: impl Into<String>) -> Self {
+        Sanitizer::ForStates {
+            pattern: pattern.into(),
+            states: vec![FlowState::Shell]
+        }
+    }
+
+    /// Get the pattern for this sanitizer
+    pub fn pattern(&self) -> &str {
+        match self {
+            Sanitizer::Universal { pattern } => pattern,
+            Sanitizer::ForStates { pattern, .. } => pattern,
+            Sanitizer::ForSinks { pattern, .. } => pattern,
+        }
+    }
+
+    /// Check if this sanitizer matches a function name
+    pub fn matches_name(&self, name: &str) -> bool {
+        let pattern = self.pattern().to_lowercase();
+        let name_lower = name.to_lowercase();
+        name_lower.contains(&pattern)
+    }
+
+    /// Check if this sanitizer is effective for a given flow state
+    pub fn is_effective_for_state(&self, state: &FlowState) -> bool {
+        match self {
+            Sanitizer::Universal { .. } => true,
+            Sanitizer::ForStates { states, .. } => {
+                // Generic state requires universal sanitizer
+                if *state == FlowState::Generic {
+                    return false;
+                }
+                states.contains(state)
+            }
+            Sanitizer::ForSinks { sink_kinds, .. } => {
+                sink_kinds.iter().any(|sk| state.matches_sink(sk))
+            }
+        }
+    }
+
+    /// Check if this sanitizer is effective for a given sink kind
+    pub fn is_effective_for_sink(&self, sink: &TaintSinkKind) -> bool {
+        match self {
+            Sanitizer::Universal { .. } => true,
+            Sanitizer::ForStates { states, .. } => {
+                let sink_state = FlowState::from_sink_kind(sink);
+                states.iter().any(|s| *s == sink_state || *s == FlowState::Generic)
+            }
+            Sanitizer::ForSinks { sink_kinds, .. } => {
+                sink_kinds.contains(sink)
+            }
+        }
+    }
+}
+
 /// Represents a tainted value in the program
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TaintValue {
     pub variable: String,
     pub source: TaintSourceKind,
     pub sanitized: bool,
+
+    /// Flow state tracking - what kind of sink is this taint flowing toward?
+    /// This enables context-specific sanitization checking.
+    #[serde(default)]
+    pub flow_state: FlowState,
+
+    /// Set of flow states for which this value has been sanitized.
+    /// E.g., after escapeHtml(), this contains [Html].
+    /// This allows precise tracking: sanitized for HTML doesn't mean sanitized for SQL!
+    #[serde(default)]
+    pub sanitized_for: Vec<FlowState>,
+
+    /// Optional content path for field-sensitive tracking.
+    /// E.g., "list.element" for ArrayList contents, "map.value" for Map values.
+    /// This enables implicit reads at sinks - when a container is passed to a sink,
+    /// we check if its contents are tainted.
+    #[serde(default)]
+    pub content_path: Option<String>,
 
     /// Condition under which this value becomes tainted (None = always tainted)
     /// This enables path-sensitive analysis by tracking WHEN taint applies
@@ -63,14 +265,78 @@ pub struct TaintValue {
     pub sanitized_condition: Option<SymbolicValue>,
 }
 
+/// Helper for implicit reads at sinks.
+///
+/// When a container (ArrayList, HashMap, etc.) is passed to a sink,
+/// we should check if its contents are tainted, not just the container itself.
+pub fn allows_implicit_read(container_var: &str, content_path: &str) -> bool {
+    // Common patterns for implicit container reads
+    let implicit_read_patterns = [
+        // Java Collections
+        (".element", true),    // List/Set elements
+        (".value", true),      // Map values
+        (".key", true),        // Map keys
+        // JavaScript/TypeScript arrays
+        ("[*]", true),         // Any array index
+        // Python lists/dicts
+        (".items", true),      // Dict items
+    ];
+
+    for (pattern, allowed) in &implicit_read_patterns {
+        if content_path.ends_with(pattern) {
+            return *allowed;
+        }
+    }
+
+    // Allow if the content path starts with the container variable
+    content_path.starts_with(container_var)
+}
+
+impl Default for FlowState {
+    fn default() -> Self {
+        FlowState::Generic
+    }
+}
+
 impl TaintValue {
     pub fn new(variable: String, source: TaintSourceKind) -> Self {
         Self {
             variable,
             source,
             sanitized: false,
+            flow_state: FlowState::Generic,
+            sanitized_for: Vec::new(),
+            content_path: None,
             taint_condition: None,      // Always tainted
             sanitized_condition: None,  // Not conditionally sanitized
+        }
+    }
+
+    /// Create a tainted value with a specific flow state
+    pub fn with_state(variable: String, source: TaintSourceKind, state: FlowState) -> Self {
+        Self {
+            variable,
+            source,
+            sanitized: false,
+            flow_state: state,
+            sanitized_for: Vec::new(),
+            content_path: None,
+            taint_condition: None,
+            sanitized_condition: None,
+        }
+    }
+
+    /// Create a tainted value with a content path for field-sensitive tracking
+    pub fn with_content_path(variable: String, source: TaintSourceKind, path: String) -> Self {
+        Self {
+            variable,
+            source,
+            sanitized: false,
+            flow_state: FlowState::Generic,
+            sanitized_for: Vec::new(),
+            content_path: Some(path),
+            taint_condition: None,
+            sanitized_condition: None,
         }
     }
 
@@ -85,20 +351,52 @@ impl TaintValue {
             variable,
             source,
             sanitized: false,
+            flow_state: FlowState::Generic,
+            sanitized_for: Vec::new(),
+            content_path: None,
             taint_condition: condition,
             sanitized_condition: None,
         }
     }
 
-    /// Mark as unconditionally sanitized
+    /// Mark as unconditionally sanitized (for all contexts)
     pub fn sanitize(&mut self) {
         self.sanitized = true;
+    }
+
+    /// Mark as sanitized for a specific flow state (context-specific)
+    /// This is the key to precision: escapeHtml() only sanitizes for Html state!
+    pub fn sanitize_for(&mut self, state: FlowState) {
+        if !self.sanitized_for.contains(&state) {
+            self.sanitized_for.push(state);
+        }
+    }
+
+    /// Mark as sanitized for multiple flow states
+    pub fn sanitize_for_states(&mut self, states: &[FlowState]) {
+        for state in states {
+            self.sanitize_for(*state);
+        }
     }
 
     /// Mark as sanitized under a specific condition
     /// This is the key to path-sensitive analysis!
     pub fn sanitize_when(&mut self, condition: SymbolicValue) {
         self.sanitized_condition = Some(condition);
+    }
+
+    /// Check if this value is sanitized for a specific sink kind
+    pub fn is_sanitized_for_sink(&self, sink_kind: &TaintSinkKind) -> bool {
+        // If universally sanitized, it's safe for everything
+        if self.sanitized {
+            return true;
+        }
+
+        // Check if we're sanitized for the specific flow state this sink needs
+        let required_state = FlowState::from_sink_kind(sink_kind);
+        self.sanitized_for.contains(&required_state) ||
+            // Generic sanitization (rare but possible)
+            self.sanitized_for.contains(&FlowState::Generic)
     }
 
     /// Check if this value is potentially tainted (considering conditions)
@@ -114,6 +412,22 @@ impl TaintValue {
         }
 
         true  // Always potentially tainted
+    }
+
+    /// Check if this value is potentially tainted for a specific sink
+    /// More precise than is_potentially_tainted() because it considers context
+    pub fn is_potentially_tainted_for(&self, sink_kind: &TaintSinkKind) -> bool {
+        if self.is_sanitized_for_sink(sink_kind) {
+            return false;
+        }
+
+        // Check flow state compatibility
+        // If we have a specific flow state that doesn't match the sink, it might be safe
+        if self.flow_state != FlowState::Generic && !self.flow_state.matches_sink(sink_kind) {
+            return false;
+        }
+
+        self.is_potentially_tainted()
     }
 
     /// Check if this value is always safe (definitely sanitized on all paths)
@@ -133,10 +447,25 @@ impl TaintValue {
         false  // Not provably safe
     }
 
+    /// Check if this value is always safe for a specific sink
+    pub fn is_always_safe_for(&self, sink_kind: &TaintSinkKind) -> bool {
+        if self.is_always_safe() {
+            return true;
+        }
+
+        // Check context-specific sanitization
+        self.is_sanitized_for_sink(sink_kind)
+    }
+
     /// Check if this value may be tainted on some path
     /// More conservative than is_potentially_tainted - used for reporting
     pub fn may_be_tainted(&self) -> bool {
         !self.is_always_safe()
+    }
+
+    /// Check if this value may be tainted for a specific sink
+    pub fn may_be_tainted_for(&self, sink_kind: &TaintSinkKind) -> bool {
+        !self.is_always_safe_for(sink_kind)
     }
 }
 
@@ -261,9 +590,10 @@ impl TaintAnalysis {
                 if let Some(taint_set) = result.get_in(cfg_index) {
                     // Check if any tainted values reach this sink without sanitization
                     for taint_value in taint_set {
-                        // NEW: Use path-sensitive checking
-                        // Only report if potentially tainted AND not always safe
-                        if taint_value.is_potentially_tainted() && !taint_value.is_always_safe() {
+                        // Use context-specific taint checking!
+                        // This is the key to precision: escapeHtml() prevents XSS but NOT SQL injection
+                        if taint_value.is_potentially_tainted_for(&sink.kind) &&
+                           !taint_value.is_always_safe_for(&sink.kind) {
                             vulnerabilities.push(TaintVulnerability {
                                 sink: sink.clone(),
                                 tainted_value: taint_value.clone(),
@@ -574,10 +904,13 @@ impl TransferFunction<TaintValue> for OwnedTaintTransferFunction {
                         for taint in input {
                             if referenced_vars.contains(&taint.variable) {
                                 // Create new taint for LHS variable, preserving conditions
-                                let mut new_taint = TaintValue {
+                                let new_taint = TaintValue {
                                     variable: lhs.clone(),
                                     source: taint.source.clone(),
                                     sanitized: taint.sanitized,
+                                    flow_state: taint.flow_state,
+                                    sanitized_for: taint.sanitized_for.clone(),
+                                    content_path: taint.content_path.clone(),
                                     taint_condition: taint.taint_condition.clone(),
                                     sanitized_condition: taint.sanitized_condition.clone(),
                                 };
@@ -933,5 +1266,179 @@ mod tests {
             transfer.extract_callee(&node),
             Some("getUserInput".to_string())
         );
+    }
+
+    #[test]
+    fn test_flow_state_from_sink_kind() {
+        assert_eq!(FlowState::from_sink_kind(&TaintSinkKind::SqlQuery), FlowState::Sql);
+        assert_eq!(FlowState::from_sink_kind(&TaintSinkKind::HtmlOutput), FlowState::Html);
+        assert_eq!(FlowState::from_sink_kind(&TaintSinkKind::CommandExecution), FlowState::Shell);
+        assert_eq!(FlowState::from_sink_kind(&TaintSinkKind::FileWrite), FlowState::Path);
+    }
+
+    #[test]
+    fn test_flow_state_matches_sink() {
+        assert!(FlowState::Generic.matches_sink(&TaintSinkKind::SqlQuery));
+        assert!(FlowState::Generic.matches_sink(&TaintSinkKind::HtmlOutput));
+
+        assert!(FlowState::Sql.matches_sink(&TaintSinkKind::SqlQuery));
+        assert!(!FlowState::Sql.matches_sink(&TaintSinkKind::HtmlOutput));
+
+        assert!(FlowState::Html.matches_sink(&TaintSinkKind::HtmlOutput));
+        assert!(!FlowState::Html.matches_sink(&TaintSinkKind::SqlQuery));
+
+        assert!(FlowState::Shell.matches_sink(&TaintSinkKind::CommandExecution));
+        assert!(FlowState::Shell.matches_sink(&TaintSinkKind::CodeEval));
+        assert!(!FlowState::Shell.matches_sink(&TaintSinkKind::SqlQuery));
+    }
+
+    #[test]
+    fn test_flow_state_from_str() {
+        assert_eq!(FlowState::from_str("sql"), Some(FlowState::Sql));
+        assert_eq!(FlowState::from_str("sqli"), Some(FlowState::Sql));
+        assert_eq!(FlowState::from_str("html"), Some(FlowState::Html));
+        assert_eq!(FlowState::from_str("xss"), Some(FlowState::Html));
+        assert_eq!(FlowState::from_str("shell"), Some(FlowState::Shell));
+        assert_eq!(FlowState::from_str("command"), Some(FlowState::Shell));
+        assert_eq!(FlowState::from_str("generic"), Some(FlowState::Generic));
+        assert_eq!(FlowState::from_str("*"), Some(FlowState::Generic));
+        assert_eq!(FlowState::from_str("unknown"), None);
+    }
+
+    #[test]
+    fn test_sanitizer_universal() {
+        let san = Sanitizer::universal("validate");
+        assert!(san.matches_name("validate"));
+        assert!(san.matches_name("validateInput"));
+        assert!(san.is_effective_for_state(&FlowState::Sql));
+        assert!(san.is_effective_for_state(&FlowState::Html));
+        assert!(san.is_effective_for_state(&FlowState::Generic));
+    }
+
+    #[test]
+    fn test_sanitizer_for_html() {
+        let san = Sanitizer::for_html("escapeHtml");
+        assert!(san.matches_name("escapeHtml"));
+        assert!(san.is_effective_for_state(&FlowState::Html));
+        assert!(!san.is_effective_for_state(&FlowState::Sql));
+        assert!(!san.is_effective_for_state(&FlowState::Shell));
+        // Generic state requires universal sanitizer
+        assert!(!san.is_effective_for_state(&FlowState::Generic));
+    }
+
+    #[test]
+    fn test_sanitizer_for_sql() {
+        let san = Sanitizer::for_sql("escapeSql");
+        assert!(san.matches_name("escapeSql"));
+        assert!(san.is_effective_for_state(&FlowState::Sql));
+        assert!(!san.is_effective_for_state(&FlowState::Html));
+        assert!(!san.is_effective_for_state(&FlowState::Shell));
+    }
+
+    #[test]
+    fn test_sanitizer_is_effective_for_sink() {
+        let html_san = Sanitizer::for_html("escapeHtml");
+        let sql_san = Sanitizer::for_sql("escapeSql");
+        let universal = Sanitizer::universal("validate");
+
+        // HTML sanitizer only works for HTML output
+        assert!(html_san.is_effective_for_sink(&TaintSinkKind::HtmlOutput));
+        assert!(!html_san.is_effective_for_sink(&TaintSinkKind::SqlQuery));
+
+        // SQL sanitizer only works for SQL queries
+        assert!(sql_san.is_effective_for_sink(&TaintSinkKind::SqlQuery));
+        assert!(!sql_san.is_effective_for_sink(&TaintSinkKind::HtmlOutput));
+
+        // Universal sanitizer works for everything
+        assert!(universal.is_effective_for_sink(&TaintSinkKind::SqlQuery));
+        assert!(universal.is_effective_for_sink(&TaintSinkKind::HtmlOutput));
+        assert!(universal.is_effective_for_sink(&TaintSinkKind::CommandExecution));
+    }
+
+    #[test]
+    fn test_taint_value_with_flow_state() {
+        let mut tv = TaintValue::with_state(
+            "x".to_string(),
+            TaintSourceKind::UserInput,
+            FlowState::Sql
+        );
+
+        assert_eq!(tv.flow_state, FlowState::Sql);
+        assert!(tv.sanitized_for.is_empty());
+
+        // Mark sanitized for HTML only
+        tv.sanitize_for(FlowState::Html);
+
+        // Should still be tainted for SQL (not sanitized for SQL)
+        assert!(!tv.is_sanitized_for_sink(&TaintSinkKind::SqlQuery));
+        assert!(tv.is_potentially_tainted_for(&TaintSinkKind::SqlQuery));
+
+        // Now sanitize for SQL
+        tv.sanitize_for(FlowState::Sql);
+        assert!(tv.is_sanitized_for_sink(&TaintSinkKind::SqlQuery));
+        assert!(!tv.is_potentially_tainted_for(&TaintSinkKind::SqlQuery));
+    }
+
+    #[test]
+    fn test_context_specific_sanitization() {
+        let mut tv = TaintValue::new("userInput".to_string(), TaintSourceKind::UserInput);
+
+        // Initially tainted for all sinks
+        assert!(tv.is_potentially_tainted_for(&TaintSinkKind::SqlQuery));
+        assert!(tv.is_potentially_tainted_for(&TaintSinkKind::HtmlOutput));
+        assert!(tv.is_potentially_tainted_for(&TaintSinkKind::CommandExecution));
+
+        // Sanitize for HTML (simulating escapeHtml())
+        tv.sanitize_for(FlowState::Html);
+
+        // No longer tainted for HTML output (XSS prevented)
+        assert!(!tv.is_potentially_tainted_for(&TaintSinkKind::HtmlOutput));
+
+        // STILL tainted for SQL (escapeHtml doesn't prevent SQL injection!)
+        assert!(tv.is_potentially_tainted_for(&TaintSinkKind::SqlQuery));
+
+        // STILL tainted for command execution
+        assert!(tv.is_potentially_tainted_for(&TaintSinkKind::CommandExecution));
+    }
+
+    #[test]
+    fn test_allows_implicit_read_list_element() {
+        // ArrayList elements should allow implicit read
+        assert!(allows_implicit_read("list", "list.element"));
+        assert!(allows_implicit_read("myList", "myList.element"));
+    }
+
+    #[test]
+    fn test_allows_implicit_read_map() {
+        // Map values and keys should allow implicit read
+        assert!(allows_implicit_read("map", "map.value"));
+        assert!(allows_implicit_read("map", "map.key"));
+    }
+
+    #[test]
+    fn test_allows_implicit_read_array() {
+        // Array elements should allow implicit read
+        assert!(allows_implicit_read("arr", "arr[*]"));
+    }
+
+    #[test]
+    fn test_allows_implicit_read_unrelated() {
+        // Unrelated paths with non-implicit-read suffixes should not allow implicit read
+        assert!(!allows_implicit_read("foo", "bar.other"));
+        assert!(!allows_implicit_read("foo", "bar.field"));
+        // But paths starting with container should work
+        assert!(allows_implicit_read("foo", "foo.something"));
+    }
+
+    #[test]
+    fn test_taint_value_with_content_path() {
+        let tv = TaintValue::with_content_path(
+            "list".to_string(),
+            TaintSourceKind::UserInput,
+            "list.element".to_string(),
+        );
+
+        assert_eq!(tv.variable, "list");
+        assert_eq!(tv.content_path, Some("list.element".to_string()));
     }
 }

@@ -38,7 +38,7 @@ bool vulnerableEmailRegex(String email) {
 // Test 6: URL regex
 bool vulnerableUrlRegex(String url) {
   // VULNERABLE: URL regex with potential backtracking
-  var regex = RegExp(r'^(https?://)?([a-zA-Z0-9-]+\.)+[a-zA-Z]+(/[a-zA-Z0-9-._~:/?#\[\]@!$&\'()*+,;=%]*)*$');
+  var regex = RegExp(r'^(https?://)?([a-zA-Z0-9-]+\.)+[a-zA-Z]+(/[a-zA-Z0-9._-]*)*$');
   return regex.hasMatch(url);
 }
 

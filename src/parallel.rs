@@ -5,8 +5,8 @@
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 use gittera_analyzer::{CallGraphBuilder, CfgBuilder, InterproceduralTaintAnalysis, SymbolTableBuilder};
-use gittera_parser::{LanguageConfig, Parser};
-use gittera_query::{Query, QueryExecutor};
+use gittera_parser::{Language, LanguageConfig, Parser};
+use gittera_query::{Query, QueryExecutor, QueryMetadata};
 use gittera_query::Finding;
 use rayon::prelude::*;
 use std::path::PathBuf;
@@ -29,16 +29,54 @@ pub struct ParallelAnalyzer {
     show_progress: bool,
 }
 
+/// Convert Language enum to the string format used in query metadata
+fn language_to_string(lang: Language) -> &'static str {
+    match lang {
+        Language::JavaScript => "javascript",
+        Language::TypeScript => "typescript",
+        Language::Python => "python",
+        Language::Ruby => "ruby",
+        Language::Php => "php",
+        Language::Java => "java",
+        Language::Kotlin => "kotlin",
+        Language::Scala => "scala",
+        Language::Go => "go",
+        Language::Rust => "rust",
+        Language::C => "c",
+        Language::Cpp => "cpp",
+        Language::CSharp => "csharp",
+        Language::Swift => "swift",
+        Language::Lua => "lua",
+        Language::Perl => "perl",
+        Language::Bash => "bash",
+        Language::Dart => "dart",
+    }
+}
+
 impl ParallelAnalyzer {
     pub fn new(show_progress: bool) -> Self {
         Self { show_progress }
     }
 
-    /// Analyze multiple files in parallel
+    /// Analyze multiple files in parallel (legacy - no language filtering)
     pub fn analyze_files(
         &self,
         files: Vec<SourceFile>,
         queries: &[(String, Query)],
+    ) -> Result<Vec<FileAnalysisResult>> {
+        // Convert to the new format with empty metadata (no language filtering)
+        let queries_with_metadata: Vec<(String, Query, Option<QueryMetadata>)> = queries
+            .iter()
+            .map(|(id, q)| (id.clone(), q.clone(), None))
+            .collect();
+        self.analyze_files_with_metadata(files, &queries_with_metadata)
+    }
+
+    /// Analyze multiple files in parallel with language-aware query filtering
+    pub fn analyze_files_with_metadata(
+        &self,
+        files: Vec<SourceFile>,
+        queries: &[(String, Query, Option<QueryMetadata>)],
     ) -> Result<Vec<FileAnalysisResult>> {
         info!("Starting parallel analysis of {} files", files.len());
 
@@ -59,7 +97,7 @@ impl ParallelAnalyzer {
         let results: Vec<FileAnalysisResult> = files
             .par_iter()
             .map(|source_file| {
-                let result = self.analyze_single_file(source_file, queries);
+                let result = self.analyze_single_file_with_metadata(source_file, queries);
 
                 // Update progress
                 if let Some(pb) = &progress {
@@ -129,11 +167,9 @@ impl ParallelAnalyzer {
         let cfg_builder = CfgBuilder::new();
         let cfg = cfg_builder.build(&ast);
 
-        // Run interprocedural taint analysis
+        // Run interprocedural taint analysis with language-specific configuration
         let mut interprocedural_analysis = InterproceduralTaintAnalysis::new()
-            .with_default_sources()
-            .with_default_sinks()
-            .with_default_sanitizers();
+            .for_language(source_file.language);
         let taint_results = interprocedural_analysis.analyze(&ast, &call_graph);
 
         // Execute all queries
@@ -148,6 +184,149 @@ impl ParallelAnalyzer {
                 finding.rule_id = name.to_string();
                 all_findings.push(finding);
             }
+        }
+
+        // Also include findings from interprocedural taint analysis
+        for vuln in &taint_results.vulnerabilities {
+            let severity = match vuln.severity {
+                gittera_analyzer::taint::Severity::Critical => "critical",
+                gittera_analyzer::taint::Severity::High => "high",
+                gittera_analyzer::taint::Severity::Medium => "medium",
+                gittera_analyzer::taint::Severity::Low => "low",
+            };
+
+            let category = match vuln.sink.kind {
+                gittera_analyzer::taint::TaintSinkKind::SqlQuery => "sql-injection",
+                gittera_analyzer::taint::TaintSinkKind::CommandExecution => "command-injection",
+                gittera_analyzer::taint::TaintSinkKind::FileWrite => "arbitrary-file-write",
+                gittera_analyzer::taint::TaintSinkKind::CodeEval => "code-injection",
+                gittera_analyzer::taint::TaintSinkKind::HtmlOutput => "xss",
+                gittera_analyzer::taint::TaintSinkKind::LogOutput => "log-injection",
+                gittera_analyzer::taint::TaintSinkKind::NetworkSend => "ssrf",
+            };
+
+            let finding = Finding {
+                file_path: source_file.path.to_string_lossy().to_string(),
+                line: 1, // TODO: Get actual line from sink node_id
+                column: 1,
+                message: format!("{} vulnerability - untrusted data flows to {}", category, vuln.sink.name),
+                severity: severity.to_string(),
+                code_snippet: vuln.sink.name.clone(),
+                category: category.to_string(),
+                rule_id: format!("taint/{}", category),
+            };
+            all_findings.push(finding);
+        }
+
+        debug!(
+            "Found {} issues in {}",
+            all_findings.len(),
+            source_file.path.display()
+        );
+
+        FileAnalysisResult {
+            file_path: source_file.path.clone(),
+            findings: all_findings,
+            success: true,
+            error: None,
+        }
+    }
+
+    /// Analyze a single file with language-aware query filtering
+    fn analyze_single_file_with_metadata(
+        &self,
+        source_file: &SourceFile,
+        queries: &[(String, Query, Option<QueryMetadata>)],
+    ) -> FileAnalysisResult {
+        debug!("Analyzing: {}", source_file.path.display());
+
+        // Parse the file
+        let config = LanguageConfig::new(source_file.language);
+        let parser = Parser::new(config, &source_file.path);
+
+        let ast = match parser.parse_file() {
+            Ok(ast) => ast,
+            Err(e) => {
+                error!("Parse error in {}: {}", source_file.path.display(), e);
+                return FileAnalysisResult {
+                    file_path: source_file.path.clone(),
+                    findings: vec![],
+                    success: false,
+                    error: Some(format!("Parse error: {}", e)),
+                };
+            }
+        };
+
+        // Build analysis structures
+        let symbol_table_builder = SymbolTableBuilder::new();
+        let _symbol_table = symbol_table_builder.build(&ast);
+
+        let call_graph_builder = CallGraphBuilder::new();
+        let call_graph = call_graph_builder.build(&ast);
+
+        let cfg_builder = CfgBuilder::new();
+        let cfg = cfg_builder.build(&ast);
+
+        // Run interprocedural taint analysis with language-specific configuration
+        let mut interprocedural_analysis = InterproceduralTaintAnalysis::new()
+            .for_language(source_file.language);
+        let taint_results = interprocedural_analysis.analyze(&ast, &call_graph);
+
+        // Get the language string for filtering
+        let file_lang = language_to_string(source_file.language);
+
+        // Execute only queries that match this file's language
+        let mut all_findings = Vec::new();
+
+        for (name, query, metadata) in queries {
+            // Filter by language if metadata is present
+            let should_run = match metadata {
+                Some(meta) => meta.supports_language(file_lang),
+                None => true, // No metadata = run on all files (legacy behavior)
+            };
+
+            if should_run {
+                let result = QueryExecutor::execute(query, &ast, &cfg, Some(&taint_results));
+
+                for mut finding in result.findings {
+                    // Ensure file path is set correctly
+                    finding.file_path = source_file.path.to_string_lossy().to_string();
+                    finding.rule_id = name.to_string();
+                    all_findings.push(finding);
+                }
+            }
+        }
+
+        // Also include findings from interprocedural taint analysis
+        for vuln in &taint_results.vulnerabilities {
+            let severity = match vuln.severity {
+                gittera_analyzer::taint::Severity::Critical => "critical",
+                gittera_analyzer::taint::Severity::High => "high",
+                gittera_analyzer::taint::Severity::Medium => "medium",
+                gittera_analyzer::taint::Severity::Low => "low",
+            };
+
+            let category = match vuln.sink.kind {
+                gittera_analyzer::taint::TaintSinkKind::SqlQuery => "sql-injection",
+                gittera_analyzer::taint::TaintSinkKind::CommandExecution => "command-injection",
+                gittera_analyzer::taint::TaintSinkKind::FileWrite => "arbitrary-file-write",
+                gittera_analyzer::taint::TaintSinkKind::CodeEval => "code-injection",
+                gittera_analyzer::taint::TaintSinkKind::HtmlOutput => "xss",
+                gittera_analyzer::taint::TaintSinkKind::LogOutput => "log-injection",
+                gittera_analyzer::taint::TaintSinkKind::NetworkSend => "ssrf",
+            };
+
+            let finding = Finding {
+                file_path: source_file.path.to_string_lossy().to_string(),
+                line: 1, // TODO: Get actual line from sink node_id
+                column: 1,
+                message: format!("{} vulnerability - untrusted data flows to {}", category, vuln.sink.name),
+                severity: severity.to_string(),
+                code_snippet: vuln.sink.name.clone(),
+                category: category.to_string(),
+                rule_id: format!("taint/{}", category),
+            };
+            all_findings.push(finding);
         }
 
         debug!(

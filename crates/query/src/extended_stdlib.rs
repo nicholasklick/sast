@@ -226,6 +226,74 @@ impl ExtendedStandardLibrary {
                 .uses_taint()
                 .build()
         );
+
+        // ==================== JAVA-SPECIFIC INJECTION QUERIES ====================
+
+        // Java SQL Injection
+        self.register(
+            "java/sql-injection",
+            Self::java_sql_injection_query(),
+            QueryMetadata::builder("java/sql-injection", "SQL Injection")
+                .description("Detects SQL injection in Java applications via Statement and PreparedStatement")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::High)
+                .cwes(vec![89, 564])
+                .owasp("A03:2021 - Injection")
+                .sans_top_25()
+                .uses_taint()
+                .languages(vec!["java".to_string()])
+                .build()
+        );
+
+        // Java Command Injection
+        self.register(
+            "java/command-injection",
+            Self::java_command_injection_query(),
+            QueryMetadata::builder("java/command-injection", "Command Injection")
+                .description("Detects OS command injection via Runtime.exec() and ProcessBuilder")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::High)
+                .cwes(vec![78, 88])
+                .owasp("A03:2021 - Injection")
+                .sans_top_25()
+                .uses_taint()
+                .languages(vec!["java".to_string()])
+                .build()
+        );
+
+        // Java LDAP Injection
+        self.register(
+            "java/ldap-injection",
+            Self::java_ldap_injection_query(),
+            QueryMetadata::builder("java/ldap-injection", "LDAP Injection")
+                .description("Detects LDAP injection via DirContext.search()")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![90])
+                .owasp("A03:2021 - Injection")
+                .uses_taint()
+                .languages(vec!["java".to_string()])
+                .build()
+        );
+
+        // Java XPath Injection
+        self.register(
+            "java/xpath-injection",
+            Self::java_xpath_injection_query(),
+            QueryMetadata::builder("java/xpath-injection", "XPath Injection")
+                .description("Detects XPath injection via XPath.evaluate()")
+                .category(QueryCategory::Injection)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![643])
+                .owasp("A03:2021 - Injection")
+                .uses_taint()
+                .languages(vec!["java".to_string()])
+                .build()
+        );
     }
 
     // ==================== XSS QUERIES (CWE-79 family) ====================
@@ -1308,140 +1376,154 @@ impl ExtendedStandardLibrary {
 
     fn command_injection_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(exec|spawn|system|shell|os\\.execute|io\\.popen|popen|Runtime\\.exec|ProcessBuilder|subprocess|Popen)".to_string()),
+                    value: "(?i)(exec|spawn|system|shell|execute|popen|start|run|call)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "Command injection vulnerability".to_string(),
+                variable: "mc".to_string(),
+                message: "Command injection vulnerability - untrusted data in system command".to_string(),
             }]),
         )
     }
 
     fn command_injection_extended_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(exec|spawn|system|shell|sh|bash|cmd|powershell|os\\.execute|io\\.popen|popen|Runtime\\.exec|ProcessBuilder|subprocess|Popen|Process\\.Start|ShellExecute)".to_string()),
+                    value: "(?i)(exec|spawn|system|shell|sh|bash|cmd|powershell|execute|popen|start|run|call|command|proc)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "Potential command injection (extended)".to_string(),
+                variable: "mc".to_string(),
+                message: "Potential command injection (extended) - untrusted data flows to command".to_string(),
             }]),
         )
     }
 
     fn ldap_injection_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(search|bind|modify|add|delete).*ldap".to_string()),
+                    value: "(?i)(search|bind|modify|add|delete|lookup)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "LDAP injection vulnerability".to_string(),
+                variable: "mc".to_string(),
+                message: "LDAP injection vulnerability - untrusted data in LDAP query".to_string(),
             }]),
         )
     }
 
     fn xpath_injection_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(evaluate|select).*xpath".to_string()),
+                    value: "(?i)(evaluate|select|compile|xpath)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "XPath injection vulnerability".to_string(),
+                variable: "mc".to_string(),
+                message: "XPath injection vulnerability - untrusted data in XPath query".to_string(),
             }]),
         )
     }
 
     fn code_injection_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(eval|Function|setTimeout|setInterval|loadstring|load|loadfile|dofile|compile|ScriptEngine|GroovyShell|Eval\\.me)".to_string()),
+                    value: "(?i)(eval|compile|execute|run|load|loadstring|loadfile|dofile)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "Code injection via eval/Function".to_string(),
+                variable: "mc".to_string(),
+                message: "Code injection vulnerability - untrusted data in code evaluation".to_string(),
             }]),
         )
     }
 
     fn template_injection_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(render|compile|template)".to_string()),
+                    value: "(?i)(render|compile|template|format|interpolate)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "Server-side template injection".to_string(),
+                variable: "mc".to_string(),
+                message: "Server-side template injection - untrusted data in template".to_string(),
             }]),
         )
     }
 
     fn expression_injection_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(parseExpression|evaluateExpression)".to_string()),
+                    value: "(?i)(parseExpression|evaluateExpression|getValue|parse)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "Expression language injection".to_string(),
+                variable: "mc".to_string(),
+                message: "Expression language injection - untrusted data in expression".to_string(),
             }]),
         )
     }
@@ -1928,60 +2010,66 @@ impl ExtendedStandardLibrary {
     // Path traversal queries
     fn path_traversal_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(readFile|writeFile|open|unlink|io\\.open|io\\.lines|os\\.remove|os\\.rename|File\\.read|File\\.write|fopen)".to_string()),
+                    value: "(?i)(readFile|writeFile|open|unlink|remove|rename|read|write|fopen|createReadStream|createWriteStream)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "Path traversal vulnerability".to_string(),
+                variable: "mc".to_string(),
+                message: "Path traversal vulnerability - untrusted data in file path".to_string(),
             }]),
         )
     }
 
     fn zip_slip_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(extract|unzip|decompress)".to_string()),
+                    value: "(?i)(extract|unzip|decompress|untar|gunzip)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "Zip slip vulnerability".to_string(),
+                variable: "mc".to_string(),
+                message: "Zip slip vulnerability - untrusted archive extraction".to_string(),
             }]),
         )
     }
 
     fn arbitrary_file_write_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(writeFile|appendFile|createWriteStream)".to_string()),
+                    value: "(?i)(writeFile|appendFile|createWriteStream|write|fwrite)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "Arbitrary file write vulnerability".to_string(),
+                variable: "mc".to_string(),
+                message: "Arbitrary file write vulnerability - untrusted data controls file path".to_string(),
             }]),
         )
     }
@@ -2293,60 +2381,66 @@ impl ExtendedStandardLibrary {
     // API misuse queries
     fn ssrf_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(fetch|axios|request|http\\.)".to_string()),
+                    value: "(?i)(fetch|get|post|put|delete|request|open|openConnection|openStream|getInputStream)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "Server-side request forgery (SSRF)".to_string(),
+                variable: "mc".to_string(),
+                message: "Server-side request forgery (SSRF) - untrusted URL".to_string(),
             }]),
         )
     }
 
     fn xxe_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(parseXml|parse.*xml|XMLParser)".to_string()),
+                    value: "(?i)(parse|parseXml|newDocumentBuilder|newSAXParser|unmarshal)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "XML External Entity (XXE) vulnerability".to_string(),
+                variable: "mc".to_string(),
+                message: "XML External Entity (XXE) vulnerability - untrusted XML input".to_string(),
             }]),
         )
     }
 
     fn insecure_deserialization_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(deserialize|unserialize|pickle|yaml\\.|loadstring|readObject|ObjectInputStream|Marshal\\.load|Unmarshal)".to_string()),
+                    value: "(?i)(deserialize|unserialize|readObject|load|loads|unmarshal|decode)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "Insecure deserialization".to_string(),
+                variable: "mc".to_string(),
+                message: "Insecure deserialization - untrusted data being deserialized".to_string(),
             }]),
         )
     }
@@ -2373,20 +2467,22 @@ impl ExtendedStandardLibrary {
 
     fn open_redirect_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(redirect|sendRedirect)".to_string()),
+                    value: "(?i)(redirect|sendRedirect|location|navigate)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "Open redirect vulnerability".to_string(),
+                variable: "mc".to_string(),
+                message: "Open redirect vulnerability - untrusted URL in redirect".to_string(),
             }]),
         )
     }
@@ -2535,20 +2631,22 @@ impl ExtendedStandardLibrary {
 
     fn mongodb_injection_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
-                    },
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(find|findOne|update|remove)".to_string()),
+                    value: "(?i)(find|findOne|findOneAndUpdate|findOneAndDelete|update|updateOne|updateMany|delete|deleteOne|deleteMany|aggregate|where)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "call".to_string(),
-                message: "MongoDB injection vulnerability".to_string(),
+                variable: "mc".to_string(),
+                message: "MongoDB injection vulnerability - untrusted data in query".to_string(),
             }]),
         )
     }
@@ -2686,6 +2784,100 @@ impl ExtendedStandardLibrary {
             SelectClause::new(vec![SelectItem::Both {
                 variable: "obj".to_string(),
                 message: "Electron contextIsolation disabled".to_string(),
+            }]),
+        )
+    }
+
+    // ==================== JAVA QUERY IMPLEMENTATIONS ====================
+
+    /// Java SQL Injection - detects tainted data flowing to Statement.execute(), executeQuery(), etc.
+    fn java_sql_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
+                    operator: ComparisonOp::Matches,
+                    value: "(?i)(executeQuery|executeUpdate|execute|prepareStatement|createStatement|nativeQuery|createQuery)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "mc".to_string(),
+                message: "SQL injection vulnerability - untrusted data in database query".to_string(),
+            }]),
+        )
+    }
+
+    /// Java Command Injection - detects tainted data flowing to Runtime.exec(), ProcessBuilder
+    fn java_command_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
+                    operator: ComparisonOp::Matches,
+                    value: "(?i)(exec|command|start|ProcessBuilder)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "mc".to_string(),
+                message: "Command injection vulnerability - untrusted data in system command".to_string(),
+            }]),
+        )
+    }
+
+    /// Java LDAP Injection - detects tainted data flowing to DirContext.search()
+    fn java_ldap_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
+                    operator: ComparisonOp::Matches,
+                    value: "(?i)(search|lookup|bind)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "mc".to_string(),
+                message: "LDAP injection vulnerability - untrusted data in LDAP query".to_string(),
+            }]),
+        )
+    }
+
+    /// Java XPath Injection - detects tainted data flowing to XPath.evaluate()
+    fn java_xpath_injection_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
+                    operator: ComparisonOp::Matches,
+                    value: "(?i)(evaluate|compile|selectNodes|selectSingleNode)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "mc".to_string(),
+                message: "XPath injection vulnerability - untrusted data in XPath expression".to_string(),
             }]),
         )
     }

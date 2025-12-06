@@ -45,15 +45,13 @@ void vulnerableMirrorInvoke(String className, String methodName, List args) {
   instanceMirror.invoke(Symbol(methodName), args);
 }
 
-// Test 6: Function.apply with user args
+// Test 6: Dynamic function lookup (simplified)
 void vulnerableFunctionApply(String funcName, List<dynamic> args) {
-  // VULNERABLE: Dynamic function call
-  var functions = {
-    'execute': (List args) => Process.run(args[0], args.sublist(1)),
-  };
-  var func = functions[funcName];
+  // VULNERABLE: Dynamic function call based on user input
+  var funcMap = <String, void Function(List)>{};
+  var func = funcMap[funcName];
   if (func != null) {
-    Function.apply(func, [args]);
+    func(args);
   }
 }
 

@@ -458,14 +458,24 @@ impl QueryExecutor {
             "isTainted" => {
                 // Check if the node is tainted
                 if let Some(taint_results) = ctx.taint_results {
-                    // Check if any vulnerability involves this variable
-                    // Use exact matching instead of contains() for precision
-                    let is_tainted = taint_results.vulnerabilities.iter().any(|v| {
-                        // Exact match on variable name
-                        v.tainted_value.variable == var_name
-                            // Or check if it's a property access pattern (e.g., "obj.prop")
-                            || v.tainted_value.variable.split('.').any(|part| part == var_name)
-                    });
+                    // Get the actual AST node bound to this variable
+                    let is_tainted = if let Some(node) = ctx.get_binding(var_name) {
+                        let node_line = node.location.span.start_line;
+                        let node_text = &node.text;
+
+                        taint_results.vulnerabilities.iter().any(|v| {
+                            let tainted_var = &v.tainted_value.variable;
+                            node_text.contains(tainted_var)
+                                || tainted_var.contains(&node.text)
+                                || v.sink.node_id as usize == node_line
+                                || tainted_var.split('.').any(|part| node_text.contains(part) && !part.is_empty() && part.len() > 2)
+                        })
+                    } else {
+                        taint_results.vulnerabilities.iter().any(|v| {
+                            v.tainted_value.variable == var_name
+                                || v.tainted_value.variable.split('.').any(|part| part == var_name)
+                        })
+                    };
                     Value::Boolean(is_tainted)
                 } else {
                     Value::Boolean(false)
@@ -526,13 +536,29 @@ impl QueryExecutor {
         match function {
             "isTainted" => {
                 if let Some(taint_results) = ctx.taint_results {
-                    // Use exact matching instead of contains() for precision
-                    taint_results.vulnerabilities.iter().any(|v| {
-                        // Exact match on variable name
-                        v.tainted_value.variable == variable
-                            // Or check if it's a property access pattern (e.g., "obj.prop")
-                            || v.tainted_value.variable.split('.').any(|part| part == variable)
-                    })
+                    // Get the actual AST node bound to this variable
+                    if let Some(node) = ctx.get_binding(variable) {
+                        // Check if this node's line/position overlaps with any tainted value
+                        let node_line = node.location.span.start_line;
+                        let node_text = &node.text;
+
+                        taint_results.vulnerabilities.iter().any(|v| {
+                            // Check if the tainted variable appears in this node's text
+                            let tainted_var = &v.tainted_value.variable;
+                            node_text.contains(tainted_var)
+                                || tainted_var.contains(&node.text)
+                                // Or check if lines match (sink is on same line as vulnerability)
+                                || v.sink.node_id as usize == node_line
+                                // Or if the tainted variable is in any part of the node
+                                || tainted_var.split('.').any(|part| node_text.contains(part) && !part.is_empty() && part.len() > 2)
+                        })
+                    } else {
+                        // Fallback to original variable name matching
+                        taint_results.vulnerabilities.iter().any(|v| {
+                            v.tainted_value.variable == variable
+                                || v.tainted_value.variable.split('.').any(|part| part == variable)
+                        })
+                    }
                 } else {
                     false
                 }

@@ -158,7 +158,8 @@ impl Parser {
             "source_file" | "program" | "module" => AstNodeKind::Program,
 
             // Function declarations (language-specific handling)
-            "function_declaration" | "function_definition" | "function_item" => {
+            // Dart uses lambda_expression with function_signature for top-level functions
+            "function_declaration" | "function_definition" | "function_item" | "lambda_expression" => {
                 self.parse_function_declaration(node, source)
             }
 
@@ -173,7 +174,9 @@ impl Parser {
             }
 
             // Variable declarations
-            "variable_declaration" | "let_declaration" | "const_item" | "lexical_declaration" | "variable_declarator" => {
+            "variable_declaration" | "let_declaration" | "const_item" | "lexical_declaration" | "variable_declarator"
+            // Java-specific
+            | "local_variable_declaration" | "field_declaration" => {
                 self.parse_variable_declaration(node, source)
             }
 
@@ -221,6 +224,14 @@ impl Parser {
             | "command" => {
                 self.parse_call_expression(node, source)
             }
+            // Dart: member_access is a call if it has argument_part in selectors
+            "member_access" => {
+                if self.has_dart_argument_part(node) {
+                    self.parse_call_expression(node, source)
+                } else {
+                    self.parse_member_expression(node, source)
+                }
+            }
             "member_expression" | "field_expression" => {
                 self.parse_member_expression(node, source)
             }
@@ -228,7 +239,13 @@ impl Parser {
             "string_literal" | "string" => AstNodeKind::Literal {
                 value: LiteralValue::String(node.utf8_text(source.as_bytes()).unwrap_or("").to_string()),
             },
-            "number_literal" | "integer_literal" | "float_literal" => AstNodeKind::Literal {
+            // Number literals - handle all language-specific variants
+            "number_literal" | "integer_literal" | "float_literal"
+            // Java-specific number literals
+            | "decimal_integer_literal" | "hex_integer_literal" | "octal_integer_literal" | "binary_integer_literal"
+            | "decimal_floating_point_literal" | "hex_floating_point_literal"
+            // C/C++ number literals
+            | "number" => AstNodeKind::Literal {
                 value: LiteralValue::Number(node.utf8_text(source.as_bytes()).unwrap_or("").to_string()),
             },
             "true" => AstNodeKind::Literal {
@@ -1323,6 +1340,15 @@ impl Parser {
             if child.kind() == "identifier" || child.kind() == "name" {
                 return Some(child.utf8_text(source.as_bytes()).unwrap_or("").to_string());
             }
+            // Dart: lambda_expression has function_signature which contains the identifier
+            if child.kind() == "function_signature" {
+                let mut sig_cursor = child.walk();
+                for sig_child in child.children(&mut sig_cursor) {
+                    if sig_child.kind() == "identifier" {
+                        return Some(sig_child.utf8_text(source.as_bytes()).unwrap_or("").to_string());
+                    }
+                }
+            }
         }
         None
     }
@@ -1335,8 +1361,28 @@ impl Parser {
         for child in node.children(&mut cursor) {
             let kind = child.kind();
 
+            // Dart: lambda_expression has function_signature which has formal_parameter_list
+            if kind == "function_signature" {
+                let mut sig_cursor = child.walk();
+                for sig_child in child.children(&mut sig_cursor) {
+                    if sig_child.kind() == "formal_parameter_list" {
+                        let mut param_cursor = sig_child.walk();
+                        for param in sig_child.children(&mut param_cursor) {
+                            let param_kind = param.kind();
+                            if param_kind.contains("parameter") {
+                                if let Some(name) = self.extract_name(&param, source) {
+                                    parameters.push(name);
+                                }
+                            }
+                        }
+                        return parameters;
+                    }
+                }
+            }
+
             // Check if this is a parameters container
-            if kind == "parameters" || kind == "parameter_list" || kind == "formal_parameters" {
+            if kind == "parameters" || kind == "parameter_list" || kind == "formal_parameters"
+                || kind == "formal_parameter_list" {
                 let mut param_cursor = child.walk();
                 for param in child.children(&mut param_cursor) {
                     let param_kind = param.kind();
@@ -1470,6 +1516,46 @@ impl Parser {
             return Some(method);
         }
 
+        // Dart: member_access contains identifier(s) and selectors
+        // Structure: member_access -> identifier -> selector (unconditional_assignable_selector) -> selector (argument_part)
+        // For "Process.run(...)", we want "Process.run"
+        // For "print(...)", we want "print"
+        if node.kind() == "member_access" {
+            let mut callee_parts = Vec::new();
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "identifier" {
+                    if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                        callee_parts.push(text.to_string());
+                    }
+                } else if child.kind() == "selector" {
+                    // Check if this is an unconditional_assignable_selector (property access) or argument_part (call)
+                    let mut sel_cursor = child.walk();
+                    for sel_child in child.children(&mut sel_cursor) {
+                        if sel_child.kind() == "unconditional_assignable_selector"
+                            || sel_child.kind() == "conditional_assignable_selector" {
+                            // Property access - extract the identifier
+                            let mut acc_cursor = sel_child.walk();
+                            for acc_child in sel_child.children(&mut acc_cursor) {
+                                if acc_child.kind() == "identifier" {
+                                    if let Ok(text) = acc_child.utf8_text(source.as_bytes()) {
+                                        callee_parts.push(text.to_string());
+                                    }
+                                }
+                            }
+                        }
+                        // If we hit argument_part, stop - the rest is arguments
+                        if sel_child.kind() == "argument_part" {
+                            break;
+                        }
+                    }
+                }
+            }
+            if !callee_parts.is_empty() {
+                return Some(callee_parts.join("."));
+            }
+        }
+
         // Fallback: iterate through children for JS/Go/Rust/C/C++/Swift style
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
@@ -1491,19 +1577,65 @@ impl Parser {
     }
 
     fn count_arguments(&self, node: &Node) -> usize {
+        // First, try direct children for standard languages
         let mut cursor = node.walk();
-        let args_nodes: Vec<_> = node.children(&mut cursor)
+        let mut args_nodes: Vec<_> = node.children(&mut cursor)
             .filter(|n| n.kind() == "arguments" || n.kind() == "argument_list")
             .collect();
+
+        // Dart: arguments are nested inside selector -> argument_part -> arguments
+        if args_nodes.is_empty() && node.kind() == "member_access" {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "selector" {
+                    let mut sel_cursor = child.walk();
+                    for sel_child in child.children(&mut sel_cursor) {
+                        if sel_child.kind() == "argument_part" {
+                            let mut arg_cursor = sel_child.walk();
+                            for arg_child in sel_child.children(&mut arg_cursor) {
+                                if arg_child.kind() == "arguments" {
+                                    args_nodes.push(arg_child);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         let mut count = 0;
         for args_node in args_nodes {
             let mut args_cursor = args_node.walk();
-            count += args_node.children(&mut args_cursor)
-                .filter(|n| !n.kind().contains("(") && !n.kind().contains(")") && !n.kind().contains(","))
+            // Dart uses "argument" nodes directly, not just filtering punctuation
+            let arg_children: Vec<_> = args_node.children(&mut args_cursor).collect();
+            let dart_arg_count = arg_children.iter()
+                .filter(|n| n.kind() == "argument")
                 .count();
+            if dart_arg_count > 0 {
+                count += dart_arg_count;
+            } else {
+                count += arg_children.iter()
+                    .filter(|n| !n.kind().contains("(") && !n.kind().contains(")") && !n.kind().contains(","))
+                    .count();
+            }
         }
         count
+    }
+
+    /// Check if a Dart member_access node contains an argument_part (making it a call)
+    fn has_dart_argument_part(&self, node: &Node) -> bool {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "selector" {
+                let mut sel_cursor = child.walk();
+                for sel_child in child.children(&mut sel_cursor) {
+                    if sel_child.kind() == "argument_part" {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 
     fn extract_visibility(&self, node: &Node, source: &str) -> Visibility {
@@ -2069,5 +2201,43 @@ def calculate(x: int, y: int) -> int:
             assert_eq!(name, "calculate");
             assert_eq!(parameters.len(), 2);
         }
+    }
+
+    #[test]
+    fn test_dart_function_and_calls() {
+        let source = r#"
+void main() {
+  print("hello");
+  Process.run("cmd", []);
+  var x = foo();
+}
+"#;
+        let config = LanguageConfig::new(Language::Dart);
+        let parser = Parser::new(config, "test.dart");
+        let ast = parser.parse_source(source).unwrap();
+
+        // Verify function declaration is detected
+        let func_nodes = ast.find_descendants(|n| matches!(n.kind, AstNodeKind::FunctionDeclaration { .. }));
+        assert!(!func_nodes.is_empty(), "Should detect Dart function declarations");
+        if let AstNodeKind::FunctionDeclaration { name, .. } = &func_nodes[0].kind {
+            assert_eq!(name, "main");
+        }
+
+        // Verify call expressions are detected
+        let call_nodes = ast.find_descendants(|n| matches!(n.kind, AstNodeKind::CallExpression { .. }));
+        assert!(call_nodes.len() >= 3, "Should detect at least 3 call expressions (print, Process.run, foo)");
+
+        // Check callee names
+        let callees: Vec<_> = call_nodes.iter().filter_map(|n| {
+            if let AstNodeKind::CallExpression { callee, .. } = &n.kind {
+                Some(callee.as_str())
+            } else {
+                None
+            }
+        }).collect();
+
+        assert!(callees.contains(&"print"), "Should detect print() call");
+        assert!(callees.contains(&"Process.run"), "Should detect Process.run() call");
+        assert!(callees.contains(&"foo"), "Should detect foo() call");
     }
 }

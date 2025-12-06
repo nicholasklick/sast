@@ -233,11 +233,9 @@ fn analyze_file(
 
     info!("Built CFG with {} nodes", cfg.graph.node_count());
 
-    // Run interprocedural taint analysis
+    // Run interprocedural taint analysis with language-specific configuration
     let mut interprocedural_analysis = InterproceduralTaintAnalysis::new()
-        .with_default_sources()
-        .with_default_sinks()
-        .with_default_sanitizers();
+        .for_language(lang);
     let taint_results = interprocedural_analysis.analyze(&ast, &call_graph);
 
     info!("Interprocedural analysis found {} vulnerabilities", taint_results.vulnerabilities.len());
@@ -344,11 +342,9 @@ fn scan_single_file(path: &PathBuf, format_str: &str, output: Option<&Path>, sui
     let cfg_builder = CfgBuilder::new();
     let cfg = cfg_builder.build(&ast);
 
-    // Run interprocedural taint analysis
+    // Run interprocedural taint analysis with language-specific configuration
     let mut interprocedural_analysis = InterproceduralTaintAnalysis::new()
-        .with_default_sources()
-        .with_default_sinks()
-        .with_default_sanitizers();
+        .for_language(lang);
     let taint_results = interprocedural_analysis.analyze(&ast, &call_graph);
 
     info!("Interprocedural analysis found {} vulnerabilities", taint_results.vulnerabilities.len());
@@ -358,9 +354,38 @@ fn scan_single_file(path: &PathBuf, format_str: &str, output: Option<&Path>, sui
     let queries = library.get_suite(suite);
     let mut all_findings = Vec::new();
 
-    info!("Running {} queries from {} suite", queries.len(), suite_name(suite));
+    // Get language string for filtering
+    let lang_str = match lang {
+        Language::JavaScript => "javascript",
+        Language::TypeScript => "typescript",
+        Language::Python => "python",
+        Language::Ruby => "ruby",
+        Language::Php => "php",
+        Language::Java => "java",
+        Language::Kotlin => "kotlin",
+        Language::Scala => "scala",
+        Language::Go => "go",
+        Language::Rust => "rust",
+        Language::C => "c",
+        Language::Cpp => "cpp",
+        Language::CSharp => "csharp",
+        Language::Swift => "swift",
+        Language::Lua => "lua",
+        Language::Perl => "perl",
+        Language::Bash => "bash",
+        Language::Dart => "dart",
+    };
 
-    for (query_id, query, metadata) in queries {
+    // Filter queries by language
+    let matching_queries: Vec<_> = queries
+        .into_iter()
+        .filter(|(_, _, metadata)| metadata.supports_language(lang_str))
+        .collect();
+
+    info!("Running {} queries from {} suite (filtered for {})",
+          matching_queries.len(), suite_name(suite), lang_str);
+
+    for (query_id, query, metadata) in matching_queries {
         info!("Running query: {} - {}", query_id, metadata.name);
         let result = QueryExecutor::execute(&query, &ast, &cfg, Some(&taint_results));
 
@@ -502,15 +527,15 @@ fn scan_directory(
 
     info!("Using {} queries from {} suite", suite_queries.len(), suite_name(suite));
 
-    // Prepare queries with categorization
-    let queries: Vec<(String, gittera_query::Query)> = suite_queries
+    // Prepare queries with metadata for language-aware filtering
+    let queries: Vec<(String, gittera_query::Query, Option<gittera_query::QueryMetadata>)> = suite_queries
         .into_iter()
-        .map(|(id, query, _metadata)| (id.to_string(), query.clone()))
+        .map(|(id, query, metadata)| (id.to_string(), query.clone(), Some(metadata.clone())))
         .collect();
 
-    // Run parallel analysis
+    // Run parallel analysis with language filtering
     let analyzer = ParallelAnalyzer::new(true); // Enable progress bar
-    let results = analyzer.analyze_files(source_files.clone(), &queries)?;
+    let results = analyzer.analyze_files_with_metadata(source_files.clone(), &queries)?;
 
     // Get statistics
     let stats = ParallelAnalyzer::get_statistics(&results);

@@ -146,28 +146,73 @@ impl SymbolicValue {
         !self.is_concrete()
     }
 
-    /// Simplify the symbolic value if possible
+    /// Simplify the symbolic value if possible.
+    /// SOUNDNESS: If either operand is Unknown, the result is Unknown
+    /// to ensure we don't incorrectly prune branches.
     pub fn simplify(&self) -> SymbolicValue {
         match self {
             SymbolicValue::BinaryOp { operator, left, right } => {
                 let left = left.simplify();
                 let right = right.simplify();
 
-                // Constant folding
+                // SOUNDNESS: If either operand is Unknown, result is Unknown
+                if matches!(left, SymbolicValue::Unknown) || matches!(right, SymbolicValue::Unknown) {
+                    return SymbolicValue::Unknown;
+                }
+
+                // Constant folding for integers
                 if let (SymbolicValue::Concrete(l), SymbolicValue::Concrete(r)) = (&left, &right) {
                     match operator {
-                        BinaryOperator::Add => return SymbolicValue::Concrete(l + r),
-                        BinaryOperator::Subtract => return SymbolicValue::Concrete(l - r),
-                        BinaryOperator::Multiply => return SymbolicValue::Concrete(l * r),
+                        BinaryOperator::Add => return SymbolicValue::Concrete(l.saturating_add(*r)),
+                        BinaryOperator::Subtract => return SymbolicValue::Concrete(l.saturating_sub(*r)),
+                        BinaryOperator::Multiply => return SymbolicValue::Concrete(l.saturating_mul(*r)),
                         BinaryOperator::Divide if *r != 0 => return SymbolicValue::Concrete(l / r),
+                        BinaryOperator::Modulo if *r != 0 => return SymbolicValue::Concrete(l % r),
                         BinaryOperator::Equal => return SymbolicValue::ConcreteBool(l == r),
                         BinaryOperator::NotEqual => return SymbolicValue::ConcreteBool(l != r),
                         BinaryOperator::LessThan => return SymbolicValue::ConcreteBool(l < r),
                         BinaryOperator::LessThanOrEqual => return SymbolicValue::ConcreteBool(l <= r),
                         BinaryOperator::GreaterThan => return SymbolicValue::ConcreteBool(l > r),
                         BinaryOperator::GreaterThanOrEqual => return SymbolicValue::ConcreteBool(l >= r),
+                        BinaryOperator::BitwiseAnd => return SymbolicValue::Concrete(l & r),
+                        BinaryOperator::BitwiseOr => return SymbolicValue::Concrete(l | r),
+                        BinaryOperator::BitwiseXor => return SymbolicValue::Concrete(l ^ r),
+                        BinaryOperator::LeftShift => return SymbolicValue::Concrete(l << (r & 63)),
+                        BinaryOperator::RightShift => return SymbolicValue::Concrete(l >> (r & 63)),
                         _ => {}
                     }
+                }
+
+                // Constant folding for booleans
+                if let (SymbolicValue::ConcreteBool(l), SymbolicValue::ConcreteBool(r)) = (&left, &right) {
+                    match operator {
+                        BinaryOperator::And => return SymbolicValue::ConcreteBool(*l && *r),
+                        BinaryOperator::Or => return SymbolicValue::ConcreteBool(*l || *r),
+                        BinaryOperator::Equal => return SymbolicValue::ConcreteBool(l == r),
+                        BinaryOperator::NotEqual => return SymbolicValue::ConcreteBool(l != r),
+                        _ => {}
+                    }
+                }
+
+                // Short-circuit evaluation for AND/OR
+                match operator {
+                    BinaryOperator::And => {
+                        if let SymbolicValue::ConcreteBool(false) = left {
+                            return SymbolicValue::ConcreteBool(false);
+                        }
+                        if let SymbolicValue::ConcreteBool(false) = right {
+                            return SymbolicValue::ConcreteBool(false);
+                        }
+                    }
+                    BinaryOperator::Or => {
+                        if let SymbolicValue::ConcreteBool(true) = left {
+                            return SymbolicValue::ConcreteBool(true);
+                        }
+                        if let SymbolicValue::ConcreteBool(true) = right {
+                            return SymbolicValue::ConcreteBool(true);
+                        }
+                    }
+                    _ => {}
                 }
 
                 SymbolicValue::BinaryOp {
@@ -180,9 +225,22 @@ impl SymbolicValue {
             SymbolicValue::UnaryOp { operator, operand } => {
                 let operand = operand.simplify();
 
+                // SOUNDNESS: Unknown propagates
+                if matches!(operand, SymbolicValue::Unknown) {
+                    return SymbolicValue::Unknown;
+                }
+
                 if let SymbolicValue::ConcreteBool(b) = operand {
                     if *operator == UnaryOperator::Not {
                         return SymbolicValue::ConcreteBool(!b);
+                    }
+                }
+
+                if let SymbolicValue::Concrete(n) = operand {
+                    match operator {
+                        UnaryOperator::Negate => return SymbolicValue::Concrete(-n),
+                        UnaryOperator::BitwiseNot => return SymbolicValue::Concrete(!n),
+                        _ => {}
                     }
                 }
 
@@ -194,6 +252,38 @@ impl SymbolicValue {
 
             _ => self.clone(),
         }
+    }
+
+    /// Check if this value is definitely a boolean and return it.
+    /// Returns None for Unknown or symbolic values - be conservative.
+    /// This is used for sound branch pruning in taint analysis.
+    pub fn as_definite_bool(&self) -> Option<bool> {
+        match self.simplify() {
+            SymbolicValue::ConcreteBool(b) => Some(b),
+            SymbolicValue::Unknown => None,  // Explicitly unknown = analyze both branches
+            _ => None,  // Symbolic = analyze both branches (conservative)
+        }
+    }
+
+    /// Check if this value is definitely a concrete integer and return it.
+    pub fn as_definite_int(&self) -> Option<i64> {
+        match self.simplify() {
+            SymbolicValue::Concrete(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    /// Check if this value is definitely a concrete string and return it.
+    pub fn as_definite_string(&self) -> Option<String> {
+        match self.simplify() {
+            SymbolicValue::ConcreteString(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Check if this value is Unknown (untracked/conservative)
+    pub fn is_unknown(&self) -> bool {
+        matches!(self, SymbolicValue::Unknown)
     }
 }
 

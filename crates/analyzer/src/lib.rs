@@ -339,11 +339,17 @@
 
 pub mod cfg;
 pub mod dataflow;
+pub mod dataflow_node;    // CodeQL-inspired data flow node abstraction
+pub mod content;          // Content model for field-sensitive analysis
+pub mod access_path;      // Access path tracking (depth 5)
+pub mod flow_summary;     // Flow summaries (Models as Data) for library functions
 pub mod taint;
 pub mod taint_ast_based;  // New: AST-based taint analysis with proper expression evaluation
 pub mod taint_config;     // Language-specific taint configurations
+pub mod taint_pipeline;   // Multi-stage analysis pipeline for performance
 pub mod symbol_table;
 pub mod call_graph;
+pub mod call_context;      // k-CFA context sensitivity for inter-procedural analysis
 pub mod interprocedural_taint;
 pub mod points_to;
 pub mod symbolic;
@@ -351,10 +357,16 @@ pub mod type_system;      // Type system integration for enhanced analysis preci
 
 pub use cfg::{ControlFlowGraph, CfgNode, CfgEdge, CfgBuilder};
 pub use dataflow::{DataFlowAnalysis, DataFlowDirection, TransferFunction};
-pub use taint::{TaintAnalysis, TaintSource, TaintSink, TaintValue, TaintAnalysisResult, Severity, TaintSinkKind, TaintSourceKind};
+pub use dataflow_node::{DataFlowNode, ArgumentPosition, ReturnKind, LocalFlowStep, ClearedNodes};
+pub use content::{Content, ContentSet};
+pub use access_path::{AccessPath, AccessPathFront, MAX_ACCESS_PATH_LENGTH};
+pub use flow_summary::{FlowSummaryRegistry, SummarizedCallable, FlowPropagation, SummaryComponent, FlowKind, ArgumentSpec, Provenance};
+pub use taint::{TaintAnalysis, TaintSource, TaintSink, TaintValue, TaintAnalysisResult, Severity, TaintSinkKind, TaintSourceKind, FlowState, Sanitizer, TaintVulnerability, allows_implicit_read};
 pub use taint_config::LanguageTaintConfig;
+pub use taint_pipeline::{TaintAnalysisPipeline, PipelineConfig, PipelineResult, VulnerabilityCandidate, StageStats};
 pub use symbol_table::{SymbolTable, SymbolTableBuilder, Symbol, SymbolKind};
 pub use call_graph::{CallGraph, CallGraphBuilder, CallGraphNode, CallEdge, CallableKind};
+pub use call_context::{CallContext, ContextualFunction, ContextConfig, MAX_CONTEXT_DEPTH};
 pub use interprocedural_taint::{InterproceduralTaintAnalysis, FunctionTaintSummary};
 pub use points_to::{PointsToAnalysis, PointsToAnalysisBuilder, AbstractLocation, PointsToConstraint, PointsToStats};
 pub use symbolic::{SymbolicExecutor, SymbolicExecutorBuilder, SymbolicValue, SymbolicState, ExecutionPath, SymbolicExecutionResult, Constraint, BinaryOperator, UnaryOperator};
