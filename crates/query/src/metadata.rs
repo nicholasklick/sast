@@ -216,7 +216,12 @@ impl QueryMetadata {
     }
 
     /// Check if this query supports the given language
+    /// Returns true if no languages are specified (universal query) or if language is in list
     pub fn supports_language(&self, language: &str) -> bool {
+        // If no languages specified, query applies to all languages
+        if self.languages.is_empty() {
+            return true;
+        }
         let lang_lower = language.to_lowercase();
         self.languages.iter().any(|l| l.to_lowercase() == lang_lower)
     }
@@ -262,7 +267,7 @@ impl QueryMetadataBuilder {
             sans_top_25: false,
             suites: vec![QuerySuite::Default],
             tags: Vec::new(),
-            languages: vec!["javascript".to_string(), "typescript".to_string()],
+            languages: Vec::new(),  // Empty = applies to all languages
             uses_taint: false,
             path_sensitive: false,
             example_vulnerable: None,

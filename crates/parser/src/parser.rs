@@ -257,7 +257,7 @@ impl Parser {
             "null" | "nil" => AstNodeKind::Literal {
                 value: LiteralValue::Null,
             },
-            "assignment_expression" => self.parse_assignment_expression(node, source),
+            "assignment_expression" | "assignment" => self.parse_assignment_expression(node, source),
             "ternary_expression" | "conditional_expression" => {
                 self.parse_conditional_expression(node, source)
             }

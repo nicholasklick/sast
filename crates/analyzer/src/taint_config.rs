@@ -33,6 +33,10 @@ impl LanguageTaintConfig {
             Language::Perl => Self::perl_config(),
             Language::Bash => Self::bash_config(),
             Language::Dart => Self::dart_config(),
+            Language::C => Self::c_config(),
+            Language::Cpp => Self::cpp_config(),
+            Language::Kotlin => Self::kotlin_config(),
+            Language::Scala => Self::scala_config(),
             _ => Self::generic_config(language),
         }
     }
@@ -602,14 +606,34 @@ impl LanguageTaintConfig {
         }
     }
 
-    /// Python configuration
+    /// Python configuration (comprehensive - Flask, Django, FastAPI)
     fn python_config() -> Self {
         let mut sources = Vec::new();
         let mut sinks = Vec::new();
         let mut sanitizers = Vec::new();
 
-        // User Input
-        for name in &["input", "raw_input", "sys.argv", "request.args", "request.form"] {
+        // ===== TAINT SOURCES =====
+
+        // User Input - Flask
+        for name in &[
+            "request.args",
+            "request.args.get",
+            "request.form",
+            "request.form.get",
+            "request.form.getlist",
+            "request.cookies",
+            "request.cookies.get",
+            "request.headers",
+            "request.headers.get",
+            "request.data",
+            "request.json",
+            "request.values",
+            "request.values.get",
+            "request.query_string",
+            "request.path",
+            "request.url",
+            "request.files",
+        ] {
             sources.push(TaintSource {
                 name: name.to_string(),
                 kind: TaintSourceKind::UserInput,
@@ -617,8 +641,156 @@ impl LanguageTaintConfig {
             });
         }
 
-        // Command Execution
-        for name in &["os.system", "subprocess.call", "subprocess.run", "eval", "exec"] {
+        // User Input - Django
+        for name in &[
+            "request.GET",
+            "request.GET.get",
+            "request.POST",
+            "request.POST.get",
+            "request.COOKIES",
+            "request.META",
+            "request.body",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - FastAPI/Starlette
+        for name in &[
+            "Query",
+            "Path",
+            "Body",
+            "Form",
+            "Header",
+            "Cookie",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - Standard library
+        for name in &[
+            "input",
+            "raw_input",
+            "sys.argv",
+            "sys.stdin",
+            "sys.stdin.read",
+            "sys.stdin.readline",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // File Read
+        for name in &[
+            "open",
+            "read",
+            "readline",
+            "readlines",
+            "file.read",
+            "Path.read_text",
+            "Path.read_bytes",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::FileRead,
+                node_id: 0,
+            });
+        }
+
+        // Environment Variables
+        for name in &[
+            "os.environ",
+            "os.environ.get",
+            "os.getenv",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::EnvironmentVariable,
+                node_id: 0,
+            });
+        }
+
+        // Network/HTTP
+        for name in &[
+            "requests.get",
+            "requests.post",
+            "urllib.request.urlopen",
+            "httpx.get",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::NetworkRequest,
+                node_id: 0,
+            });
+        }
+
+        // ===== TAINT SINKS =====
+
+        // SQL Injection (Critical)
+        for name in &[
+            "execute",
+            "executemany",
+            "cur.execute",
+            "cursor.execute",
+            "conn.execute",
+            "connection.execute",
+            "db.execute",
+            "session.execute",
+            "engine.execute",
+            "raw",
+            "RawSQL",
+            "text",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::SqlQuery,
+                node_id: 0,
+            });
+        }
+
+        // Command Execution (Critical)
+        for name in &[
+            "os.system",
+            "os.popen",
+            "os.spawn",
+            "os.spawnl",
+            "os.spawnle",
+            "os.spawnlp",
+            "os.spawnlpe",
+            "os.spawnv",
+            "os.spawnve",
+            "os.spawnvp",
+            "os.spawnvpe",
+            "os.execl",
+            "os.execle",
+            "os.execlp",
+            "os.execlpe",
+            "os.execv",
+            "os.execve",
+            "os.execvp",
+            "os.execvpe",
+            "subprocess.call",
+            "subprocess.run",
+            "subprocess.Popen",
+            "subprocess.check_call",
+            "subprocess.check_output",
+            "commands.getoutput",
+            "commands.getstatusoutput",
+            "popen",
+            "popen2",
+            "popen3",
+            "popen4",
+        ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
                 kind: TaintSinkKind::CommandExecution,
@@ -626,10 +798,170 @@ impl LanguageTaintConfig {
             });
         }
 
+        // Code Evaluation (Critical)
+        for name in &[
+            "eval",
+            "exec",
+            "compile",
+            "__import__",
+            "importlib.import_module",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CodeEval,
+                node_id: 0,
+            });
+        }
+
+        // File Operations (Path Traversal)
+        for name in &[
+            "open",
+            "file",
+            "os.open",
+            "io.open",
+            "codecs.open",
+            "Path",
+            "pathlib.Path",
+            "os.path.join",
+            "os.makedirs",
+            "os.mkdir",
+            "os.remove",
+            "os.unlink",
+            "os.rename",
+            "shutil.copy",
+            "shutil.move",
+            "shutil.rmtree",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::FileWrite,
+                node_id: 0,
+            });
+        }
+
+        // XSS/HTML Output
+        for name in &[
+            "render_template_string",
+            "Markup",
+            "mark_safe",
+            "format_html",
+            "innerHTML",
+            "write",
+            "response.write",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::HtmlOutput,
+                node_id: 0,
+            });
+        }
+
+        // LDAP Injection
+        for name in &[
+            "search_s",
+            "search",
+            "search_ext",
+            "ldap.search",
+            "connection.search",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CodeEval,  // Using CodeEval as closest match
+                node_id: 0,
+            });
+        }
+
+        // XPath Injection
+        for name in &[
+            "xpath",
+            "find",
+            "findall",
+            "findtext",
+            "iterfind",
+            "lxml.etree.XPath",
+            "etree.xpath",
+            "root.xpath",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CodeEval,  // Using CodeEval as closest match
+                node_id: 0,
+            });
+        }
+
+        // Deserialization (Critical)
+        for name in &[
+            "pickle.loads",
+            "pickle.load",
+            "cPickle.loads",
+            "cPickle.load",
+            "yaml.load",
+            "yaml.unsafe_load",
+            "marshal.loads",
+            "shelve.open",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CodeEval,
+                node_id: 0,
+            });
+        }
+
+        // Network/SSRF
+        for name in &[
+            "urllib.request.urlopen",
+            "requests.get",
+            "requests.post",
+            "requests.put",
+            "requests.delete",
+            "httpx.get",
+            "aiohttp.ClientSession.get",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::NetworkSend,
+                node_id: 0,
+            });
+        }
+
+        // Logging (Information Disclosure)
+        for name in &[
+            "print",
+            "logging.info",
+            "logging.debug",
+            "logging.warning",
+            "logging.error",
+            "logger.info",
+            "logger.debug",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::LogOutput,
+                node_id: 0,
+            });
+        }
+
+        // ===== SANITIZERS =====
         sanitizers.extend(vec![
+            // HTML Escaping
             "escape".to_string(),
             "html.escape".to_string(),
+            "cgi.escape".to_string(),
+            "markupsafe.escape".to_string(),
+            "bleach.clean".to_string(),
+            // Shell Escaping
             "shlex.quote".to_string(),
+            "pipes.quote".to_string(),
+            // SQL Parameterization indicators
+            "?".to_string(),
+            "%s".to_string(),
+            // Type Coercion
+            "int".to_string(),
+            "float".to_string(),
+            "str".to_string(),
+            // Validation
+            "validate".to_string(),
+            "is_safe".to_string(),
         ]);
 
         Self {
@@ -2460,6 +2792,301 @@ impl LanguageTaintConfig {
 
         Self {
             language: Language::Dart,
+            sources,
+            sinks,
+            sanitizers,
+        }
+    }
+
+    /// C configuration (comprehensive)
+    fn c_config() -> Self {
+        let mut sources = Vec::new();
+        let mut sinks = Vec::new();
+        let mut sanitizers = Vec::new();
+
+        // ===== TAINT SOURCES =====
+
+        // User Input / Network
+        for name in &[
+            "recv",
+            "recvfrom",
+            "recvmsg",
+            "read",
+            "fread",
+            "fgets",
+            "gets",
+            "scanf",
+            "fscanf",
+            "sscanf",
+            "getenv",
+            "getchar",
+            "fgetc",
+            "getc",
+            "readline",
+            "accept",
+            "listen",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // Environment Variables
+        for name in &["getenv", "secure_getenv"] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::EnvironmentVariable,
+                node_id: 0,
+            });
+        }
+
+        // File Read
+        for name in &["fread", "read", "fgets", "fgetc", "getc"] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::FileRead,
+                node_id: 0,
+            });
+        }
+
+        // ===== TAINT SINKS =====
+
+        // Command Execution (Critical)
+        for name in &[
+            "system",
+            "popen",
+            "execl",
+            "execlp",
+            "execle",
+            "execv",
+            "execvp",
+            "execvpe",
+            "execve",
+            "fork",
+            "vfork",
+            "spawn",
+            "spawnl",
+            "spawnle",
+            "spawnlp",
+            "spawnlpe",
+            "spawnv",
+            "spawnve",
+            "spawnvp",
+            "spawnvpe",
+            "_execl",
+            "_execv",
+            "_system",
+            "_popen",
+            "ShellExecute",
+            "ShellExecuteEx",
+            "CreateProcess",
+            "WinExec",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CommandExecution,
+                node_id: 0,
+            });
+        }
+
+        // Format String (Critical)
+        for name in &[
+            "printf",
+            "fprintf",
+            "sprintf",
+            "snprintf",
+            "vprintf",
+            "vfprintf",
+            "vsprintf",
+            "vsnprintf",
+            "syslog",
+            "wprintf",
+            "fwprintf",
+            "swprintf",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::LogOutput,  // Format string vulnerabilities
+                node_id: 0,
+            });
+        }
+
+        // Memory Operations (Buffer Overflow)
+        for name in &[
+            "strcpy",
+            "strncpy",
+            "strcat",
+            "strncat",
+            "memcpy",
+            "memmove",
+            "memset",
+            "bcopy",
+            "gets",
+            "sprintf",
+            "vsprintf",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::FileWrite,  // Using FileWrite for memory corruption
+                node_id: 0,
+            });
+        }
+
+        // File Operations (Path Traversal)
+        for name in &[
+            "fopen",
+            "freopen",
+            "open",
+            "creat",
+            "openat",
+            "rename",
+            "remove",
+            "unlink",
+            "rmdir",
+            "mkdir",
+            "chdir",
+            "chmod",
+            "chown",
+            "link",
+            "symlink",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::FileWrite,
+                node_id: 0,
+            });
+        }
+
+        // Network Send
+        for name in &["send", "sendto", "sendmsg", "write"] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::NetworkSend,
+                node_id: 0,
+            });
+        }
+
+        // ===== SANITIZERS =====
+        sanitizers.extend(vec![
+            "snprintf".to_string(),  // Safe with proper size
+            "strncpy".to_string(),   // Safe with proper size
+            "strncat".to_string(),   // Safe with proper size
+            "escape".to_string(),
+            "sanitize".to_string(),
+            "validate".to_string(),
+        ]);
+
+        Self {
+            language: Language::C,
+            sources,
+            sinks,
+            sanitizers,
+        }
+    }
+
+    /// C++ configuration (extends C config)
+    fn cpp_config() -> Self {
+        // Start with C config
+        let c_config = Self::c_config();
+        let mut sources = c_config.sources;
+        let mut sinks = c_config.sinks;
+        let mut sanitizers = c_config.sanitizers;
+
+        // Add C++ specific sources
+        for name in &[
+            "cin",
+            "std::cin",
+            "getline",
+            "std::getline",
+            "ifstream.read",
+            "ifstream.getline",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // Add C++ specific sinks
+        for name in &[
+            "cout",
+            "std::cout",
+            "cerr",
+            "std::cerr",
+            "ofstream.write",
+            "std::system",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::LogOutput,
+                node_id: 0,
+            });
+        }
+
+        Self {
+            language: Language::Cpp,
+            sources,
+            sinks,
+            sanitizers,
+        }
+    }
+
+    /// Kotlin configuration (similar to Java)
+    fn kotlin_config() -> Self {
+        // Kotlin uses Java-like APIs, so start with Java config
+        let java_config = Self::java_config();
+        let mut sources = java_config.sources;
+        let mut sinks = java_config.sinks;
+        let mut sanitizers = java_config.sanitizers;
+
+        // Add Kotlin-specific patterns
+        for name in &[
+            "readLine",
+            "readln",
+            "System.console",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        Self {
+            language: Language::Kotlin,
+            sources,
+            sinks,
+            sanitizers,
+        }
+    }
+
+    /// Scala configuration (similar to Java)
+    fn scala_config() -> Self {
+        // Scala uses Java-like APIs
+        let java_config = Self::java_config();
+        let mut sources = java_config.sources;
+        let mut sinks = java_config.sinks;
+        let mut sanitizers = java_config.sanitizers;
+
+        // Add Scala-specific patterns
+        for name in &[
+            "scala.io.StdIn.readLine",
+            "StdIn.readLine",
+            "Source.fromFile",
+            "Source.fromURL",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        Self {
+            language: Language::Scala,
             sources,
             sinks,
             sanitizers,
