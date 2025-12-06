@@ -17,9 +17,11 @@
 
 use crate::call_graph::CallGraph;
 use crate::flow_summary::FlowSummaryRegistry;
+use crate::language_handler::{LanguageTaintHandler, SafeSinkPattern, get_handler_for_language, evaluate_node_symbolic};
 use crate::symbolic::{SymbolicValue, SymbolicState, BinaryOperator, UnaryOperator};
 use crate::taint::{TaintAnalysisResult, TaintSink, TaintSource, TaintSourceKind, TaintValue, TaintVulnerability, Severity, TaintSinkKind};
 use gittera_parser::ast::{AstNode, AstNodeKind, LiteralValue};
+use gittera_parser::language::Language;
 use std::collections::{HashMap, HashSet};
 
 /// Summary of taint behavior for a function
@@ -60,10 +62,18 @@ pub struct InterproceduralTaintAnalysis {
     flow_registry: FlowSummaryRegistry,
     /// Cache of method definitions indexed by method name for inter-procedural analysis
     method_cache: HashMap<String, AstNode>,
+    /// Language-specific handler for AST and taint patterns
+    language_handler: Box<dyn LanguageTaintHandler>,
 }
 
 impl InterproceduralTaintAnalysis {
+    /// Create a new analysis engine with default (Java) language handler
     pub fn new() -> Self {
+        Self::new_with_language(Language::Java)
+    }
+
+    /// Create a new analysis engine with a specific language handler
+    pub fn new_with_language(language: Language) -> Self {
         Self {
             sources: Vec::new(),
             sinks: Vec::new(),
@@ -71,6 +81,7 @@ impl InterproceduralTaintAnalysis {
             summaries: HashMap::new(),
             flow_registry: FlowSummaryRegistry::java_stdlib(),
             method_cache: HashMap::new(),
+            language_handler: get_handler_for_language(language),
         }
     }
 
@@ -661,14 +672,13 @@ impl InterproceduralTaintAnalysis {
                     #[cfg(debug_assertions)]
                     eprintln!("[DEBUG] Checking sink '{}' at branch_depth={}", callee, branch_depth);
 
-                    // Check for parameterized query pattern (safe from SQL injection)
-                    // Pattern: execute(sql, (params,)) or query(sql, [params])
-                    // Parameterized queries pass user data as separate parameters, not concatenated
-                    let is_parameterized = self.is_parameterized_sql_call(callee, node);
-                    if is_parameterized {
+                    // Use language handler to check for safe sink patterns
+                    // (e.g., parameterized queries, prepared statements, etc.)
+                    let safe_pattern = self.language_handler.detect_safe_sink_pattern(callee, node);
+                    if safe_pattern != SafeSinkPattern::None {
                         #[cfg(debug_assertions)]
-                        eprintln!("[DEBUG]   Skipping parameterized SQL call - safe from injection");
-                        // Don't flag parameterized queries as SQL injection
+                        eprintln!("[DEBUG]   Skipping safe sink pattern: {:?}", safe_pattern);
+                        // Don't flag safe patterns as vulnerabilities
                     } else {
                         // Check if any arguments are tainted (use symbolic evaluation)
                         let has_tainted = self.has_tainted_arguments(node, tainted_vars, sym_state);
@@ -718,8 +728,7 @@ impl InterproceduralTaintAnalysis {
             }
 
             // Conditional expression (ternary) - use constant propagation!
-            // Python: `value if condition else other` → [true_val, "if", condition, "else", false_val]
-            // Java/C: `condition ? value : other` → [condition, "?", true_val, ":", false_val]
+            // Uses language handler to get correct indices for Python vs Java ternaries
             AstNodeKind::ConditionalExpression { test, .. } => {
                 // Debug: log the ternary expression
                 #[cfg(debug_assertions)]
@@ -733,21 +742,17 @@ impl InterproceduralTaintAnalysis {
                     }
                 }
 
-                // Detect Python vs Java/C ternary by checking child[1]
-                let is_python_ternary = node.children.get(1).map_or(false, |c| {
-                    matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "if")
-                });
-
-                // Get correct indices based on ternary style
-                let (condition_idx, true_idx, false_idx) = if is_python_ternary {
-                    (2, 0, 4) // Python: condition at 2, true at 0, false at 4
-                } else {
-                    (0, 2, 4) // Java/C: condition at 0, true at 2, false at 4
-                };
+                // Use language handler to get correct indices
+                let indices = self.language_handler.get_conditional_indices(node);
+                let (condition_idx, true_idx, false_idx) = (
+                    indices.condition,
+                    indices.true_branch,
+                    indices.false_branch,
+                );
 
                 #[cfg(debug_assertions)]
-                eprintln!("[DEBUG]   is_python_ternary={}, indices: cond={}, true={}, false={}",
-                         is_python_ternary, condition_idx, true_idx, false_idx);
+                eprintln!("[DEBUG]   language={:?}, indices: cond={}, true={}, false={}",
+                         self.language_handler.language(), condition_idx, true_idx, false_idx);
 
                 // Try to evaluate the condition symbolically
                 if let Some(condition_node) = node.children.get(condition_idx) {
@@ -942,89 +947,28 @@ impl InterproceduralTaintAnalysis {
     }
 
     /// Evaluate an AST node to a symbolic value for constant propagation
+    /// Uses language handler for language-specific literal and operator evaluation
     fn evaluate_symbolic(&self, node: &AstNode, sym_state: &SymbolicState) -> SymbolicValue {
-        match &node.kind {
-            AstNodeKind::Literal { value } => {
-                match value {
-                    LiteralValue::Number(n) => {
-                        n.parse::<i64>()
-                            .map(SymbolicValue::Concrete)
-                            .unwrap_or(SymbolicValue::Unknown)
-                    }
-                    LiteralValue::Boolean(b) => SymbolicValue::ConcreteBool(*b),
-                    LiteralValue::String(s) => SymbolicValue::ConcreteString(s.clone()),
-                    LiteralValue::Null => SymbolicValue::Null,
-                    LiteralValue::Undefined => SymbolicValue::Undefined,
-                }
-            }
+        // First try language handler for literals (handles Python integer, float, etc.)
+        if let Some(value) = self.language_handler.evaluate_literal(node) {
+            return value;
+        }
 
+        // Then try language handler for binary operators (Python binary_operator)
+        if let Some(value) = self.language_handler.evaluate_binary_op(node, sym_state) {
+            return value;
+        }
+
+        // Then try language handler for comparisons (Python comparison_operator)
+        if let Some(value) = self.language_handler.evaluate_comparison(node, sym_state) {
+            return value;
+        }
+
+        // Fall back to generic handling
+        match &node.kind {
             AstNodeKind::Identifier { name } => {
                 // Look up in symbolic state
                 sym_state.get(name)
-            }
-
-            // Handle Python integer/float types that aren't recognized as Literal
-            AstNodeKind::Other { node_type } if node_type == "integer" || node_type == "float" => {
-                node.text.trim().parse::<i64>()
-                    .map(SymbolicValue::Concrete)
-                    .unwrap_or(SymbolicValue::Unknown)
-            }
-
-            // Handle Python comparison_operator (like "7 * 18 + num > 200")
-            AstNodeKind::Other { node_type } if node_type == "comparison_operator" => {
-                // Python comparison has children: [left, operator, right]
-                // e.g., "7 * 18 + num > 200" -> [expression, ">", 200]
-                if node.children.len() >= 3 {
-                    let left = self.evaluate_symbolic(&node.children[0], sym_state);
-                    let right = self.evaluate_symbolic(&node.children[2], sym_state);
-
-                    // Find the operator (middle child is usually a token like ">", "<", etc.)
-                    let op_text = node.children.get(1).map(|c| c.text.trim()).unwrap_or("");
-
-                    let op = match op_text {
-                        "==" => BinaryOperator::Equal,
-                        "!=" => BinaryOperator::NotEqual,
-                        "<" => BinaryOperator::LessThan,
-                        "<=" => BinaryOperator::LessThanOrEqual,
-                        ">" => BinaryOperator::GreaterThan,
-                        ">=" => BinaryOperator::GreaterThanOrEqual,
-                        _ => return SymbolicValue::Unknown,
-                    };
-
-                    #[cfg(debug_assertions)]
-                    eprintln!("[DEBUG] Python comparison: left={:?} {} right={:?}", left, op_text, right);
-
-                    SymbolicValue::binary(op, left, right).simplify()
-                } else {
-                    SymbolicValue::Unknown
-                }
-            }
-
-            // Handle Python binary_operator (like "7 * 18 + num")
-            AstNodeKind::Other { node_type } if node_type == "binary_operator" => {
-                // Python binary_operator has children: [left, operator, right]
-                if node.children.len() >= 3 {
-                    let left = self.evaluate_symbolic(&node.children[0], sym_state);
-                    let right = self.evaluate_symbolic(&node.children[2], sym_state);
-
-                    let op_text = node.children.get(1).map(|c| c.text.trim()).unwrap_or("");
-
-                    let op = match op_text {
-                        "+" => BinaryOperator::Add,
-                        "-" => BinaryOperator::Subtract,
-                        "*" => BinaryOperator::Multiply,
-                        "/" => BinaryOperator::Divide,
-                        "%" => BinaryOperator::Modulo,
-                        _ => return SymbolicValue::Unknown,
-                    };
-
-                    #[cfg(debug_assertions)]
-                    eprintln!("[DEBUG] Python binary_operator: left={:?} {} right={:?}", left, op_text, right);
-
-                    SymbolicValue::binary(op, left, right).simplify()
-                } else {
-                    SymbolicValue::Unknown
-                }
             }
 
             AstNodeKind::BinaryExpression { operator } => {
@@ -1163,20 +1107,15 @@ impl InterproceduralTaintAnalysis {
             AstNodeKind::Identifier { name } => tainted_vars.contains(name),
 
             // Handle conditional expressions (ternaries) with symbolic evaluation
-            // Python: `value if condition else other` → [true_val, "if", condition, "else", false_val]
-            // Java/C: `condition ? value : other` → [condition, "?", true_val, ":", false_val]
+            // Uses language handler to get correct indices for Python vs Java ternaries
             AstNodeKind::ConditionalExpression { .. } => {
-                // Detect Python vs Java/C ternary by checking child[1]
-                let is_python_ternary = node.children.get(1).map_or(false, |c| {
-                    matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "if")
-                });
-
-                // Get correct indices based on ternary style
-                let (condition_idx, true_idx, false_idx) = if is_python_ternary {
-                    (2, 0, 4) // Python: condition at 2, true at 0, false at 4
-                } else {
-                    (0, 2, 4) // Java/C: condition at 0, true at 2, false at 4
-                };
+                // Use language handler to get correct indices
+                let indices = self.language_handler.get_conditional_indices(node);
+                let (condition_idx, true_idx, false_idx) = (
+                    indices.condition,
+                    indices.true_branch,
+                    indices.false_branch,
+                );
 
                 if let Some(condition_node) = node.children.get(condition_idx) {
                     let condition = self.evaluate_symbolic(condition_node, sym_state);
@@ -1415,6 +1354,7 @@ impl InterproceduralTaintAnalysis {
     }
 
     /// Check if function call has tainted arguments
+    /// Uses language handler to determine callee position
     fn has_tainted_arguments(&self, node: &AstNode, tainted_vars: &HashSet<String>, sym_state: &SymbolicState) -> bool {
         // For CallExpression, we only want to check the ARGUMENTS, not the callee
         // Structure is typically: [callee, argument_list] or [callee, "(", arg1, arg2, ..., ")"]
@@ -1422,20 +1362,9 @@ impl InterproceduralTaintAnalysis {
         // when determining if the arguments are tainted.
 
         for (idx, child) in node.children.iter().enumerate() {
-            // Skip the first child if it's the callee (attribute or identifier)
-            // Callees are typically: Identifier, MemberExpression, attribute, etc.
-            if idx == 0 {
-                let is_callee = match &child.kind {
-                    AstNodeKind::Identifier { .. } => true,
-                    AstNodeKind::MemberExpression { .. } => true,
-                    AstNodeKind::Other { node_type } => {
-                        node_type == "attribute" || node_type == "identifier"
-                    }
-                    _ => false,
-                };
-                if is_callee {
-                    continue;
-                }
+            // Use language handler to check if this is the callee position
+            if self.language_handler.is_callee_position(node, idx) {
+                continue;
             }
 
             if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
@@ -1444,61 +1373,6 @@ impl InterproceduralTaintAnalysis {
                 return true;
             }
         }
-        false
-    }
-
-    /// Check if this is a parameterized SQL call pattern
-    /// Parameterized queries are safe from SQL injection because user data is
-    /// passed as a separate parameter (tuple/list), not concatenated into the SQL string.
-    ///
-    /// Pattern: execute(sql, (params,)) or query(sql, [params])
-    fn is_parameterized_sql_call(&self, callee: &str, node: &AstNode) -> bool {
-        // Only check execute/query methods
-        let method = callee.split('.').last().unwrap_or(callee).to_lowercase();
-        if method != "execute" && method != "query" && method != "executemany" {
-            return false;
-        }
-
-        // Check if there's an argument_list child with a tuple/list as second arg
-        // Structure: CallExpression { children: [callee, argument_list] }
-        // argument_list children: [(, arg1, ,, arg2, )]
-        for child in &node.children {
-            match &child.kind {
-                AstNodeKind::Other { node_type } if node_type == "argument_list" => {
-                    // Look for tuple or list in arguments (indicates parameterized)
-                    // Count non-trivial children (skip punctuation)
-                    let mut arg_count = 0;
-                    let mut has_tuple_or_list = false;
-
-                    for arg_child in &child.children {
-                        match &arg_child.kind {
-                            AstNodeKind::Other { node_type } => {
-                                let nt = node_type.as_str();
-                                if nt == "tuple" || nt == "list" || nt == "dictionary" {
-                                    has_tuple_or_list = true;
-                                    arg_count += 1;
-                                } else if nt != "(" && nt != ")" && nt != "," {
-                                    arg_count += 1;
-                                }
-                            }
-                            AstNodeKind::Identifier { .. } => {
-                                arg_count += 1;
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    // Parameterized query has 2+ arguments with a tuple/list as 2nd arg
-                    if arg_count >= 2 && has_tuple_or_list {
-                        #[cfg(debug_assertions)]
-                        eprintln!("[DEBUG] Detected parameterized query pattern: arg_count={}, has_tuple_or_list={}", arg_count, has_tuple_or_list);
-                        return true;
-                    }
-                }
-                _ => {}
-            }
-        }
-
         false
     }
 
@@ -1970,6 +1844,9 @@ impl InterproceduralTaintAnalysis {
         self.sources = config.sources;
         self.sinks = config.sinks;
         self.sanitizers = config.sanitizers.into_iter().collect();
+
+        // Update the language handler to match the language
+        self.language_handler = get_handler_for_language(language);
 
         self
     }
