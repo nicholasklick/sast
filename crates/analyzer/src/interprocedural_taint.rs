@@ -660,29 +660,40 @@ impl InterproceduralTaintAnalysis {
                 if self.is_sink_function(callee) {
                     #[cfg(debug_assertions)]
                     eprintln!("[DEBUG] Checking sink '{}' at branch_depth={}", callee, branch_depth);
-                    // Check if any arguments are tainted (use symbolic evaluation)
-                    let has_tainted = self.has_tainted_arguments(node, tainted_vars, sym_state);
-                    #[cfg(debug_assertions)]
-                    {
-                        eprintln!("[DEBUG]   has_tainted_arguments={}", has_tainted);
-                        eprintln!("[DEBUG]   Current tainted_vars: {:?}", tainted_vars);
-                    }
-                    if has_tainted {
-                        // Create vulnerability
-                        let sink_found = self.find_sink_by_name(callee);
+
+                    // Check for parameterized query pattern (safe from SQL injection)
+                    // Pattern: execute(sql, (params,)) or query(sql, [params])
+                    // Parameterized queries pass user data as separate parameters, not concatenated
+                    let is_parameterized = self.is_parameterized_sql_call(callee, node);
+                    if is_parameterized {
                         #[cfg(debug_assertions)]
-                        eprintln!("[DEBUG]   find_sink_by_name('{}') = {:?}", callee, sink_found.is_some());
-                        if let Some(sink) = sink_found {
+                        eprintln!("[DEBUG]   Skipping parameterized SQL call - safe from injection");
+                        // Don't flag parameterized queries as SQL injection
+                    } else {
+                        // Check if any arguments are tainted (use symbolic evaluation)
+                        let has_tainted = self.has_tainted_arguments(node, tainted_vars, sym_state);
+                        #[cfg(debug_assertions)]
+                        {
+                            eprintln!("[DEBUG]   has_tainted_arguments={}", has_tainted);
+                            eprintln!("[DEBUG]   Current tainted_vars: {:?}", tainted_vars);
+                        }
+                        if has_tainted {
+                            // Create vulnerability
+                            let sink_found = self.find_sink_by_name(callee);
                             #[cfg(debug_assertions)]
-                            eprintln!("[DEBUG]   Creating vulnerability for sink: {}", sink.name);
-                            vulnerabilities.push(TaintVulnerability {
-                                sink: sink.clone(),
-                                tainted_value: TaintValue::new(
-                                    callee.clone(),
-                                    TaintSourceKind::UserInput,
-                                ),
-                                severity: Severity::High,
-                            });
+                            eprintln!("[DEBUG]   find_sink_by_name('{}') = {:?}", callee, sink_found.is_some());
+                            if let Some(sink) = sink_found {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG]   Creating vulnerability for sink: {}", sink.name);
+                                vulnerabilities.push(TaintVulnerability {
+                                    sink: sink.clone(),
+                                    tainted_value: TaintValue::new(
+                                        callee.clone(),
+                                        TaintSourceKind::UserInput,
+                                    ),
+                                    severity: Severity::High,
+                                });
+                            }
                         }
                     }
                 }
@@ -1433,6 +1444,61 @@ impl InterproceduralTaintAnalysis {
                 return true;
             }
         }
+        false
+    }
+
+    /// Check if this is a parameterized SQL call pattern
+    /// Parameterized queries are safe from SQL injection because user data is
+    /// passed as a separate parameter (tuple/list), not concatenated into the SQL string.
+    ///
+    /// Pattern: execute(sql, (params,)) or query(sql, [params])
+    fn is_parameterized_sql_call(&self, callee: &str, node: &AstNode) -> bool {
+        // Only check execute/query methods
+        let method = callee.split('.').last().unwrap_or(callee).to_lowercase();
+        if method != "execute" && method != "query" && method != "executemany" {
+            return false;
+        }
+
+        // Check if there's an argument_list child with a tuple/list as second arg
+        // Structure: CallExpression { children: [callee, argument_list] }
+        // argument_list children: [(, arg1, ,, arg2, )]
+        for child in &node.children {
+            match &child.kind {
+                AstNodeKind::Other { node_type } if node_type == "argument_list" => {
+                    // Look for tuple or list in arguments (indicates parameterized)
+                    // Count non-trivial children (skip punctuation)
+                    let mut arg_count = 0;
+                    let mut has_tuple_or_list = false;
+
+                    for arg_child in &child.children {
+                        match &arg_child.kind {
+                            AstNodeKind::Other { node_type } => {
+                                let nt = node_type.as_str();
+                                if nt == "tuple" || nt == "list" || nt == "dictionary" {
+                                    has_tuple_or_list = true;
+                                    arg_count += 1;
+                                } else if nt != "(" && nt != ")" && nt != "," {
+                                    arg_count += 1;
+                                }
+                            }
+                            AstNodeKind::Identifier { .. } => {
+                                arg_count += 1;
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    // Parameterized query has 2+ arguments with a tuple/list as 2nd arg
+                    if arg_count >= 2 && has_tuple_or_list {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] Detected parameterized query pattern: arg_count={}, has_tuple_or_list={}", arg_count, has_tuple_or_list);
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+        }
+
         false
     }
 

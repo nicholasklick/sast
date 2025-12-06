@@ -463,6 +463,13 @@ impl QueryExecutor {
                         let node_line = node.location.span.start_line;
                         let node_text = &node.text;
 
+                        // Check if this is a parameterized query pattern (safe from SQL injection)
+                        // Pattern: execute(sql, (params,)) or execute(sql, [params])
+                        // This is the safe way to use SQL - parameterized queries prevent injection
+                        if Self::is_parameterized_query(node_text) {
+                            return Value::Boolean(false);
+                        }
+
                         taint_results.vulnerabilities.iter().any(|v| {
                             let tainted_var = &v.tainted_value.variable;
                             node_text.contains(tainted_var)
@@ -521,6 +528,50 @@ impl QueryExecutor {
         } else {
             false
         }
+    }
+
+    /// Check if a node represents a parameterized query pattern
+    /// Parameterized queries are safe from SQL injection because user input is
+    /// passed as a separate parameter, not concatenated into the SQL string.
+    ///
+    /// Patterns detected:
+    /// - `execute(sql, (params,))` - tuple parameter
+    /// - `execute(sql, [params])` - list parameter
+    /// - `execute(sql, params)` - any second argument indicates parameterized
+    fn is_parameterized_query(node_text: &str) -> bool {
+        let text = node_text.to_lowercase();
+
+        // Check for execute/query calls with multiple arguments (indicating parameterized)
+        // Pattern: execute(..., (...)) or execute(..., [...])
+        if text.contains("execute") || text.contains("query") {
+            // Check if there's a comma followed by a tuple/list argument
+            // This indicates parameterized: execute(sql, (param,)) or execute(sql, [param])
+            let has_param_tuple = text.contains(", (") || text.contains(",(");
+            let has_param_list = text.contains(", [") || text.contains(",[");
+            let has_param_dict = text.contains(", {") || text.contains(",{");
+
+            // If we see execute with a tuple/list/dict as second argument, it's parameterized
+            // This is a conservative check - better to have false negatives than false positives
+            if has_param_tuple || has_param_list || has_param_dict {
+                return true;
+            }
+
+            // Also check for placeholder patterns in the SQL string if visible
+            let has_placeholder = text.contains(" = ?")
+                || text.contains("=?")
+                || text.contains("= :")
+                || text.contains("=:")
+                || text.contains("$1")
+                || text.contains("$2")
+                || text.contains("%s")
+                || text.contains("%(");
+
+            if has_placeholder {
+                return true;
+            }
+        }
+
+        false
     }
 
     fn evaluate_function_call(variable: &str, function: &str, ctx: &EvaluationContext) -> bool {
