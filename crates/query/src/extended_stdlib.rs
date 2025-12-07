@@ -1526,13 +1526,15 @@ impl ExtendedStandardLibrary {
     fn code_injection_query() -> Query {
         // Note: Removed 'compile' as it causes FPs with Pattern.compile(), re.compile(), etc.
         // Removed 'execute' as it conflicts with SQL execute() - covered by sql-injection rule
+        // Removed 'exec' alone as it matches Go's exec.Command which is command injection, not code injection
+        // Use more specific patterns for actual code injection
         Query::new(
             FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
                 Predicate::MethodName {
                     variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    value: "(?i)(eval|exec|Function|loadstring|loadfile|dofile|runScript)".to_string(),
+                    value: "(?i)(\\beval\\b|Function|loadstring|loadfile|dofile|runScript|execScript)".to_string(),
                 },
                 Predicate::FunctionCall {
                     variable: "mc".to_string(),

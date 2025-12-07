@@ -176,7 +176,9 @@ impl Parser {
             // Variable declarations
             "variable_declaration" | "let_declaration" | "const_item" | "lexical_declaration" | "variable_declarator"
             // Java-specific
-            | "local_variable_declaration" | "field_declaration" => {
+            | "local_variable_declaration" | "field_declaration"
+            // Go-specific (param := value)
+            | "short_var_declaration" => {
                 self.parse_variable_declaration(node, source)
             }
 
@@ -1349,6 +1351,16 @@ impl Parser {
                     }
                 }
             }
+            // Go: short_var_declaration has expression_list which contains the identifier(s)
+            // For "param := c.Query(...)", the first expression_list contains "param"
+            if child.kind() == "expression_list" {
+                let mut expr_cursor = child.walk();
+                for expr_child in child.children(&mut expr_cursor) {
+                    if expr_child.kind() == "identifier" {
+                        return Some(expr_child.utf8_text(source.as_bytes()).unwrap_or("").to_string());
+                    }
+                }
+            }
         }
         None
     }
@@ -1561,9 +1573,11 @@ impl Parser {
         for child in node.children(&mut cursor) {
             // Handle member expressions (e.g., crypto.createHash)
             // Swift: navigation_expression
+            // Go: selector_expression (e.g., c.Query, exec.Command)
             if child.kind() == "member_expression" || child.kind() == "field_expression"
                 || child.kind() == "attribute"  // Python attribute access
-                || child.kind() == "navigation_expression" {  // Swift member access
+                || child.kind() == "navigation_expression"  // Swift member access
+                || child.kind() == "selector_expression" {  // Go member access (c.Query)
                 return Some(child.utf8_text(source.as_bytes()).unwrap_or("").to_string());
             }
             // Handle simple identifiers
