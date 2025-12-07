@@ -1529,17 +1529,26 @@ impl InterproceduralTaintAnalysis {
                 });
 
                 if let (Some(base), Some(key)) = (base_var.as_ref(), key) {
+                    // We have a specific key access like map['keyA']
+                    // ONLY check if this specific key is tainted, not the whole map
+                    // This enables strong updates: map['keyA'] = safe_value kills taint
                     let map_key = format!("{}[{}]", base, key);
                     #[cfg(debug_assertions)]
                     eprintln!("[DEBUG] is_node_tainted: checking subscript '{}', result={}", map_key, tainted_vars.contains(&map_key));
-                    if tainted_vars.contains(&map_key) {
-                        return true;
-                    }
+
+                    // Return the result of checking the specific key only
+                    // Do NOT fall through to check the base variable
+                    return tainted_vars.contains(&map_key);
                 }
 
-                // Also check if the base variable itself is tainted
+                // No specific key (dynamic index) - must conservatively check if base has any tainted values
                 if let Some(base) = base_var.as_ref() {
                     if tainted_vars.contains(base) {
+                        return true;
+                    }
+                    // Check if any key in this map is tainted
+                    let map_prefix = format!("{}[", base);
+                    if tainted_vars.iter().any(|v| v.starts_with(&map_prefix)) {
                         return true;
                     }
                 }

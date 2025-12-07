@@ -254,10 +254,11 @@ impl LanguageTaintConfig {
         }
 
         // Logging
+        // Note: Removed "p" as it's a common Ruby debugging method but too short,
+        // causing false positives when matching partial method names
         let log_sinks = vec![
             "puts",
             "print",
-            "p",
             "logger.info",
             "logger.debug",
             "logger.warn",

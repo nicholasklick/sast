@@ -103,10 +103,11 @@ impl ExtendedStandardLibrary {
                 .sans_top_25()
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string(), "python".to_string()])
                 .build()
         );
 
-        // NoSQL Injection
+        // NoSQL Injection - JS/TS/Python only (MongoDB, Mongoose, etc.)
         self.register(
             "js/nosql-injection",
             Self::nosql_injection_query(),
@@ -118,6 +119,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![89, 943])
                 .owasp("A03:2021 - Injection")
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string(), "python".to_string()])
                 .build()
         );
 
@@ -138,7 +140,7 @@ impl ExtendedStandardLibrary {
                 .build()
         );
 
-        // Command Injection - Extended
+        // Command Injection - Extended (JS/TS/Python only)
         self.register(
             "js/command-injection-extended",
             Self::command_injection_extended_query(),
@@ -150,6 +152,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![78])
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string(), "python".to_string()])
                 .build()
         );
 
@@ -183,7 +186,8 @@ impl ExtendedStandardLibrary {
                 .build()
         );
 
-        // Code Injection (eval)
+        // Code Injection (eval) - JS/TS/Python only
+        // Note: eval exists in JS, Python, and Lua (loadstring/loadfile)
         self.register(
             "js/code-injection",
             Self::code_injection_query(),
@@ -196,6 +200,7 @@ impl ExtendedStandardLibrary {
                 .owasp("A03:2021 - Injection")
                 .sans_top_25()
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string(), "python".to_string(), "lua".to_string()])
                 .build()
         );
 
@@ -216,11 +221,11 @@ impl ExtendedStandardLibrary {
                 .build()
         );
 
-        // Expression Language Injection
+        // Expression Language Injection - Java only (Spring EL, OGNL, etc.)
         self.register(
-            "js/expression-injection",
+            "java/expression-injection",
             Self::expression_injection_query(),
-            QueryMetadata::builder("js/expression-injection", "Expression Language Injection")
+            QueryMetadata::builder("java/expression-injection", "Expression Language Injection")
                 .description("Detects injection in expression languages (OGNL, SpEL, etc.)")
                 .category(QueryCategory::Injection)
                 .severity(QuerySeverity::Critical)
@@ -228,6 +233,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![917])
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
                 .uses_taint()
+                .languages(vec!["java".to_string()])
                 .build()
         );
 
