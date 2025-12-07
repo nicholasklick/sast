@@ -312,6 +312,7 @@ impl ExtendedStandardLibrary {
                 .owasp("A03:2021 - Injection")
                 .sans_top_25()
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -359,6 +360,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![79])
                 .owasp("A03:2021 - Injection")
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -374,6 +376,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![79])
                 .owasp("A03:2021 - Injection")
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -389,6 +392,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![79])
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -404,6 +408,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![79])
                 .tags(vec!["react".to_string()])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -419,6 +424,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![79])
                 .tags(vec!["angular".to_string()])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
     }
@@ -988,6 +994,7 @@ impl ExtendedStandardLibrary {
                 .precision(QueryPrecision::Medium)
                 .cwes(vec![755])
                 .suites(vec![QuerySuite::SecurityAndQuality])
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
     }
@@ -995,7 +1002,7 @@ impl ExtendedStandardLibrary {
     // ==================== API MISUSE ====================
 
     fn register_api_misuse_queries(&mut self) {
-        // Server-Side Request Forgery (SSRF)
+        // Server-Side Request Forgery (SSRF) - JS/TS only to avoid matching route definitions
         self.register(
             "js/ssrf",
             Self::ssrf_query(),
@@ -1008,6 +1015,7 @@ impl ExtendedStandardLibrary {
                 .owasp("A10:2021 - Server-Side Request Forgery")
                 .sans_top_25()
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -1055,6 +1063,7 @@ impl ExtendedStandardLibrary {
                 .sans_top_25()
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -1165,6 +1174,7 @@ impl ExtendedStandardLibrary {
                 .precision(QueryPrecision::High)
                 .cwes(vec![330])
                 .tags(vec!["express".to_string(), "nodejs".to_string()])
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -1180,6 +1190,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![1021])
                 .tags(vec!["express".to_string()])
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -1195,6 +1206,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![943])
                 .tags(vec!["mongodb".to_string()])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -1211,6 +1223,7 @@ impl ExtendedStandardLibrary {
                 .tags(vec!["graphql".to_string()])
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -1227,6 +1240,7 @@ impl ExtendedStandardLibrary {
                 .tags(vec!["react".to_string()])
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -1243,6 +1257,7 @@ impl ExtendedStandardLibrary {
                 .tags(vec!["angular".to_string()])
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -1259,6 +1274,7 @@ impl ExtendedStandardLibrary {
                 .tags(vec!["vue".to_string()])
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -1274,6 +1290,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![918])
                 .tags(vec!["nextjs".to_string(), "react".to_string()])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -1288,6 +1305,7 @@ impl ExtendedStandardLibrary {
                 .precision(QueryPrecision::VeryHigh)
                 .cwes(vec![16])
                 .tags(vec!["electron".to_string()])
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
@@ -1302,6 +1320,7 @@ impl ExtendedStandardLibrary {
                 .precision(QueryPrecision::VeryHigh)
                 .cwes(vec![653])
                 .tags(vec!["electron".to_string()])
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
     }
