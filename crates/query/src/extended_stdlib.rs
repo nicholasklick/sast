@@ -200,6 +200,7 @@ impl ExtendedStandardLibrary {
         );
 
         // Server-Side Template Injection
+        // Limited to JS/TS/Python - Ruby's `render` is too different (render plain: is not SSTI)
         self.register(
             "js/template-injection",
             Self::template_injection_query(),
@@ -211,6 +212,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![94])
                 .owasp("A03:2021 - Injection")
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string(), "python".to_string()])
                 .build()
         );
 
@@ -1497,13 +1499,16 @@ impl ExtendedStandardLibrary {
     }
 
     fn xpath_injection_query() -> Query {
+        // Note: Removed generic 'compile' and 'select' patterns as they cause false positives
+        // (e.g., Pattern.compile() in Java, document.querySelector() in JS)
+        // Focus on XPath-specific API patterns
         Query::new(
             FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
                 Predicate::MethodName {
                     variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    value: "(?i)(evaluate|select|compile|xpath)".to_string(),
+                    value: "(?i)(xpath|selectNodes|selectSingleNode|xpathQuery|evaluateXPath)".to_string(),
                 },
                 Predicate::FunctionCall {
                     variable: "mc".to_string(),
@@ -1519,13 +1524,15 @@ impl ExtendedStandardLibrary {
     }
 
     fn code_injection_query() -> Query {
+        // Note: Removed 'compile' as it causes FPs with Pattern.compile(), re.compile(), etc.
+        // Removed 'execute' as it conflicts with SQL execute() - covered by sql-injection rule
         Query::new(
             FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
                 Predicate::MethodName {
                     variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    value: "(?i)(eval|compile|execute|run|load|loadstring|loadfile|dofile)".to_string(),
+                    value: "(?i)(eval|exec|Function|loadstring|loadfile|dofile|runScript)".to_string(),
                 },
                 Predicate::FunctionCall {
                     variable: "mc".to_string(),
@@ -2975,6 +2982,8 @@ impl ExtendedStandardLibrary {
     }
 
     /// Java XPath Injection - detects tainted data flowing to XPath.evaluate()
+    /// Note: Removed 'compile' as it causes FPs with Pattern.compile() in regex code
+    /// Keep 'evaluate' as it's the primary XPath method - taint tracking filters non-XPath uses
     fn java_xpath_injection_query() -> Query {
         Query::new(
             FromClause::new(EntityType::MethodCall, "mc".to_string()),
@@ -2982,7 +2991,7 @@ impl ExtendedStandardLibrary {
                 Predicate::MethodName {
                     variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    value: "(?i)(evaluate|compile|selectNodes|selectSingleNode)".to_string(),
+                    value: "(?i)(evaluate|selectNodes|selectSingleNode)".to_string(),
                 },
                 Predicate::FunctionCall {
                     variable: "mc".to_string(),
