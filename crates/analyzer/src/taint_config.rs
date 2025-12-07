@@ -3,9 +3,93 @@
 //! This module provides taint sources, sinks, and sanitizers for different
 //! programming languages. Each language has unique frameworks, APIs, and
 //! security-sensitive functions that need to be tracked.
+//!
+//! ## Configuration Sources
+//!
+//! Configurations can be loaded from:
+//! 1. YAML files in the `models/` directory (MaD format, preferred)
+//! 2. Hardcoded configurations in this module (fallback)
+//!
+//! When a YAML config exists for a language, it takes precedence over hardcoded configs.
 
 use crate::taint::{TaintSink, TaintSinkKind, TaintSource, TaintSourceKind};
+use crate::yaml_config::{TaintConfigYaml, TaintConfigRegistry, SinkKind as YamlSinkKind, SourceKind as YamlSourceKind};
 use gittera_parser::language::Language;
+use std::path::Path;
+use std::sync::OnceLock;
+
+/// Global registry for YAML configs (lazily initialized)
+static YAML_REGISTRY: OnceLock<Option<TaintConfigRegistry>> = OnceLock::new();
+
+/// Initialize the YAML config registry from the models directory
+pub fn init_yaml_configs(models_dir: &Path) -> Result<(), String> {
+    let registry = TaintConfigRegistry::load_from_dir(models_dir)
+        .map_err(|e| format!("Failed to load YAML configs: {}", e))?;
+
+    // Store the registry (ignore if already initialized)
+    let _ = YAML_REGISTRY.set(Some(registry));
+    Ok(())
+}
+
+/// Get the YAML config registry if initialized
+fn get_yaml_registry() -> Option<&'static TaintConfigRegistry> {
+    YAML_REGISTRY.get().and_then(|opt| opt.as_ref())
+}
+
+/// Convert Language enum to string for YAML lookup
+fn language_to_string(language: Language) -> String {
+    match language {
+        Language::Ruby => "ruby",
+        Language::Php => "php",
+        Language::JavaScript => "javascript",
+        Language::TypeScript => "typescript",
+        Language::Python => "python",
+        Language::Java => "java",
+        Language::Go => "go",
+        Language::CSharp => "csharp",
+        Language::Swift => "swift",
+        Language::Rust => "rust",
+        Language::Lua => "lua",
+        Language::Perl => "perl",
+        Language::Bash => "bash",
+        Language::Dart => "dart",
+        Language::C => "c",
+        Language::Cpp => "cpp",
+        Language::Kotlin => "kotlin",
+        Language::Scala => "scala",
+        _ => "generic",
+    }.to_string()
+}
+
+/// Convert YAML source kind to internal source kind
+fn convert_source_kind(kind: &YamlSourceKind) -> TaintSourceKind {
+    match kind {
+        YamlSourceKind::UserInput => TaintSourceKind::UserInput,
+        YamlSourceKind::Environment => TaintSourceKind::EnvironmentVariable,
+        YamlSourceKind::Database => TaintSourceKind::DatabaseQuery,
+        YamlSourceKind::File => TaintSourceKind::FileRead,
+        YamlSourceKind::Network => TaintSourceKind::NetworkRequest,
+        YamlSourceKind::Config => TaintSourceKind::EnvironmentVariable, // Closest match
+    }
+}
+
+/// Convert YAML sink kind to internal sink kind
+fn convert_sink_kind(kind: &YamlSinkKind) -> TaintSinkKind {
+    match kind {
+        YamlSinkKind::SqlQuery => TaintSinkKind::SqlQuery,
+        YamlSinkKind::CommandExecution => TaintSinkKind::CommandExecution,
+        YamlSinkKind::FileWrite => TaintSinkKind::FileWrite,
+        YamlSinkKind::CodeEval => TaintSinkKind::CodeEval,
+        YamlSinkKind::HtmlOutput => TaintSinkKind::HtmlOutput,
+        YamlSinkKind::LogOutput => TaintSinkKind::LogOutput,
+        YamlSinkKind::NetworkSend => TaintSinkKind::NetworkSend,
+        YamlSinkKind::PathTraversal => TaintSinkKind::FileWrite, // Closest match
+        YamlSinkKind::Deserialization => TaintSinkKind::CodeEval, // Closest match
+        YamlSinkKind::LdapQuery => TaintSinkKind::CodeEval, // Closest match
+        YamlSinkKind::XPathQuery => TaintSinkKind::CodeEval, // Closest match
+        YamlSinkKind::XmlParse => TaintSinkKind::CodeEval, // Closest match
+    }
+}
 
 /// Language-specific taint configuration
 pub struct LanguageTaintConfig {
@@ -17,7 +101,61 @@ pub struct LanguageTaintConfig {
 
 impl LanguageTaintConfig {
     /// Get taint configuration for a specific language
+    ///
+    /// This method first checks if a YAML config exists for the language
+    /// (requires `init_yaml_configs` to be called first). If no YAML config
+    /// is found, it falls back to the hardcoded configuration.
     pub fn for_language(language: Language) -> Self {
+        // First, try to load from YAML if the registry is initialized
+        if let Some(yaml_config) = Self::try_from_yaml(language) {
+            return yaml_config;
+        }
+
+        // Fall back to hardcoded configs
+        Self::for_language_hardcoded(language)
+    }
+
+    /// Try to load configuration from YAML
+    fn try_from_yaml(language: Language) -> Option<Self> {
+        let registry = get_yaml_registry()?;
+        let lang_name = language_to_string(language);
+        let yaml_config = registry.get(&lang_name)?;
+
+        Some(Self::from_yaml_config(language, yaml_config))
+    }
+
+    /// Convert a YAML config to LanguageTaintConfig
+    fn from_yaml_config(language: Language, yaml: &TaintConfigYaml) -> Self {
+        let sources = yaml.sources.iter().map(|s| {
+            TaintSource {
+                name: s.name.clone(),
+                kind: convert_source_kind(&s.kind),
+                node_id: 0,
+            }
+        }).collect();
+
+        let sinks = yaml.sinks.iter().map(|s| {
+            TaintSink {
+                name: s.name.clone(),
+                kind: convert_sink_kind(&s.kind),
+                node_id: 0,
+            }
+        }).collect();
+
+        let sanitizers = yaml.sanitizers.iter()
+            .map(|s| s.name.clone())
+            .collect();
+
+        Self {
+            language,
+            sources,
+            sinks,
+            sanitizers,
+        }
+    }
+
+    /// Get hardcoded taint configuration for a specific language (fallback)
+    fn for_language_hardcoded(language: Language) -> Self {
         match language {
             Language::Ruby => Self::ruby_config(),
             Language::Php => Self::php_config(),
@@ -236,13 +374,15 @@ impl LanguageTaintConfig {
         }
 
         // HTML/XSS (Rails)
+        // Note: Removed "render" and "render_to_string" as they cause FPs
+        // render plain:/json: are safe, only render html: is dangerous
+        // Without argument-aware analysis, we can't distinguish these variants
+        // Focus on clearly dangerous methods: raw, html_safe
         let html_sinks = vec![
-            "html_safe",
-            "raw",              // Rails helper
-            "render",
-            "render_to_string",
-            "content_tag",
-            "link_to",
+            "html_safe",        // Explicitly marks content as safe HTML (dangerous if untrusted)
+            "raw",              // Rails helper that bypasses escaping (dangerous)
+            "content_tag",      // Can be dangerous if content is untrusted
+            "link_to",          // Can be dangerous if href is untrusted
         ];
 
         for name in html_sinks {

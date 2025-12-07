@@ -1,0 +1,292 @@
+# Go Core Taint Configuration
+# Base sources, sinks, and sanitizers for Go applications
+
+sources:
+  # Command Line
+  - name: "os.Args"
+    kind: UserInput
+    description: "Command line arguments"
+
+  - name: "flag.String"
+    kind: UserInput
+    package: "flag"
+    description: "Flag string value"
+
+  - name: "flag.Int"
+    kind: UserInput
+    package: "flag"
+    description: "Flag int value"
+
+  # HTTP (net/http)
+  - name: "r.FormValue"
+    kind: UserInput
+    description: "HTTP form value"
+
+  - name: "r.URL.Query"
+    kind: UserInput
+    description: "HTTP query parameters"
+
+  - name: "r.URL.Query().Get"
+    kind: UserInput
+    description: "HTTP query parameter"
+
+  - name: "r.PostFormValue"
+    kind: UserInput
+    description: "HTTP POST form value"
+
+  - name: "r.Header.Get"
+    kind: UserInput
+    description: "HTTP header value"
+
+  - name: "r.Cookie"
+    kind: UserInput
+    description: "HTTP cookie"
+
+  - name: "r.Body"
+    kind: UserInput
+    description: "HTTP request body"
+
+  # File I/O
+  - name: "os.ReadFile"
+    kind: File
+    description: "Read file contents"
+
+  - name: "ioutil.ReadFile"
+    kind: File
+    description: "Read file contents (deprecated)"
+
+  - name: "os.Open"
+    kind: File
+    description: "Open file"
+
+  - name: "bufio.NewReader"
+    kind: File
+    description: "Create buffered reader"
+
+  # Environment
+  - name: "os.Getenv"
+    kind: Environment
+    description: "Get environment variable"
+
+  - name: "os.LookupEnv"
+    kind: Environment
+    description: "Lookup environment variable"
+
+  # Network
+  - name: "http.Get"
+    kind: Network
+    description: "HTTP GET request"
+
+  - name: "http.Client.Get"
+    kind: Network
+    description: "HTTP client GET"
+
+  - name: "ioutil.ReadAll"
+    kind: Network
+    description: "Read all from reader"
+
+sinks:
+  # Command Execution
+  - name: "exec.Command"
+    kind: CommandExecution
+    package: "os/exec"
+    description: "Execute command"
+    argument: 0
+
+  - name: "exec.CommandContext"
+    kind: CommandExecution
+    package: "os/exec"
+    description: "Execute command with context"
+    argument: 1
+
+  - name: "syscall.Exec"
+    kind: CommandExecution
+    package: "syscall"
+    description: "Syscall exec"
+    argument: 0
+
+  # SQL Injection
+  - name: "db.Exec"
+    kind: SqlQuery
+    package: "database/sql"
+    description: "Execute SQL"
+    argument: 0
+
+  - name: "db.Query"
+    kind: SqlQuery
+    package: "database/sql"
+    description: "Query SQL"
+    argument: 0
+
+  - name: "db.QueryRow"
+    kind: SqlQuery
+    package: "database/sql"
+    description: "Query single row"
+    argument: 0
+
+  - name: "tx.Exec"
+    kind: SqlQuery
+    description: "Transaction exec SQL"
+    argument: 0
+
+  - name: "tx.Query"
+    kind: SqlQuery
+    description: "Transaction query SQL"
+    argument: 0
+
+  # File operations
+  - name: "os.WriteFile"
+    kind: FileWrite
+    description: "Write file"
+    argument: 0
+
+  - name: "ioutil.WriteFile"
+    kind: FileWrite
+    description: "Write file (deprecated)"
+    argument: 0
+
+  - name: "os.Create"
+    kind: PathTraversal
+    description: "Create file"
+    argument: 0
+
+  - name: "os.OpenFile"
+    kind: PathTraversal
+    description: "Open file with flags"
+    argument: 0
+
+  # HTML/XSS Output
+  - name: "fmt.Fprintf"
+    kind: HtmlOutput
+    description: "Formatted print to writer"
+    argument: 1
+
+  - name: "w.Write"
+    kind: HtmlOutput
+    description: "Write to response"
+    argument: 0
+
+  - name: "io.WriteString"
+    kind: HtmlOutput
+    description: "Write string to writer"
+    argument: 1
+
+sanitizers:
+  # HTML Escaping
+  - name: "html.EscapeString"
+    sanitizes: [Html]
+    package: "html"
+    description: "HTML escape string"
+
+  - name: "template.HTMLEscapeString"
+    sanitizes: [Html]
+    package: "html/template"
+    description: "Template HTML escape"
+
+  - name: "template.JSEscapeString"
+    sanitizes: [Html]
+    package: "html/template"
+    description: "Template JS escape"
+
+  - name: "template.URLQueryEscaper"
+    sanitizes: [Html]
+    package: "html/template"
+    description: "URL query escape"
+
+  # SQL Sanitization (prepared statements)
+  - name: "db.Prepare"
+    sanitizes: [Sql]
+    package: "database/sql"
+    description: "Prepare statement"
+
+  # Shell sanitization
+  - name: "shellescape.Quote"
+    sanitizes: [Shell]
+    description: "Shell escape"
+
+  # Type conversion
+  - name: "strconv.Atoi"
+    sanitizes: [All]
+    package: "strconv"
+    description: "String to int"
+
+  - name: "strconv.ParseInt"
+    sanitizes: [All]
+    package: "strconv"
+    description: "Parse integer"
+
+  - name: "strconv.ParseFloat"
+    sanitizes: [All]
+    package: "strconv"
+    description: "Parse float"
+
+  # URL encoding
+  - name: "url.QueryEscape"
+    sanitizes: [Path]
+    package: "net/url"
+    description: "URL query escape"
+
+summaries:
+  # String operations
+  - name: "+"
+    package: "string"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "Join"
+    package: "strings"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "ToLower"
+    package: "strings"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "ToUpper"
+    package: "strings"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "TrimSpace"
+    package: "strings"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "Split"
+    package: "strings"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "Replace"
+    package: "strings"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  # fmt.Sprintf propagates taint
+  - name: "Sprintf"
+    package: "fmt"
+    input: "Argument[1]"
+    output: "ReturnValue"
+    kind: taint
+
+  # URL decoding
+  - name: "QueryUnescape"
+    package: "net/url"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: value
+
+  # Base64 decoding
+  - name: "DecodeString"
+    package: "encoding/base64"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: value

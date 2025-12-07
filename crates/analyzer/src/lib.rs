@@ -346,6 +346,7 @@ pub mod flow_summary;     // Flow summaries (Models as Data) for library functio
 pub mod taint;
 pub mod taint_ast_based;  // New: AST-based taint analysis with proper expression evaluation
 pub mod taint_config;     // Language-specific taint configurations
+pub mod yaml_config;      // YAML-based taint configuration (MaD format)
 pub mod taint_pipeline;   // Multi-stage analysis pipeline for performance
 pub mod language_handler; // Language-specific taint analysis handlers
 pub mod symbol_table;
@@ -363,7 +364,8 @@ pub use content::{Content, ContentSet};
 pub use access_path::{AccessPath, AccessPathFront, MAX_ACCESS_PATH_LENGTH};
 pub use flow_summary::{FlowSummaryRegistry, SummarizedCallable, FlowPropagation, SummaryComponent, FlowKind, ArgumentSpec, Provenance};
 pub use taint::{TaintAnalysis, TaintSource, TaintSink, TaintValue, TaintAnalysisResult, Severity, TaintSinkKind, TaintSourceKind, FlowState, Sanitizer, TaintVulnerability, allows_implicit_read};
-pub use taint_config::LanguageTaintConfig;
+pub use taint_config::{LanguageTaintConfig, init_yaml_configs};
+pub use yaml_config::{TaintConfigYaml, TaintConfigRegistry, SourceConfig, SinkConfig, SanitizerConfig, SummaryConfig, SourceKind, SinkKind, SanitizeKind, SummaryKind, YamlConfigError};
 pub use language_handler::{LanguageTaintHandler, ConditionalIndices, SafeSinkPattern, get_handler_for_language, PythonTaintHandler, JavaTaintHandler, GenericTaintHandler, evaluate_node_symbolic};
 pub use taint_pipeline::{TaintAnalysisPipeline, PipelineConfig, PipelineResult, VulnerabilityCandidate, StageStats};
 pub use symbol_table::{SymbolTable, SymbolTableBuilder, Symbol, SymbolKind};

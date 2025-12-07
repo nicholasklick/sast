@@ -14,7 +14,7 @@ use tracing_subscriber;
 use discovery::FileDiscovery;
 use parallel::ParallelAnalyzer;
 
-use gittera_analyzer::{CallGraphBuilder, CfgBuilder, InterproceduralTaintAnalysis, SymbolTableBuilder};
+use gittera_analyzer::{CallGraphBuilder, CfgBuilder, InterproceduralTaintAnalysis, SymbolTableBuilder, taint_config::init_yaml_configs};
 use gittera_parser::{Language, LanguageConfig};
 use gittera_query::{QueryExecutor, QueryParser, ExtendedStandardLibrary, QuerySuite};
 use gittera_reporter::{Report, ReportFormat, Reporter};
@@ -123,6 +123,24 @@ fn main() -> Result<()> {
     };
 
     tracing_subscriber::fmt().with_max_level(level).init();
+
+    // Initialize YAML taint configs from models directory
+    // This tries to load language-specific configs from models/<lang>/core.yaml
+    // If no YAML config is found, hardcoded defaults are used
+    let exe_path = std::env::current_exe().ok();
+    let models_dir = exe_path
+        .as_ref()
+        .and_then(|p| p.parent())
+        .map(|p| p.join("models"))
+        .unwrap_or_else(|| PathBuf::from("models"));
+
+    if models_dir.exists() {
+        if let Err(e) = init_yaml_configs(&models_dir) {
+            info!("Could not load YAML configs from {}: {} (using hardcoded configs)", models_dir.display(), e);
+        } else {
+            info!("Loaded YAML taint configs from {}", models_dir.display());
+        }
+    }
 
     let exit_code = match cli.command {
         Commands::Analyze {

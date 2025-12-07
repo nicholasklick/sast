@@ -1,0 +1,384 @@
+# Java Core Taint Configuration
+# Base sources, sinks, and sanitizers for Java applications
+
+sources:
+  # Servlet API
+  - name: "getParameter"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request parameter"
+
+  - name: "getParameterValues"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request parameter array"
+
+  - name: "getParameterMap"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request parameter map"
+
+  - name: "getHeader"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request header"
+
+  - name: "getHeaders"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request headers"
+
+  - name: "getCookies"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP cookies"
+
+  - name: "getQueryString"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP query string"
+
+  - name: "getRequestURI"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request URI"
+
+  - name: "getPathInfo"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP path info"
+
+  - name: "getInputStream"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request body stream"
+
+  - name: "getReader"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request body reader"
+
+  # Environment
+  - name: "getenv"
+    kind: Environment
+    package: "java.lang.System"
+    description: "Environment variable"
+
+  - name: "getProperty"
+    kind: Environment
+    package: "java.lang.System"
+    description: "System property"
+
+  # File I/O
+  - name: "readLine"
+    kind: File
+    package: "java.io.BufferedReader"
+    description: "Read line from file/stream"
+
+  - name: "read"
+    kind: File
+    package: "java.io.InputStream"
+    description: "Read bytes from stream"
+
+  - name: "readAllBytes"
+    kind: File
+    package: "java.nio.file.Files"
+    description: "Read all bytes from file"
+
+  - name: "readAllLines"
+    kind: File
+    package: "java.nio.file.Files"
+    description: "Read all lines from file"
+
+sinks:
+  # SQL Injection
+  - name: "executeQuery"
+    kind: SqlQuery
+    package: "java.sql.Statement"
+    description: "SQL query execution"
+    argument: 0
+
+  - name: "executeUpdate"
+    kind: SqlQuery
+    package: "java.sql.Statement"
+    description: "SQL update execution"
+    argument: 0
+
+  - name: "execute"
+    kind: SqlQuery
+    package: "java.sql.Statement"
+    description: "SQL execution"
+    argument: 0
+
+  - name: "prepareStatement"
+    kind: SqlQuery
+    package: "java.sql.Connection"
+    description: "Prepared statement creation (unsafe if string concat)"
+    argument: 0
+
+  - name: "prepareCall"
+    kind: SqlQuery
+    package: "java.sql.Connection"
+    description: "Callable statement creation"
+    argument: 0
+
+  - name: "nativeQuery"
+    kind: SqlQuery
+    package: "javax.persistence.EntityManager"
+    description: "JPA native query"
+    argument: 0
+
+  # Command Injection
+  - name: "exec"
+    kind: CommandExecution
+    package: "java.lang.Runtime"
+    description: "OS command execution"
+    argument: 0
+
+  - name: "start"
+    kind: CommandExecution
+    package: "java.lang.ProcessBuilder"
+    description: "Process start"
+
+  - name: "command"
+    kind: CommandExecution
+    package: "java.lang.ProcessBuilder"
+    description: "Process command setting"
+    argument: 0
+
+  # Path Traversal
+  - name: "FileInputStream"
+    kind: PathTraversal
+    package: "java.io"
+    description: "File input stream constructor"
+    argument: 0
+
+  - name: "FileOutputStream"
+    kind: PathTraversal
+    package: "java.io"
+    description: "File output stream constructor"
+    argument: 0
+
+  - name: "FileReader"
+    kind: PathTraversal
+    package: "java.io"
+    description: "File reader constructor"
+    argument: 0
+
+  - name: "FileWriter"
+    kind: PathTraversal
+    package: "java.io"
+    description: "File writer constructor"
+    argument: 0
+
+  # XSS / HTML Output
+  - name: "write"
+    kind: HtmlOutput
+    package: "javax.servlet.http.HttpServletResponse"
+    description: "HTTP response write"
+
+  - name: "print"
+    kind: HtmlOutput
+    package: "java.io.PrintWriter"
+    description: "Print to response"
+
+  - name: "println"
+    kind: HtmlOutput
+    package: "java.io.PrintWriter"
+    description: "Print line to response"
+
+  # LDAP Injection
+  - name: "search"
+    kind: LdapQuery
+    package: "javax.naming.directory.DirContext"
+    description: "LDAP search"
+    argument: 1
+
+  - name: "lookup"
+    kind: LdapQuery
+    package: "javax.naming.Context"
+    description: "JNDI/LDAP lookup"
+    argument: 0
+
+  # XPath Injection
+  - name: "evaluate"
+    kind: XPathQuery
+    package: "javax.xml.xpath.XPath"
+    description: "XPath evaluation"
+    argument: 0
+
+  - name: "selectNodes"
+    kind: XPathQuery
+    description: "XPath node selection"
+    argument: 0
+
+  # XXE / XML Parsing
+  - name: "parse"
+    kind: XmlParse
+    package: "javax.xml.parsers.DocumentBuilder"
+    description: "XML document parsing"
+    argument: 0
+
+  # Deserialization
+  - name: "readObject"
+    kind: Deserialization
+    package: "java.io.ObjectInputStream"
+    description: "Object deserialization"
+
+  # Code Injection
+  - name: "eval"
+    kind: CodeEval
+    package: "javax.script.ScriptEngine"
+    description: "Script evaluation"
+    argument: 0
+
+sanitizers:
+  # HTML Encoding
+  - name: "escapeHtml"
+    sanitizes: [Html]
+    package: "org.apache.commons.text.StringEscapeUtils"
+    description: "HTML escape"
+
+  - name: "escapeHtml4"
+    sanitizes: [Html]
+    package: "org.apache.commons.text.StringEscapeUtils"
+    description: "HTML4 escape"
+
+  - name: "htmlEscape"
+    sanitizes: [Html]
+    package: "org.springframework.web.util.HtmlUtils"
+    description: "Spring HTML escape"
+
+  - name: "encodeForHTML"
+    sanitizes: [Html]
+    package: "org.owasp.encoder.Encode"
+    description: "OWASP HTML encoding"
+
+  # SQL Encoding
+  - name: "escapeSql"
+    sanitizes: [Sql]
+    description: "SQL escape"
+
+  - name: "quote"
+    sanitizes: [Sql]
+    description: "SQL quoting"
+
+  # General Validation
+  - name: "parseInt"
+    sanitizes: [All]
+    package: "java.lang.Integer"
+    description: "Parse to integer (type conversion sanitizes)"
+
+  - name: "parseLong"
+    sanitizes: [All]
+    package: "java.lang.Long"
+    description: "Parse to long (type conversion sanitizes)"
+
+  - name: "parseDouble"
+    sanitizes: [All]
+    package: "java.lang.Double"
+    description: "Parse to double (type conversion sanitizes)"
+
+  - name: "valueOf"
+    sanitizes: [All]
+    description: "Value conversion (may sanitize depending on target type)"
+
+  # Path Sanitization
+  - name: "getCanonicalPath"
+    sanitizes: [Path]
+    package: "java.io.File"
+    description: "Canonicalize path (prevents traversal)"
+
+  - name: "normalize"
+    sanitizes: [Path]
+    package: "java.nio.file.Path"
+    description: "Normalize path"
+
+summaries:
+  # String operations that propagate taint
+  - name: "concat"
+    package: "java.lang.String"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "append"
+    package: "java.lang.StringBuilder"
+    input: "Argument[0]"
+    output: "Argument[this]"
+    kind: taint
+
+  - name: "append"
+    package: "java.lang.StringBuffer"
+    input: "Argument[0]"
+    output: "Argument[this]"
+    kind: taint
+
+  - name: "toString"
+    package: "java.lang.StringBuilder"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: value
+
+  - name: "substring"
+    package: "java.lang.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "toLowerCase"
+    package: "java.lang.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "toUpperCase"
+    package: "java.lang.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "trim"
+    package: "java.lang.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "replace"
+    package: "java.lang.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "split"
+    package: "java.lang.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  # URL decoding propagates taint
+  - name: "decode"
+    package: "java.net.URLDecoder"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: value
+
+  # Base64 decoding
+  - name: "decode"
+    package: "java.util.Base64.Decoder"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: value
+
+  # Collections
+  - name: "get"
+    package: "java.util.List"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "get"
+    package: "java.util.Map"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
