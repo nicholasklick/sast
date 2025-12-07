@@ -1,0 +1,405 @@
+# JavaScript Core Taint Configuration
+# Base sources, sinks, and sanitizers for JavaScript/Node.js applications
+
+sources:
+  # Command Line (Node.js)
+  - name: "process.argv"
+    kind: UserInput
+    description: "Command line arguments"
+
+  - name: "process.env"
+    kind: Environment
+    description: "Environment variables"
+
+  # HTTP - Express
+  - name: "req.body"
+    kind: UserInput
+    description: "Express request body"
+
+  - name: "req.query"
+    kind: UserInput
+    description: "Express query parameters"
+
+  - name: "req.params"
+    kind: UserInput
+    description: "Express route parameters"
+
+  - name: "req.headers"
+    kind: UserInput
+    description: "Express request headers"
+
+  - name: "req.cookies"
+    kind: UserInput
+    description: "Express cookies"
+
+  - name: "request.body"
+    kind: UserInput
+    description: "Request body"
+
+  - name: "request.query"
+    kind: UserInput
+    description: "Request query parameters"
+
+  - name: "request.params"
+    kind: UserInput
+    description: "Request route parameters"
+
+  # HTTP - Koa
+  - name: "ctx.request.body"
+    kind: UserInput
+    description: "Koa request body"
+
+  - name: "ctx.request.query"
+    kind: UserInput
+    description: "Koa query parameters"
+
+  - name: "ctx.params"
+    kind: UserInput
+    description: "Koa route parameters"
+
+  # AWS Lambda
+  - name: "event.body"
+    kind: UserInput
+    description: "Lambda event body"
+
+  - name: "event.queryStringParameters"
+    kind: UserInput
+    description: "Lambda query parameters"
+
+  - name: "event.pathParameters"
+    kind: UserInput
+    description: "Lambda path parameters"
+
+  # Browser DOM
+  - name: "document.location"
+    kind: UserInput
+    description: "Document location"
+
+  - name: "window.location"
+    kind: UserInput
+    description: "Window location"
+
+  - name: "location.search"
+    kind: UserInput
+    description: "URL query string"
+
+  - name: "location.hash"
+    kind: UserInput
+    description: "URL hash fragment"
+
+  # File I/O (Node.js)
+  - name: "fs.readFile"
+    kind: File
+    description: "Read file async"
+
+  - name: "fs.readFileSync"
+    kind: File
+    description: "Read file sync"
+
+  - name: "fs.readdir"
+    kind: File
+    description: "Read directory"
+
+sinks:
+  # Command Execution
+  - name: "exec"
+    kind: CommandExecution
+    package: "child_process"
+    description: "Execute shell command"
+    argument: 0
+
+  - name: "execSync"
+    kind: CommandExecution
+    package: "child_process"
+    description: "Execute shell command sync"
+    argument: 0
+
+  - name: "spawn"
+    kind: CommandExecution
+    package: "child_process"
+    description: "Spawn process"
+    argument: 0
+
+  - name: "spawnSync"
+    kind: CommandExecution
+    package: "child_process"
+    description: "Spawn process sync"
+    argument: 0
+
+  - name: "child_process.exec"
+    kind: CommandExecution
+    description: "Execute shell command"
+    argument: 0
+
+  # Code Injection
+  - name: "eval"
+    kind: CodeEval
+    description: "Evaluate JavaScript code"
+    argument: 0
+
+  - name: "Function"
+    kind: CodeEval
+    description: "Dynamic function constructor"
+    argument: 0
+
+  - name: "setTimeout"
+    kind: CodeEval
+    description: "Set timeout (string form)"
+    argument: 0
+
+  - name: "setInterval"
+    kind: CodeEval
+    description: "Set interval (string form)"
+    argument: 0
+
+  - name: "new Function"
+    kind: CodeEval
+    description: "New Function constructor"
+    argument: 0
+
+  # SQL Injection
+  - name: "query"
+    kind: SqlQuery
+    description: "Database query"
+    argument: 0
+
+  - name: "execute"
+    kind: SqlQuery
+    description: "Execute SQL"
+    argument: 0
+
+  - name: "raw"
+    kind: SqlQuery
+    description: "Raw SQL query"
+    argument: 0
+
+  # NoSQL Injection
+  - name: "find"
+    kind: SqlQuery
+    description: "MongoDB find"
+    argument: 0
+
+  - name: "findOne"
+    kind: SqlQuery
+    description: "MongoDB findOne"
+    argument: 0
+
+  - name: "aggregate"
+    kind: SqlQuery
+    description: "MongoDB aggregate"
+    argument: 0
+
+  # File operations
+  - name: "fs.writeFile"
+    kind: FileWrite
+    description: "Write file async"
+    argument: 0
+
+  - name: "fs.writeFileSync"
+    kind: FileWrite
+    description: "Write file sync"
+    argument: 0
+
+  - name: "fs.readFile"
+    kind: PathTraversal
+    description: "Read file (path traversal risk)"
+    argument: 0
+
+  # XSS - DOM
+  - name: "innerHTML"
+    kind: HtmlOutput
+    description: "Set inner HTML"
+
+  - name: "outerHTML"
+    kind: HtmlOutput
+    description: "Set outer HTML"
+
+  - name: "document.write"
+    kind: HtmlOutput
+    description: "Document write"
+    argument: 0
+
+  - name: "document.writeln"
+    kind: HtmlOutput
+    description: "Document writeln"
+    argument: 0
+
+  # XSS - Server response
+  - name: "res.send"
+    kind: HtmlOutput
+    description: "Express send response"
+    argument: 0
+
+  - name: "res.write"
+    kind: HtmlOutput
+    description: "Response write"
+    argument: 0
+
+sanitizers:
+  # HTML sanitization
+  - name: "escape"
+    sanitizes: [Html]
+    description: "Generic escape"
+
+  - name: "sanitize"
+    sanitizes: [Html]
+    description: "Generic sanitize"
+
+  - name: "DOMPurify.sanitize"
+    sanitizes: [Html]
+    description: "DOMPurify HTML sanitizer"
+
+  - name: "validator.escape"
+    sanitizes: [Html]
+    description: "Validator.js escape"
+
+  - name: "xss"
+    sanitizes: [Html]
+    description: "XSS filter"
+
+  # SQL sanitization (parameterized queries)
+  - name: "escape"
+    sanitizes: [Sql]
+    package: "mysql"
+    description: "MySQL escape"
+
+  # Shell sanitization
+  - name: "shellescape"
+    sanitizes: [Shell]
+    description: "Shell escape"
+
+  # Type conversion
+  - name: "parseInt"
+    sanitizes: [All]
+    description: "Parse integer"
+
+  - name: "parseFloat"
+    sanitizes: [All]
+    description: "Parse float"
+
+  - name: "Number"
+    sanitizes: [All]
+    description: "Convert to number"
+
+  # URL encoding
+  - name: "encodeURIComponent"
+    sanitizes: [Path]
+    description: "URL encode component"
+
+  - name: "encodeURI"
+    sanitizes: [Path]
+    description: "URL encode"
+
+summaries:
+  # String operations
+  - name: "+"
+    package: "String"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "concat"
+    package: "String"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "toLowerCase"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "toUpperCase"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "trim"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "split"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "replace"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "slice"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "substring"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  # Array access
+  - name: "[]"
+    package: "Array"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "join"
+    package: "Array"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  # JSON
+  - name: "JSON.parse"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: value
+
+  - name: "JSON.stringify"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  # URL decoding
+  - name: "decodeURIComponent"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: value
+
+  - name: "decodeURI"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: value
+
+  # Base64 (Node.js Buffer)
+  - name: "Buffer.from"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: value
+
+  - name: "toString"
+    package: "Buffer"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: value
+
+  # atob/btoa (browser)
+  - name: "atob"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: value
+
+  - name: "btoa"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: value

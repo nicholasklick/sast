@@ -1,0 +1,381 @@
+# Python Core Taint Configuration
+# Base sources, sinks, and sanitizers for Python applications
+
+sources:
+  # Standard Input
+  - name: "input"
+    kind: UserInput
+    description: "Read user input"
+
+  - name: "raw_input"
+    kind: UserInput
+    description: "Read user input (Python 2)"
+
+  - name: "sys.argv"
+    kind: UserInput
+    description: "Command line arguments"
+
+  - name: "sys.stdin"
+    kind: UserInput
+    description: "Standard input stream"
+
+  - name: "sys.stdin.read"
+    kind: UserInput
+    description: "Read from stdin"
+
+  - name: "sys.stdin.readline"
+    kind: UserInput
+    description: "Read line from stdin"
+
+  # File I/O
+  - name: "open"
+    kind: File
+    description: "Open file"
+
+  - name: "read"
+    kind: File
+    description: "Read file contents"
+
+  - name: "readline"
+    kind: File
+    description: "Read line from file"
+
+  - name: "readlines"
+    kind: File
+    description: "Read all lines from file"
+
+  - name: "Path.read_text"
+    kind: File
+    package: "pathlib"
+    description: "Read file as text"
+
+  - name: "Path.read_bytes"
+    kind: File
+    package: "pathlib"
+    description: "Read file as bytes"
+
+  # Environment
+  - name: "os.environ"
+    kind: Environment
+    description: "Environment variables dict"
+
+  - name: "os.environ.get"
+    kind: Environment
+    description: "Get environment variable"
+
+  - name: "os.getenv"
+    kind: Environment
+    description: "Get environment variable"
+
+  # Network
+  - name: "requests.get"
+    kind: Network
+    description: "HTTP GET request"
+
+  - name: "requests.post"
+    kind: Network
+    description: "HTTP POST request"
+
+  - name: "urllib.request.urlopen"
+    kind: Network
+    description: "URL open"
+
+  - name: "httpx.get"
+    kind: Network
+    description: "HTTPX GET request"
+
+sinks:
+  # SQL Injection
+  - name: "execute"
+    kind: SqlQuery
+    description: "Execute SQL query"
+    argument: 0
+
+  - name: "executemany"
+    kind: SqlQuery
+    description: "Execute many SQL queries"
+    argument: 0
+
+  - name: "cursor.execute"
+    kind: SqlQuery
+    description: "Cursor execute SQL"
+    argument: 0
+
+  - name: "conn.execute"
+    kind: SqlQuery
+    description: "Connection execute SQL"
+    argument: 0
+
+  - name: "session.execute"
+    kind: SqlQuery
+    description: "SQLAlchemy session execute"
+    argument: 0
+
+  - name: "engine.execute"
+    kind: SqlQuery
+    description: "SQLAlchemy engine execute"
+    argument: 0
+
+  - name: "raw"
+    kind: SqlQuery
+    description: "Raw SQL query"
+    argument: 0
+
+  - name: "text"
+    kind: SqlQuery
+    package: "sqlalchemy"
+    description: "SQLAlchemy text SQL"
+    argument: 0
+
+  # Command Execution
+  - name: "os.system"
+    kind: CommandExecution
+    description: "Execute system command"
+    argument: 0
+
+  - name: "os.popen"
+    kind: CommandExecution
+    description: "Open pipe to command"
+    argument: 0
+
+  - name: "subprocess.call"
+    kind: CommandExecution
+    description: "Call subprocess"
+    argument: 0
+
+  - name: "subprocess.run"
+    kind: CommandExecution
+    description: "Run subprocess"
+    argument: 0
+
+  - name: "subprocess.Popen"
+    kind: CommandExecution
+    description: "Popen subprocess"
+    argument: 0
+
+  - name: "subprocess.check_call"
+    kind: CommandExecution
+    description: "Check call subprocess"
+    argument: 0
+
+  - name: "subprocess.check_output"
+    kind: CommandExecution
+    description: "Check output subprocess"
+    argument: 0
+
+  # Code Injection
+  - name: "eval"
+    kind: CodeEval
+    description: "Evaluate Python expression"
+    argument: 0
+
+  - name: "exec"
+    kind: CodeEval
+    description: "Execute Python code"
+    argument: 0
+
+  - name: "compile"
+    kind: CodeEval
+    description: "Compile code object"
+    argument: 0
+
+  - name: "__import__"
+    kind: CodeEval
+    description: "Dynamic import"
+    argument: 0
+
+  - name: "importlib.import_module"
+    kind: CodeEval
+    description: "Import module dynamically"
+    argument: 0
+
+  # File operations
+  - name: "open"
+    kind: PathTraversal
+    description: "Open file (path traversal risk)"
+    argument: 0
+
+  - name: "os.path.join"
+    kind: PathTraversal
+    description: "Join paths"
+    argument: 1
+
+  - name: "shutil.copy"
+    kind: FileWrite
+    description: "Copy file"
+
+  - name: "shutil.move"
+    kind: FileWrite
+    description: "Move file"
+
+  # Deserialization
+  - name: "pickle.loads"
+    kind: Deserialization
+    description: "Unpickle object"
+    argument: 0
+
+  - name: "pickle.load"
+    kind: Deserialization
+    description: "Unpickle from file"
+    argument: 0
+
+  - name: "yaml.load"
+    kind: Deserialization
+    description: "Load YAML (unsafe)"
+    argument: 0
+
+  - name: "yaml.unsafe_load"
+    kind: Deserialization
+    description: "Unsafe YAML load"
+    argument: 0
+
+  - name: "marshal.loads"
+    kind: Deserialization
+    description: "Unmarshal object"
+    argument: 0
+
+  # XSS - Only clearly dangerous methods
+  # Note: Markup is NOT a sink - markupsafe.escape() returns Markup which is safe
+  # mark_safe marks untrusted input as safe WITHOUT escaping (dangerous)
+  - name: "render_template_string"
+    kind: HtmlOutput
+    description: "Render template from string (dangerous)"
+    argument: 0
+
+  - name: "mark_safe"
+    kind: HtmlOutput
+    package: "django.utils.safestring"
+    description: "Mark string as safe HTML (dangerous if untrusted)"
+    argument: 0
+
+  # SSRF
+  - name: "urllib.request.urlopen"
+    kind: NetworkSend
+    description: "Open URL (SSRF risk)"
+    argument: 0
+
+  - name: "requests.get"
+    kind: NetworkSend
+    description: "HTTP GET (SSRF risk)"
+    argument: 0
+
+sanitizers:
+  # HTML sanitization
+  - name: "escape"
+    sanitizes: [Html]
+    description: "Generic escape"
+
+  - name: "html.escape"
+    sanitizes: [Html]
+    description: "HTML escape"
+
+  - name: "cgi.escape"
+    sanitizes: [Html]
+    description: "CGI HTML escape"
+
+  - name: "markupsafe.escape"
+    sanitizes: [Html]
+    description: "MarkupSafe HTML escape"
+
+  - name: "bleach.clean"
+    sanitizes: [Html]
+    description: "Bleach HTML sanitizer"
+
+  # Shell sanitization
+  - name: "shlex.quote"
+    sanitizes: [Shell]
+    description: "Shell quote"
+
+  - name: "pipes.quote"
+    sanitizes: [Shell]
+    description: "Pipes shell quote"
+
+  # Type conversion (sanitizes all)
+  - name: "int"
+    sanitizes: [All]
+    description: "Convert to integer"
+
+  - name: "float"
+    sanitizes: [All]
+    description: "Convert to float"
+
+  - name: "str"
+    sanitizes: [All]
+    description: "Convert to string"
+
+summaries:
+  # String operations
+  - name: "+"
+    package: "str"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "join"
+    package: "str"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "format"
+    package: "str"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "lower"
+    package: "str"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "upper"
+    package: "str"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "strip"
+    package: "str"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "split"
+    package: "str"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "replace"
+    package: "str"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  # List/Dict access
+  - name: "[]"
+    package: "list"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "get"
+    package: "dict"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  # URL decoding
+  - name: "unquote"
+    package: "urllib.parse"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: value
+
+  # Base64 decoding
+  - name: "b64decode"
+    package: "base64"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: value

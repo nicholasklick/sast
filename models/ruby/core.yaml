@@ -1,0 +1,306 @@
+# Ruby Core Taint Configuration
+# Base sources, sinks, and sanitizers for Ruby applications
+
+sources:
+  # Standard input
+  - name: "gets"
+    kind: UserInput
+    description: "Read line from stdin"
+
+  - name: "readline"
+    kind: UserInput
+    description: "Read line from stdin"
+
+  - name: "readlines"
+    kind: UserInput
+    description: "Read all lines from stdin"
+
+  # Environment
+  - name: "ENV"
+    kind: Environment
+    description: "Environment variable access"
+
+  # File I/O
+  - name: "read"
+    kind: File
+    package: "File"
+    description: "Read file contents"
+
+  - name: "readlines"
+    kind: File
+    package: "File"
+    description: "Read file lines"
+
+  - name: "open"
+    kind: File
+    package: "File"
+    description: "Open file"
+
+sinks:
+  # Command Injection
+  - name: "system"
+    kind: CommandExecution
+    description: "Execute system command"
+    argument: 0
+
+  - name: "exec"
+    kind: CommandExecution
+    description: "Execute and replace process"
+    argument: 0
+
+  - name: "`"
+    kind: CommandExecution
+    description: "Backtick command execution"
+
+  - name: "spawn"
+    kind: CommandExecution
+    description: "Spawn subprocess"
+    argument: 0
+
+  - name: "popen"
+    kind: CommandExecution
+    package: "IO"
+    description: "Open pipe to command"
+    argument: 0
+
+  - name: "Open3.capture2"
+    kind: CommandExecution
+    description: "Capture command output"
+    argument: 0
+
+  - name: "Open3.capture3"
+    kind: CommandExecution
+    description: "Capture command output and error"
+    argument: 0
+
+  # SQL Injection
+  - name: "execute"
+    kind: SqlQuery
+    description: "Execute SQL"
+    argument: 0
+
+  - name: "exec_query"
+    kind: SqlQuery
+    description: "Execute SQL query"
+    argument: 0
+
+  - name: "select_all"
+    kind: SqlQuery
+    description: "Select all with SQL"
+    argument: 0
+
+  - name: "find_by_sql"
+    kind: SqlQuery
+    description: "Find by raw SQL"
+    argument: 0
+
+  # File operations
+  - name: "write"
+    kind: FileWrite
+    package: "File"
+    description: "Write to file"
+
+  - name: "open"
+    kind: PathTraversal
+    package: "File"
+    description: "Open file (path traversal risk)"
+    argument: 0
+
+  # Code Injection
+  - name: "eval"
+    kind: CodeEval
+    description: "Evaluate Ruby code"
+    argument: 0
+
+  - name: "instance_eval"
+    kind: CodeEval
+    description: "Evaluate in instance context"
+    argument: 0
+
+  - name: "class_eval"
+    kind: CodeEval
+    description: "Evaluate in class context"
+    argument: 0
+
+  - name: "module_eval"
+    kind: CodeEval
+    description: "Evaluate in module context"
+    argument: 0
+
+  # Deserialization
+  - name: "load"
+    kind: Deserialization
+    package: "Marshal"
+    description: "Unmarshal Ruby object"
+    argument: 0
+
+  - name: "load"
+    kind: Deserialization
+    package: "YAML"
+    description: "Load YAML (unsafe)"
+    argument: 0
+
+  - name: "unsafe_load"
+    kind: Deserialization
+    package: "YAML"
+    description: "Unsafe YAML load"
+    argument: 0
+
+  # XSS - Only clearly dangerous methods
+  # Note: "render" is NOT included because render plain:/json: are safe
+  # Only render html: is dangerous, but we can't distinguish without arg analysis
+  - name: "raw"
+    kind: HtmlOutput
+    description: "Output raw HTML (bypasses escaping)"
+    argument: 0
+
+  - name: "html_safe"
+    kind: HtmlOutput
+    description: "Mark string as safe HTML"
+
+sanitizers:
+  # HTML sanitization
+  - name: "sanitize"
+    sanitizes: [Html]
+    description: "Rails HTML sanitizer"
+
+  - name: "strip_tags"
+    sanitizes: [Html]
+    description: "Strip HTML tags"
+
+  - name: "h"
+    sanitizes: [Html]
+    description: "Rails HTML escape helper"
+
+  - name: "html_escape"
+    sanitizes: [Html]
+    description: "HTML escape"
+
+  - name: "ERB::Util.html_escape"
+    sanitizes: [Html]
+    description: "ERB HTML escape"
+
+  - name: "CGI.escapeHTML"
+    sanitizes: [Html]
+    description: "CGI HTML escape"
+
+  # SQL sanitization
+  - name: "sanitize_sql"
+    sanitizes: [Sql]
+    description: "Rails SQL sanitizer"
+
+  - name: "quote"
+    sanitizes: [Sql]
+    description: "SQL quoting"
+
+  # Shell sanitization
+  - name: "shellescape"
+    sanitizes: [Shell]
+    package: "Shellwords"
+    description: "Shell escape"
+
+  - name: "escape"
+    sanitizes: [Shell]
+    package: "Shellwords"
+    description: "Shell escape"
+
+  # Path sanitization
+  - name: "basename"
+    sanitizes: [Path]
+    package: "File"
+    description: "Extract basename (prevents traversal)"
+
+  - name: "realpath"
+    sanitizes: [Path]
+    package: "File"
+    description: "Resolve to real path"
+
+  # Validation
+  - name: "to_i"
+    sanitizes: [All]
+    description: "Convert to integer"
+
+  - name: "to_f"
+    sanitizes: [All]
+    description: "Convert to float"
+
+summaries:
+  # String operations
+  - name: "+"
+    package: "String"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "concat"
+    package: "String"
+    input: "Argument[0]"
+    output: "Argument[this]"
+    kind: taint
+
+  - name: "<<"
+    package: "String"
+    input: "Argument[0]"
+    output: "Argument[this]"
+    kind: taint
+
+  - name: "downcase"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "upcase"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "strip"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "gsub"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "sub"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "split"
+    package: "String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  # Array/Hash access
+  - name: "[]"
+    package: "Array"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "[]"
+    package: "Hash"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "first"
+    package: "Array"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "last"
+    package: "Array"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint

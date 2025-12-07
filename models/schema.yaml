@@ -1,0 +1,80 @@
+# Taint Analysis Models Schema
+# Based on CodeQL's Models as Data (MaD) format
+#
+# This schema defines sources, sinks, sanitizers, and flow summaries
+# for taint analysis across different languages and frameworks.
+
+# ============================================================================
+# SOURCES: Where tainted data enters the application
+# ============================================================================
+# sources:
+#   - name: "function_or_method_name"
+#     kind: UserInput | Environment | Database | File | Network | Config
+#     package: "optional.package.path"  # For disambiguation
+#     description: "Human-readable description"
+#
+# Example:
+#   - name: "getParameter"
+#     kind: UserInput
+#     package: "javax.servlet.http.HttpServletRequest"
+#     description: "HTTP request parameter"
+
+# ============================================================================
+# SINKS: Where tainted data becomes dangerous
+# ============================================================================
+# sinks:
+#   - name: "function_or_method_name"
+#     kind: SqlQuery | CommandExecution | FileWrite | CodeEval | HtmlOutput | LogOutput | NetworkSend | PathTraversal | Deserialization | LdapQuery | XPathQuery | XmlParse
+#     package: "optional.package.path"
+#     description: "Human-readable description"
+#     argument: 0  # Optional: which argument is the sink (0-indexed)
+#
+# Example:
+#   - name: "executeQuery"
+#     kind: SqlQuery
+#     package: "java.sql.Statement"
+#     description: "SQL query execution"
+#     argument: 0
+
+# ============================================================================
+# SANITIZERS: Functions that make tainted data safe
+# ============================================================================
+# sanitizers:
+#   - name: "function_or_method_name"
+#     sanitizes: [Html, Sql, Shell, Path, All]  # What kinds of taint it removes
+#     package: "optional.package.path"
+#     description: "Human-readable description"
+#
+# Example:
+#   - name: "escapeHtml"
+#     sanitizes: [Html]
+#     package: "org.apache.commons.text.StringEscapeUtils"
+#     description: "Escapes HTML special characters"
+
+# ============================================================================
+# SUMMARIES: How taint flows through library functions
+# ============================================================================
+# summaries:
+#   - name: "function_or_method_name"
+#     package: "optional.package.path"
+#     input: "Argument[0]" | "Argument[this]" | "ReturnValue"
+#     output: "Argument[0]" | "Argument[this]" | "ReturnValue"
+#     kind: taint | value  # taint = data derived from input, value = exact copy
+#
+# Example:
+#   - name: "append"
+#     package: "java.lang.StringBuilder"
+#     input: "Argument[0]"
+#     output: "Argument[this]"
+#     kind: taint
+
+# ============================================================================
+# FRAMEWORK-SPECIFIC EXTENSIONS
+# ============================================================================
+# Frameworks can extend base language configs. Load order:
+# 1. models/{language}/core.yaml      - Core language features
+# 2. models/{language}/{framework}.yaml - Framework-specific additions
+#
+# Example: Ruby + Rails
+# - models/ruby/core.yaml   - Basic Ruby sources/sinks
+# - models/ruby/rails.yaml  - Rails-specific (params, render, etc.)
