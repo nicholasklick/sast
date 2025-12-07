@@ -796,6 +796,83 @@ impl InterproceduralTaintAnalysis {
                 // taint based on function summaries.
             }
 
+            // Handle Java object creation expressions: new ClassName(args)
+            // Tree-sitter Java parses this as object_creation_expression
+            //
+            // TODO: Refactor to language_handler.rs - this is Java-specific logic that should
+            // be delegated to LanguageTaintHandler::is_constructor_sink() to keep the core
+            // algorithm language-agnostic. See also the cookie/headers source detection below.
+            AstNodeKind::Other { node_type } if node_type == "object_creation_expression" => {
+                // Extract the class name from the object creation
+                // Structure: new + type_identifier + argument_list
+                let mut class_name: Option<String> = None;
+                let mut has_tainted_args = false;
+
+                for child in &node.children {
+                    match &child.kind {
+                        AstNodeKind::Identifier { name } => {
+                            if class_name.is_none() {
+                                class_name = Some(name.clone());
+                            }
+                        }
+                        AstNodeKind::Other { node_type: child_type } => {
+                            if child_type == "type_identifier" || child_type == "generic_type" {
+                                // Extract class name from type identifier
+                                class_name = Some(child.text.trim().to_string());
+                            } else if child_type == "argument_list" {
+                                // Check if any arguments are tainted
+                                for arg in &child.children {
+                                    if !matches!(&arg.kind, AstNodeKind::Other { node_type: t } if t == "(" || t == ")" || t == ",") {
+                                        if self.is_node_tainted_with_sym(arg, tainted_vars, sym_state) {
+                                            has_tainted_args = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Check if the class is a sink (e.g., ProcessBuilder, Runtime)
+                if let Some(ref cname) = class_name {
+                    let cname_lower = cname.to_lowercase();
+                    // Check for command execution constructors
+                    let is_cmd_sink = cname_lower.contains("processbuilder")
+                        || cname_lower.contains("runtime")
+                        || cname_lower.contains("commandline");
+
+                    if is_cmd_sink && has_tainted_args {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] Found tainted object creation sink: new {}(...)", cname);
+
+                        let sink = TaintSink {
+                            name: format!("new {}", cname),
+                            kind: TaintSinkKind::CommandExecution,
+                            node_id: node.id,
+                        };
+                        vulnerabilities.push(TaintVulnerability {
+                            sink,
+                            tainted_value: TaintValue::new(
+                                cname.clone(),
+                                TaintSourceKind::UserInput,
+                            ),
+                            severity: Severity::High,
+                        });
+                    }
+                }
+
+                // Recurse into children
+                for child in &node.children {
+                    self.track_taint_in_ast_with_depth(
+                        child, tainted_vars, vulnerabilities, branch_depth, ast_depth + 1,
+                        sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars
+                    );
+                }
+                return;
+            }
+
             AstNodeKind::FunctionDeclaration { .. } | AstNodeKind::MethodDeclaration { .. } => {
                 // Enter new scope - analyze function body with fresh taint set and symbolic state
                 // Reset branch_depth to 0 since we're in a new function scope
@@ -1347,7 +1424,29 @@ impl InterproceduralTaintAnalysis {
     /// Check if a node contains tainted data, using symbolic state
     fn is_node_tainted_with_sym(&self, node: &AstNode, tainted_vars: &HashSet<String>, sym_state: &SymbolicState) -> bool {
         match &node.kind {
-            AstNodeKind::Identifier { name } => tainted_vars.contains(name),
+            AstNodeKind::Identifier { name } => {
+                // Direct taint check
+                if tainted_vars.contains(name) {
+                    return true;
+                }
+                // Implicit read for collections: if any element is tainted, the collection is tainted
+                // This handles patterns like: list.add(tainted); sink(list)
+                // We track list elements as "listVar@0", "listVar@1", etc.
+                let prefix = format!("{}@", name);
+                if tainted_vars.iter().any(|v| v.starts_with(&prefix)) {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] Implicit read: collection '{}' has tainted elements", name);
+                    return true;
+                }
+                // Also check for map elements: "mapVar[key]"
+                let map_prefix = format!("{}[", name);
+                if tainted_vars.iter().any(|v| v.starts_with(&map_prefix)) {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] Implicit read: map '{}' has tainted values", name);
+                    return true;
+                }
+                false
+            }
 
             // Handle conditional expressions (ternaries) with symbolic evaluation
             // Uses language handler to get correct indices for Python vs Java ternaries
@@ -1682,7 +1781,7 @@ impl InterproceduralTaintAnalysis {
     fn extract_variable_name(&self, node: &AstNode) -> Option<String> {
         match &node.kind {
             AstNodeKind::Identifier { name } => Some(name.clone()),
-            AstNodeKind::MemberExpression { property, .. } => {
+            AstNodeKind::MemberExpression { .. } => {
                 // For member expressions like obj.field, return the whole thing
                 Some(node.text.trim().to_string())
             }
@@ -1835,8 +1934,44 @@ impl InterproceduralTaintAnalysis {
             }
         }
 
-        // Fall back to legacy sources
+        // Check for cookie method calls that return user input
+        // More conservative: only match when the FULL callee looks cookie-related
+        //
+        // TODO: Refactor to language_handler.rs - this is Java-specific source detection
+        // that should be delegated to LanguageTaintHandler::is_contextual_source() to keep
+        // the core algorithm language-agnostic.
         let name_lower = name.to_lowercase();
+        let method_lower = method_name.to_lowercase();
+
+        // Match .getValue()/.getName() only if receiver looks like a cookie variable
+        // Common patterns: cookie.getValue(), theCookie.getValue(), c.getValue(), etc.
+        if (method_lower == "getvalue" || method_lower == "getname" || method_lower == "getcomment") {
+            // Check if the receiver name suggests it's a cookie
+            let receiver = name.rsplitn(2, '.').nth(1).unwrap_or("");
+            let receiver_lower = receiver.to_lowercase();
+            if receiver_lower.contains("cookie")
+                || receiver_lower == "c"  // Common single-letter variable in cookie loops
+                || (receiver_lower.starts_with("the") && receiver_lower.contains("cook"))
+            {
+                #[cfg(debug_assertions)]
+                eprintln!("[DEBUG] is_source_function: '{}' matched as cookie method (receiver='{}')", name, receiver);
+                return true;
+            }
+        }
+
+        // Match headers.nextElement() patterns
+        if method_lower == "nextelement" {
+            // Check if the receiver looks like a headers enumeration
+            let receiver = name.rsplitn(2, '.').nth(1).unwrap_or("");
+            let receiver_lower = receiver.to_lowercase();
+            if receiver_lower.contains("header") {
+                #[cfg(debug_assertions)]
+                eprintln!("[DEBUG] is_source_function: '{}' matched as headers enumeration", name);
+                return true;
+            }
+        }
+
+        // Fall back to legacy sources
         let result = self.sources.iter().any(|s| {
             let source_lower = s.name.to_lowercase();
             let matches = name_lower.contains(&source_lower) || source_lower.contains(&name_lower);
