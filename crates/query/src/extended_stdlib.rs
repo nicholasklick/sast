@@ -71,7 +71,7 @@ impl ExtendedStandardLibrary {
     // ==================== INJECTION QUERIES (CWE-74 family) ====================
 
     fn register_injection_queries(&mut self) {
-        // SQL Injection - Basic
+        // SQL Injection - Basic (JS/TS/Python only, Java uses java/sql-injection)
         self.register(
             "js/sql-injection",
             Self::sql_injection_query(),
@@ -85,6 +85,7 @@ impl ExtendedStandardLibrary {
                 .sans_top_25()
                 .uses_taint()
                 .tags(vec!["security".to_string(), "sql".to_string(), "injection".to_string()])
+                .languages(vec!["javascript".to_string(), "typescript".to_string(), "python".to_string()])
                 .build()
         );
 
@@ -120,7 +121,7 @@ impl ExtendedStandardLibrary {
                 .build()
         );
 
-        // Command Injection
+        // Command Injection - JS/TS/Python only (Java uses java/command-injection)
         self.register(
             "js/command-injection",
             Self::command_injection_query(),
@@ -133,6 +134,7 @@ impl ExtendedStandardLibrary {
                 .owasp("A03:2021 - Injection")
                 .sans_top_25()
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string(), "python".to_string()])
                 .build()
         );
 
@@ -294,6 +296,23 @@ impl ExtendedStandardLibrary {
                 .languages(vec!["java".to_string()])
                 .build()
         );
+
+        // Java Path Traversal
+        self.register(
+            "java/path-traversal",
+            Self::java_path_traversal_query(),
+            QueryMetadata::builder("java/path-traversal", "Path Traversal")
+                .description("Detects path traversal vulnerabilities in Java file operations")
+                .category(QueryCategory::PathTraversal)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![22])
+                .owasp("A01:2021 - Broken Access Control")
+                .sans_top_25()
+                .uses_taint()
+                .languages(vec!["java".to_string()])
+                .build()
+        );
     }
 
     // ==================== XSS QUERIES (CWE-79 family) ====================
@@ -316,7 +335,7 @@ impl ExtendedStandardLibrary {
                 .build()
         );
 
-        // Reflected XSS
+        // Reflected XSS - JS/TS only (Java uses java/reflected-xss)
         self.register(
             "js/reflected-xss",
             Self::reflected_xss_query(),
@@ -329,6 +348,7 @@ impl ExtendedStandardLibrary {
                 .owasp("A03:2021 - Injection")
                 .sans_top_25()
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string(), "python".to_string()])
                 .build()
         );
 
@@ -569,7 +589,7 @@ impl ExtendedStandardLibrary {
                 .build()
         );
 
-        // Weak Cipher (DES/RC4)
+        // Weak Cipher (DES/RC4) - JS/TS only due to createCipher pattern
         self.register(
             "js/weak-cipher",
             Self::weak_cipher_query(),
@@ -581,10 +601,11 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![327])
                 .owasp("A02:2021 - Cryptographic Failures")
                 .sans_top_25()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
-        // ECB Mode
+        // ECB Mode - JS/TS only
         self.register(
             "js/ecb-mode",
             Self::ecb_mode_query(),
@@ -595,10 +616,11 @@ impl ExtendedStandardLibrary {
                 .precision(QueryPrecision::VeryHigh)
                 .cwes(vec![327])
                 .owasp("A02:2021 - Cryptographic Failures")
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
-        // Insufficient Key Size
+        // Insufficient Key Size - JS/TS only
         self.register(
             "js/insufficient-key-size",
             Self::insufficient_key_size_query(),
@@ -610,10 +632,11 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![326])
                 .owasp("A02:2021 - Cryptographic Failures")
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
-        // Hardcoded Crypto Key
+        // Hardcoded Crypto Key - JS/TS only
         self.register(
             "js/hardcoded-crypto-key",
             Self::hardcoded_crypto_key_query(),
@@ -624,10 +647,11 @@ impl ExtendedStandardLibrary {
                 .precision(QueryPrecision::Medium)
                 .cwes(vec![321])
                 .owasp("A02:2021 - Cryptographic Failures")
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
-        // Insecure Random
+        // Insecure Random - JS/TS only (Math.random pattern)
         self.register(
             "js/insecure-random",
             Self::insecure_random_query(),
@@ -640,10 +664,11 @@ impl ExtendedStandardLibrary {
                 .owasp("A02:2021 - Cryptographic Failures")
                 .sans_top_25()
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
-        // Missing Salt
+        // Missing Salt - JS/TS only
         self.register(
             "js/missing-salt",
             Self::missing_salt_query(),
@@ -655,10 +680,11 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![759])
                 .owasp("A02:2021 - Cryptographic Failures")
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
-        // Predictable Seed
+        // Predictable Seed - JS/TS only
         self.register(
             "js/predictable-seed",
             Self::predictable_seed_query(),
@@ -669,6 +695,7 @@ impl ExtendedStandardLibrary {
                 .precision(QueryPrecision::Medium)
                 .cwes(vec![337])
                 .suites(vec![QuerySuite::SecurityAndQuality])
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
     }
@@ -676,7 +703,7 @@ impl ExtendedStandardLibrary {
     // ==================== PATH TRAVERSAL & FILE ACCESS ====================
 
     fn register_path_traversal_queries(&mut self) {
-        // Path Traversal
+        // Path Traversal - JS/TS/Python only (Java uses java/path-traversal)
         self.register(
             "js/path-traversal",
             Self::path_traversal_query(),
@@ -689,10 +716,11 @@ impl ExtendedStandardLibrary {
                 .owasp("A01:2021 - Broken Access Control")
                 .sans_top_25()
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string(), "python".to_string()])
                 .build()
         );
 
-        // Zip Slip
+        // Zip Slip - JS/TS only
         self.register(
             "js/zip-slip",
             Self::zip_slip_query(),
@@ -704,10 +732,11 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![22])
                 .sans_top_25()
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
-        // Arbitrary File Write
+        // Arbitrary File Write - JS/TS only
         self.register(
             "js/arbitrary-file-write",
             Self::arbitrary_file_write_query(),
@@ -718,10 +747,11 @@ impl ExtendedStandardLibrary {
                 .precision(QueryPrecision::High)
                 .cwes(vec![73])
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
-        // Unsafe File Upload
+        // Unsafe File Upload - JS/TS only
         self.register(
             "js/unsafe-file-upload",
             Self::unsafe_file_upload_query(),
@@ -734,6 +764,7 @@ impl ExtendedStandardLibrary {
                 .owasp("A04:2021 - Insecure Design")
                 .sans_top_25()
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
     }
@@ -741,7 +772,7 @@ impl ExtendedStandardLibrary {
     // ==================== INFORMATION DISCLOSURE ====================
 
     fn register_information_disclosure_queries(&mut self) {
-        // Stack Trace Exposure
+        // Stack Trace Exposure - JS/TS only
         self.register(
             "js/stack-trace-exposure",
             Self::stack_trace_exposure_query(),
@@ -753,10 +784,11 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![209])
                 .owasp("A05:2021 - Security Misconfiguration")
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
-        // Sensitive Data in Log
+        // Sensitive Data in Log - JS/TS only
         self.register(
             "js/sensitive-data-log",
             Self::sensitive_data_log_query(),
@@ -1942,7 +1974,8 @@ impl ExtendedStandardLibrary {
                         property: "callee".to_string(),
                     },
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(des|rc4|createCipher.*(des|rc4))".to_string()),
+                    // Use word boundaries to avoid matching "nodes", "describes", etc.
+                    right: Expression::String("(?i)(\\bdes\\b|\\brc4\\b|\\b3des\\b|createCipher.*(des|rc4)|DES|RC4)".to_string()),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
@@ -2500,7 +2533,8 @@ impl ExtendedStandardLibrary {
                 Predicate::MethodName {
                     variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    value: "(?i)(deserialize|unserialize|readObject|load|loads|unmarshal|decode)".to_string(),
+                    // More specific patterns to avoid matching url_decode, base64_decode, etc.
+                    value: "(?i)(\\bdeserialize\\b|\\bunserialize\\b|\\breadObject\\b|pickle\\.loads?|yaml\\.load|Marshal\\.load|json_decode|unserialize|ObjectInputStream)".to_string(),
                 },
                 Predicate::FunctionCall {
                     variable: "mc".to_string(),
@@ -2959,6 +2993,29 @@ impl ExtendedStandardLibrary {
             SelectClause::new(vec![SelectItem::Both {
                 variable: "mc".to_string(),
                 message: "XPath injection vulnerability - untrusted data in XPath expression".to_string(),
+            }]),
+        )
+    }
+
+    fn java_path_traversal_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::MethodCall, "mc".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::MethodName {
+                    variable: "mc".to_string(),
+                    operator: ComparisonOp::Matches,
+                    // Java file operations
+                    value: "(?i)(FileInputStream|FileOutputStream|FileReader|FileWriter|RandomAccessFile|File|getResource|getResourceAsStream|createTempFile|newInputStream|newOutputStream)".to_string(),
+                },
+                Predicate::FunctionCall {
+                    variable: "mc".to_string(),
+                    function: "isTainted".to_string(),
+                    arguments: Vec::new(),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "mc".to_string(),
+                message: "Path traversal vulnerability - untrusted data in file path".to_string(),
             }]),
         )
     }

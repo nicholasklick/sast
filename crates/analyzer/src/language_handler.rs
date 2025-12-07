@@ -781,6 +781,16 @@ pub fn evaluate_node_symbolic(
         return sym_state.get(name);
     }
 
+    // Handle parenthesized expressions - extract inner expression
+    if let AstNodeKind::ParenthesizedExpression = &node.kind {
+        // For 3 children: (, expr, ), the expression is at index 1
+        // For 1 child: just the expression at index 0
+        let inner_idx = if node.children.len() == 3 { 1 } else { 0 };
+        if let Some(inner) = node.children.get(inner_idx) {
+            return evaluate_node_symbolic(inner, sym_state, handler);
+        }
+    }
+
     // Default
     SymbolicValue::Unknown
 }

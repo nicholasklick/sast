@@ -294,6 +294,7 @@ pub mod stdlib;
 pub mod metadata;
 pub mod extended_stdlib;
 pub mod owasp_rules;
+pub mod languages;
 
 pub use ast::{Query, QueryAst, Predicate};
 pub use executor::{QueryExecutor, QueryResult, Finding};

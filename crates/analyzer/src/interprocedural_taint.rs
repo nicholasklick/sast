@@ -19,7 +19,7 @@ use crate::call_graph::CallGraph;
 use crate::flow_summary::FlowSummaryRegistry;
 use crate::language_handler::{LanguageTaintHandler, SafeSinkPattern, get_handler_for_language, evaluate_node_symbolic};
 use crate::symbolic::{SymbolicValue, SymbolicState, BinaryOperator, UnaryOperator};
-use crate::taint::{TaintAnalysisResult, TaintSink, TaintSource, TaintSourceKind, TaintValue, TaintVulnerability, Severity, TaintSinkKind};
+use crate::taint::{TaintAnalysisResult, TaintSink, TaintSource, TaintSourceKind, TaintValue, TaintVulnerability, Severity, TaintSinkKind, FlowState};
 use gittera_parser::ast::{AstNode, AstNodeKind, LiteralValue};
 use gittera_parser::language::Language;
 use std::collections::{HashMap, HashSet};
@@ -279,8 +279,12 @@ impl InterproceduralTaintAnalysis {
         // (e.g., after `if '../' in var: return` guard)
         let mut path_sanitized_vars: HashSet<String> = HashSet::new();
 
+        // Track which flow states each variable has been sanitized for
+        // This enables context-specific sanitization: escapeHtml sanitizes for Html, not for Sql
+        let mut sanitized_for_vars: HashMap<String, HashSet<FlowState>> = HashMap::new();
+
         // Traverse AST and track taint with symbolic evaluation
-        self.track_taint_in_ast(ast, &mut tainted_vars, &mut vulnerabilities, &mut sym_state, &mut list_sizes, &mut path_sanitized_vars);
+        self.track_taint_in_ast(ast, &mut tainted_vars, &mut vulnerabilities, &mut sym_state, &mut list_sizes, &mut path_sanitized_vars, &mut sanitized_for_vars);
 
         TaintAnalysisResult { vulnerabilities }
     }
@@ -292,6 +296,7 @@ impl InterproceduralTaintAnalysis {
     /// - CONSTANT PROPAGATION to eliminate infeasible branches
     /// - INDEX-AWARE LIST TRACKING for ArrayList operations
     /// - PATH TRAVERSAL VALIDATION GUARDS (detecting '../' in var checks)
+    /// - CONTEXT-SPECIFIC SANITIZATION tracking (e.g., escapeHtml sanitizes for Html only)
     fn track_taint_in_ast(
         &self,
         node: &AstNode,
@@ -300,8 +305,9 @@ impl InterproceduralTaintAnalysis {
         sym_state: &mut SymbolicState,
         list_sizes: &mut HashMap<String, usize>,
         path_sanitized_vars: &mut HashSet<String>,
+        sanitized_for_vars: &mut HashMap<String, HashSet<FlowState>>,
     ) {
-        self.track_taint_in_ast_with_depth(node, tainted_vars, vulnerabilities, 0, 0, sym_state, list_sizes, path_sanitized_vars);
+        self.track_taint_in_ast_with_depth(node, tainted_vars, vulnerabilities, 0, 0, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
     }
 
     /// Internal taint tracking with depth tracking for strong updates
@@ -321,6 +327,10 @@ impl InterproceduralTaintAnalysis {
     /// The `path_sanitized_vars` parameter tracks variables validated for path traversal
     /// through patterns like `if '../' in var: return` - after such a guard, the variable
     /// is known to NOT contain path traversal sequences.
+    ///
+    /// The `sanitized_for_vars` parameter tracks which flow states each variable has been
+    /// sanitized for. This enables context-specific sanitization: escapeHtml sanitizes for
+    /// Html but not for Sql.
     fn track_taint_in_ast_with_depth(
         &self,
         node: &AstNode,
@@ -331,6 +341,7 @@ impl InterproceduralTaintAnalysis {
         sym_state: &mut SymbolicState,
         list_sizes: &mut HashMap<String, usize>,
         path_sanitized_vars: &mut HashSet<String>,
+        sanitized_for_vars: &mut HashMap<String, HashSet<FlowState>>,
     ) {
         // Prevent stack overflow on deeply nested ASTs
         const MAX_AST_DEPTH: usize = 500;
@@ -353,7 +364,7 @@ impl InterproceduralTaintAnalysis {
                 // First, process all children to handle nested declarations and expressions
                 // This ensures ternaries are evaluated before we check for taint
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
                 }
 
                 // Track the symbolic value of this variable
@@ -377,6 +388,35 @@ impl InterproceduralTaintAnalysis {
                 eprintln!("[DEBUG] VariableDeclaration: {} = {:?}", name, sym_value);
                 sym_state.set(name.clone(), sym_value);
 
+                // Check if initializer is a sanitizer call - track context-specific sanitization
+                // Look for CallExpression in children (the initializer)
+                for child in &node.children {
+                    if let AstNodeKind::CallExpression { callee, .. } = &child.kind {
+                        if let Some(sanitizer_states) = self.get_sanitizer_flow_states(callee) {
+                            // Record that this variable has been sanitized for specific states
+                            let var_sanitized = sanitized_for_vars.entry(name.clone()).or_insert_with(HashSet::new);
+                            if sanitizer_states.is_empty() {
+                                // Universal sanitizer - mark as sanitized for all states
+                                var_sanitized.insert(FlowState::Sql);
+                                var_sanitized.insert(FlowState::Html);
+                                var_sanitized.insert(FlowState::Shell);
+                                var_sanitized.insert(FlowState::Path);
+                                var_sanitized.insert(FlowState::Ldap);
+                                var_sanitized.insert(FlowState::Xml);
+                                var_sanitized.insert(FlowState::Generic);
+                            } else {
+                                // Context-specific sanitizer
+                                for state in sanitizer_states {
+                                    var_sanitized.insert(state);
+                                }
+                            }
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG]     -> VariableDeclaration '{}' sanitized for states: {:?}", name, var_sanitized);
+                        }
+                        break; // Only check the first CallExpression (the initializer)
+                    }
+                }
+
                 // Check if initializer is tainted
                 if self.is_initializer_tainted(node, tainted_vars) {
                     tainted_vars.insert(name.clone());
@@ -384,6 +424,7 @@ impl InterproceduralTaintAnalysis {
                     // STRONG UPDATE: If not in a branch and initializer is clean,
                     // this declaration shadows any previous taint
                     tainted_vars.remove(name);
+                    sanitized_for_vars.remove(name);
                 }
                 // Children already processed above, don't process again
                 return;
@@ -460,6 +501,32 @@ impl InterproceduralTaintAnalysis {
                     if let AstNodeKind::Identifier { name } = &lhs.kind {
                         #[cfg(debug_assertions)]
                         eprintln!("[DEBUG]   Assignment to '{}': rhs_tainted={}, branch_depth={}", name, rhs_tainted, branch_depth);
+
+                        // Check if RHS is a sanitizer call - track context-specific sanitization
+                        if let AstNodeKind::CallExpression { callee, .. } = &rhs.kind {
+                            if let Some(sanitizer_states) = self.get_sanitizer_flow_states(callee) {
+                                // Record that this variable has been sanitized for specific states
+                                let var_sanitized = sanitized_for_vars.entry(name.clone()).or_insert_with(HashSet::new);
+                                if sanitizer_states.is_empty() {
+                                    // Universal sanitizer - mark as sanitized for all states
+                                    var_sanitized.insert(FlowState::Sql);
+                                    var_sanitized.insert(FlowState::Html);
+                                    var_sanitized.insert(FlowState::Shell);
+                                    var_sanitized.insert(FlowState::Path);
+                                    var_sanitized.insert(FlowState::Ldap);
+                                    var_sanitized.insert(FlowState::Xml);
+                                    var_sanitized.insert(FlowState::Generic);
+                                } else {
+                                    // Context-specific sanitizer
+                                    for state in sanitizer_states {
+                                        var_sanitized.insert(state);
+                                    }
+                                }
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG]     -> Marked '{}' as sanitized for states: {:?}", name, var_sanitized);
+                            }
+                        }
+
                         if rhs_tainted {
                             // Add taint if RHS is tainted
                             tainted_vars.insert(name.clone());
@@ -473,6 +540,8 @@ impl InterproceduralTaintAnalysis {
                             //   x = "safe";  // <-- this kills the taint
                             //   sink(x);     // <-- should NOT report
                             tainted_vars.remove(name);
+                            // Also clear sanitization tracking for the variable
+                            sanitized_for_vars.remove(name);
                             #[cfg(debug_assertions)]
                             eprintln!("[DEBUG]     -> Removed taint from '{}' (strong update)", name);
                         }
@@ -693,16 +762,29 @@ impl InterproceduralTaintAnalysis {
                             #[cfg(debug_assertions)]
                             eprintln!("[DEBUG]   find_sink_by_name('{}') = {:?}", callee, sink_found.is_some());
                             if let Some(sink) = sink_found {
-                                #[cfg(debug_assertions)]
-                                eprintln!("[DEBUG]   Creating vulnerability for sink: {}", sink.name);
-                                vulnerabilities.push(TaintVulnerability {
-                                    sink: sink.clone(),
-                                    tainted_value: TaintValue::new(
-                                        callee.clone(),
-                                        TaintSourceKind::UserInput,
-                                    ),
-                                    severity: Severity::High,
-                                });
+                                // Get the FlowState for this sink
+                                let sink_flow_state = FlowState::from_sink_kind(&sink.kind);
+
+                                // Check if tainted arguments are sanitized for this specific sink
+                                let all_sanitized = self.are_tainted_args_sanitized_for_state(
+                                    node, tainted_vars, sym_state, sanitized_for_vars, &sink_flow_state
+                                );
+
+                                if all_sanitized {
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("[DEBUG]   Skipping vulnerability - tainted args are sanitized for {:?}", sink_flow_state);
+                                } else {
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("[DEBUG]   Creating vulnerability for sink: {}", sink.name);
+                                    vulnerabilities.push(TaintVulnerability {
+                                        sink: sink.clone(),
+                                        tainted_value: TaintValue::new(
+                                            callee.clone(),
+                                            TaintSourceKind::UserInput,
+                                        ),
+                                        severity: Severity::High,
+                                    });
+                                }
                             }
                         }
                     }
@@ -721,8 +803,9 @@ impl InterproceduralTaintAnalysis {
                 let mut local_sym_state = SymbolicState::new();
                 let mut local_list_sizes = HashMap::new();
                 let mut local_path_sanitized = HashSet::new();
+                let mut local_sanitized_for = HashMap::new();
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, &mut local_tainted, vulnerabilities, 0, ast_depth + 1, &mut local_sym_state, &mut local_list_sizes, &mut local_path_sanitized);
+                    self.track_taint_in_ast_with_depth(child, &mut local_tainted, vulnerabilities, 0, ast_depth + 1, &mut local_sym_state, &mut local_list_sizes, &mut local_path_sanitized, &mut local_sanitized_for);
                 }
                 return; // Don't propagate local taint to parent scope
             }
@@ -771,7 +854,7 @@ impl InterproceduralTaintAnalysis {
                                 eprintln!("[DEBUG]   True branch: {:?} = '{}'", true_branch.kind, true_branch.text.lines().next().unwrap_or(""));
                                 self.track_taint_in_ast_with_depth(
                                     true_branch, tainted_vars, vulnerabilities,
-                                    branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
+                                    branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars
                                 );
                             }
                             return;
@@ -781,7 +864,7 @@ impl InterproceduralTaintAnalysis {
                             if let Some(false_branch) = node.children.get(false_idx) {
                                 self.track_taint_in_ast_with_depth(
                                     false_branch, tainted_vars, vulnerabilities,
-                                    branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
+                                    branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars
                                 );
                             }
                             return;
@@ -792,7 +875,7 @@ impl InterproceduralTaintAnalysis {
                             for child in &node.children {
                                 self.track_taint_in_ast_with_depth(
                                     child, tainted_vars, vulnerabilities,
-                                    branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
+                                    branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars
                                 );
                             }
                             return;
@@ -801,7 +884,7 @@ impl InterproceduralTaintAnalysis {
                 }
                 // Fallback: analyze all children with incremented depth
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
                 }
                 return;
             }
@@ -841,7 +924,7 @@ impl InterproceduralTaintAnalysis {
                             // Process the then-branch (it might have findings)
                             self.track_taint_in_ast_with_depth(
                                 then_branch, tainted_vars, vulnerabilities,
-                                branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
+                                branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars
                             );
                             // Process any else branch
                             for i in 3..node.children.len() {
@@ -849,7 +932,7 @@ impl InterproceduralTaintAnalysis {
                                     if !matches!(&else_branch.kind, AstNodeKind::Other { node_type } if node_type == "else") {
                                         self.track_taint_in_ast_with_depth(
                                             else_branch, tainted_vars, vulnerabilities,
-                                            branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
+                                            branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars
                                         );
                                     }
                                 }
@@ -873,7 +956,7 @@ impl InterproceduralTaintAnalysis {
                             if let Some(then_branch) = node.children.get(2) {
                                 self.track_taint_in_ast_with_depth(
                                     then_branch, tainted_vars, vulnerabilities,
-                                    branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
+                                    branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars
                                 );
                             }
                             return;
@@ -887,7 +970,7 @@ impl InterproceduralTaintAnalysis {
                                     if !matches!(&else_branch.kind, AstNodeKind::Other { node_type } if node_type == "else") {
                                         self.track_taint_in_ast_with_depth(
                                             else_branch, tainted_vars, vulnerabilities,
-                                            branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
+                                            branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars
                                         );
                                     }
                                 }
@@ -899,7 +982,7 @@ impl InterproceduralTaintAnalysis {
                             for child in &node.children {
                                 self.track_taint_in_ast_with_depth(
                                     child, tainted_vars, vulnerabilities,
-                                    branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars
+                                    branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars
                                 );
                             }
                             return;
@@ -908,7 +991,7 @@ impl InterproceduralTaintAnalysis {
                 }
                 // Fallback
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
                 }
                 return;
             }
@@ -916,7 +999,7 @@ impl InterproceduralTaintAnalysis {
             AstNodeKind::SwitchStatement { .. } | AstNodeKind::SwitchCase { .. } => {
                 // Inside a switch, we can't do strong updates
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
                 }
                 return;
             }
@@ -1022,7 +1105,7 @@ impl InterproceduralTaintAnalysis {
                                     // Skip the pattern itself, just process the body (block)
                                     if matches!(&case_child.kind, AstNodeKind::Block) ||
                                        matches!(&case_child.kind, AstNodeKind::Other { node_type } if node_type == "block") {
-                                        self.track_taint_in_ast_with_depth(case_child, tainted_vars, vulnerabilities, branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
+                                        self.track_taint_in_ast_with_depth(case_child, tainted_vars, vulnerabilities, branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
                                     }
                                 }
                                 return;
@@ -1036,7 +1119,7 @@ impl InterproceduralTaintAnalysis {
 
                 // If we can't determine the match, analyze all branches conservatively
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
                 }
                 return;
             }
@@ -1044,7 +1127,7 @@ impl InterproceduralTaintAnalysis {
             AstNodeKind::WhileStatement | AstNodeKind::ForStatement { .. } | AstNodeKind::DoWhileStatement => {
                 // Inside a loop, we can't do strong updates
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
                 }
                 return;
             }
@@ -1052,7 +1135,7 @@ impl InterproceduralTaintAnalysis {
             AstNodeKind::TryStatement | AstNodeKind::CatchClause { .. } => {
                 // Inside try/catch, we can't do strong updates
                 for child in &node.children {
-                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
                 }
                 return;
             }
@@ -1062,7 +1145,7 @@ impl InterproceduralTaintAnalysis {
 
         // Recursively process children (preserving branch depth)
         for child in &node.children {
-            self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars);
+            self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
         }
     }
 
@@ -1546,6 +1629,81 @@ impl InterproceduralTaintAnalysis {
         false
     }
 
+    /// Check if all tainted arguments are sanitized for a specific FlowState.
+    /// Returns true if ALL tainted arguments have been sanitized for the given state,
+    /// meaning we should NOT create a vulnerability.
+    fn are_tainted_args_sanitized_for_state(
+        &self,
+        node: &AstNode,
+        tainted_vars: &HashSet<String>,
+        sym_state: &SymbolicState,
+        sanitized_for_vars: &HashMap<String, HashSet<FlowState>>,
+        sink_state: &FlowState,
+    ) -> bool {
+        let mut found_unsanitized_tainted = false;
+
+        for (idx, child) in node.children.iter().enumerate() {
+            // Skip callee position
+            if self.language_handler.is_callee_position(node, idx) {
+                continue;
+            }
+
+            // Check if this argument is tainted
+            if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                // Get the variable name from the argument
+                let var_name = self.extract_variable_name(child);
+
+                if let Some(name) = var_name {
+                    // Check if this variable is sanitized for the sink's FlowState
+                    if let Some(sanitized_states) = sanitized_for_vars.get(&name) {
+                        // Check if sanitized for this specific state or Generic (universal)
+                        if sanitized_states.contains(sink_state) || sanitized_states.contains(&FlowState::Generic) {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG]   Variable '{}' is sanitized for {:?}", name, sink_state);
+                            continue; // This tainted var is sanitized, check others
+                        }
+                    }
+                    // Variable is tainted but NOT sanitized for this sink
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG]   Variable '{}' is tainted but NOT sanitized for {:?}", name, sink_state);
+                    found_unsanitized_tainted = true;
+                } else {
+                    // Can't determine variable name, assume not sanitized
+                    found_unsanitized_tainted = true;
+                }
+            }
+        }
+
+        // Return true only if we found no unsanitized tainted arguments
+        !found_unsanitized_tainted
+    }
+
+    /// Extract variable name from a node for sanitization checking
+    fn extract_variable_name(&self, node: &AstNode) -> Option<String> {
+        match &node.kind {
+            AstNodeKind::Identifier { name } => Some(name.clone()),
+            AstNodeKind::MemberExpression { property, .. } => {
+                // For member expressions like obj.field, return the whole thing
+                Some(node.text.trim().to_string())
+            }
+            _ => {
+                // Try to find an identifier in children
+                for child in &node.children {
+                    if let AstNodeKind::Identifier { name } = &child.kind {
+                        return Some(name.clone());
+                    }
+                }
+                // Last resort: use the text
+                let text = node.text.trim();
+                if !text.is_empty() && text.len() < 100 {
+                    Some(text.to_string())
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
     // Helper methods
 
     fn find_function_node<'a>(&self, ast: &'a AstNode, func_name: &str) -> Option<&'a AstNode> {
@@ -1606,9 +1764,10 @@ impl InterproceduralTaintAnalysis {
         // Analyze the method body to track taint flow
         let mut vulnerabilities = Vec::new();
         let mut local_path_sanitized: HashSet<String> = HashSet::new();
+        let mut local_sanitized_for: HashMap<String, HashSet<FlowState>> = HashMap::new();
         for child in &method.children {
             self.track_taint_in_ast_with_depth(
-                child, &mut local_tainted, &mut vulnerabilities, 0, 0, &mut local_sym_state, &mut local_list_sizes, &mut local_path_sanitized
+                child, &mut local_tainted, &mut vulnerabilities, 0, 0, &mut local_sym_state, &mut local_list_sizes, &mut local_path_sanitized, &mut local_sanitized_for
             );
         }
 
@@ -1794,6 +1953,81 @@ impl InterproceduralTaintAnalysis {
             let sanitizer_lower = s.to_lowercase();
             name_lower.contains(&sanitizer_lower)
         })
+    }
+
+    /// Get the FlowStates that a sanitizer function is effective for.
+    /// This enables context-specific sanitization - escapeHtml sanitizes HTML but NOT SQL.
+    /// Returns None if the function is not a sanitizer, Some(empty) for universal sanitizers,
+    /// or Some(states) for context-specific sanitizers.
+    fn get_sanitizer_flow_states(&self, name: &str) -> Option<HashSet<FlowState>> {
+        let name_lower = name.to_lowercase();
+
+        // HTML/XSS sanitizers
+        if name_lower.contains("escapehtml") || name_lower.contains("htmlescape")
+            || name_lower.contains("htmlspecialchars") || name_lower.contains("htmlentities")
+            || name_lower.contains("encodeforhtml") || name_lower.contains("sanitizehtml")
+            || (name_lower.contains("escape") && name_lower.contains("html")) {
+            let mut states = HashSet::new();
+            states.insert(FlowState::Html);
+            return Some(states);
+        }
+
+        // SQL sanitizers
+        if name_lower.contains("escapesql") || name_lower.contains("encodeforsql")
+            || name_lower.contains("sanitizesql") || name_lower.contains("quotesql")
+            || name_lower.contains("preparedstatement.set") {
+            let mut states = HashSet::new();
+            states.insert(FlowState::Sql);
+            return Some(states);
+        }
+
+        // Command/Shell sanitizers
+        if name_lower.contains("escapeshell") || name_lower.contains("shellwords")
+            || name_lower.contains("escapejava") || name_lower.contains("encodeforcommand")
+            || name_lower.contains("processbuilder") {
+            let mut states = HashSet::new();
+            states.insert(FlowState::Shell);
+            return Some(states);
+        }
+
+        // Path traversal sanitizers
+        if name_lower.contains("canonicalpath") || name_lower.contains("normalize")
+            || name_lower.contains("realpath") || name_lower.contains("escapepath") {
+            let mut states = HashSet::new();
+            states.insert(FlowState::Path);
+            return Some(states);
+        }
+
+        // LDAP sanitizers
+        if name_lower.contains("escapeldap") || name_lower.contains("encodeforldn")
+            || name_lower.contains("encodefordistinguishedname") {
+            let mut states = HashSet::new();
+            states.insert(FlowState::Ldap);
+            return Some(states);
+        }
+
+        // XML/XPath sanitizers
+        if name_lower.contains("escapexml") || name_lower.contains("encodeforxml")
+            || name_lower.contains("escapexpath") {
+            let mut states = HashSet::new();
+            states.insert(FlowState::Xml);
+            return Some(states);
+        }
+
+        // Universal sanitizers (validation, encoding functions that sanitize all types)
+        if name_lower.contains("validate") || name_lower.contains("isvalid")
+            || name_lower.contains("whitelist") || name_lower.contains("allowlist") {
+            // Universal sanitizers use empty set to indicate all states
+            return Some(HashSet::new());
+        }
+
+        // Check if it's a sanitizer via is_sanitizer_function but not context-specific
+        if self.is_sanitizer_function(name) {
+            // Generic sanitizer - sanitizes all states
+            return Some(HashSet::new());
+        }
+
+        None
     }
 
     /// Check if a .replace() call is a quote escaping pattern that sanitizes injection
@@ -2193,9 +2427,10 @@ mod tests {
         let mut sym_state = SymbolicState::new();
         let mut list_sizes: HashMap<String, usize> = HashMap::new();
         let mut path_sanitized_vars: HashSet<String> = HashSet::new();
+        let mut sanitized_for_vars: HashMap<String, HashSet<FlowState>> = HashMap::new();
 
         // Process at branch_depth 0 - should do strong update
-        analysis.track_taint_in_ast_with_depth(&assignment, &mut tainted_vars, &mut vulnerabilities, 0, 0, &mut sym_state, &mut list_sizes, &mut path_sanitized_vars);
+        analysis.track_taint_in_ast_with_depth(&assignment, &mut tainted_vars, &mut vulnerabilities, 0, 0, &mut sym_state, &mut list_sizes, &mut path_sanitized_vars, &mut sanitized_for_vars);
 
         // x should no longer be tainted
         assert!(!tainted_vars.contains("x"), "Strong update should kill taint for x");
@@ -2247,9 +2482,10 @@ mod tests {
         let mut sym_state = SymbolicState::new();
         let mut list_sizes: HashMap<String, usize> = HashMap::new();
         let mut path_sanitized_vars: HashSet<String> = HashSet::new();
+        let mut sanitized_for_vars: HashMap<String, HashSet<FlowState>> = HashMap::new();
 
         // Process at branch_depth 1 - should NOT do strong update
-        analysis.track_taint_in_ast_with_depth(&assignment, &mut tainted_vars, &mut vulnerabilities, 1, 0, &mut sym_state, &mut list_sizes, &mut path_sanitized_vars);
+        analysis.track_taint_in_ast_with_depth(&assignment, &mut tainted_vars, &mut vulnerabilities, 1, 0, &mut sym_state, &mut list_sizes, &mut path_sanitized_vars, &mut sanitized_for_vars);
 
         // x should STILL be tainted (conservative behavior)
         assert!(tainted_vars.contains("x"), "Should NOT do strong update inside a branch");
