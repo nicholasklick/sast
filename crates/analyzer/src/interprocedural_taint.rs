@@ -391,41 +391,59 @@ impl InterproceduralTaintAnalysis {
 
                 // Check if initializer is a sanitizer call - track context-specific sanitization
                 // Look for CallExpression in children (the initializer)
+                let mut sanitizer_with_tainted_input = false;
                 for child in &node.children {
                     if let AstNodeKind::CallExpression { callee, .. } = &child.kind {
                         if let Some(sanitizer_states) = self.get_sanitizer_flow_states(callee) {
-                            // Record that this variable has been sanitized for specific states
-                            let var_sanitized = sanitized_for_vars.entry(name.clone()).or_insert_with(HashSet::new);
-                            if sanitizer_states.is_empty() {
-                                // Universal sanitizer - mark as sanitized for all states
-                                var_sanitized.insert(FlowState::Sql);
-                                var_sanitized.insert(FlowState::Html);
-                                var_sanitized.insert(FlowState::Shell);
-                                var_sanitized.insert(FlowState::Path);
-                                var_sanitized.insert(FlowState::Ldap);
-                                var_sanitized.insert(FlowState::Xml);
-                                var_sanitized.insert(FlowState::Generic);
-                            } else {
-                                // Context-specific sanitizer
-                                for state in sanitizer_states {
-                                    var_sanitized.insert(state);
+                            // Check if the sanitizer has tainted arguments
+                            // If so, the output is still "tainted" but sanitized for specific states
+                            let has_tainted_args = child.children.iter().any(|arg| {
+                                self.is_node_tainted(arg, tainted_vars)
+                            });
+
+                            if has_tainted_args {
+                                sanitizer_with_tainted_input = true;
+                                // Record that this variable has been sanitized for specific states
+                                let var_sanitized = sanitized_for_vars.entry(name.clone()).or_insert_with(HashSet::new);
+                                if sanitizer_states.is_empty() {
+                                    // Universal sanitizer - mark as sanitized for all states
+                                    var_sanitized.insert(FlowState::Sql);
+                                    var_sanitized.insert(FlowState::Html);
+                                    var_sanitized.insert(FlowState::Shell);
+                                    var_sanitized.insert(FlowState::Path);
+                                    var_sanitized.insert(FlowState::Ldap);
+                                    var_sanitized.insert(FlowState::Xml);
+                                    var_sanitized.insert(FlowState::Generic);
+                                } else {
+                                    // Context-specific sanitizer
+                                    for state in sanitizer_states {
+                                        var_sanitized.insert(state);
+                                    }
                                 }
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG]     -> VariableDeclaration '{}' sanitized for states: {:?}", name, var_sanitized);
+
+                                // IMPORTANT: Keep the variable in tainted_vars so we can check
+                                // sanitization at sinks. The variable is still "tainted" but
+                                // sanitized for specific flow states. This allows context-specific
+                                // sanitization: escapeHtml sanitizes for HTML but not SQL/TrustBoundary.
+                                tainted_vars.insert(name.clone());
                             }
-                            #[cfg(debug_assertions)]
-                            eprintln!("[DEBUG]     -> VariableDeclaration '{}' sanitized for states: {:?}", name, var_sanitized);
                         }
                         break; // Only check the first CallExpression (the initializer)
                     }
                 }
 
-                // Check if initializer is tainted
-                if self.is_initializer_tainted(node, tainted_vars) {
-                    tainted_vars.insert(name.clone());
-                } else if branch_depth == 0 {
-                    // STRONG UPDATE: If not in a branch and initializer is clean,
-                    // this declaration shadows any previous taint
-                    tainted_vars.remove(name);
-                    sanitized_for_vars.remove(name);
+                // Check if initializer is tainted (but not already handled by sanitizer)
+                if !sanitizer_with_tainted_input {
+                    if self.is_initializer_tainted(node, tainted_vars) {
+                        tainted_vars.insert(name.clone());
+                    } else if branch_depth == 0 {
+                        // STRONG UPDATE: If not in a branch and initializer is clean,
+                        // this declaration shadows any previous taint
+                        tainted_vars.remove(name);
+                        sanitized_for_vars.remove(name);
+                    }
                 }
                 // Children already processed above, don't process again
                 return;
@@ -504,47 +522,64 @@ impl InterproceduralTaintAnalysis {
                         eprintln!("[DEBUG]   Assignment to '{}': rhs_tainted={}, branch_depth={}", name, rhs_tainted, branch_depth);
 
                         // Check if RHS is a sanitizer call - track context-specific sanitization
+                        let mut sanitizer_with_tainted_input = false;
                         if let AstNodeKind::CallExpression { callee, .. } = &rhs.kind {
                             if let Some(sanitizer_states) = self.get_sanitizer_flow_states(callee) {
-                                // Record that this variable has been sanitized for specific states
-                                let var_sanitized = sanitized_for_vars.entry(name.clone()).or_insert_with(HashSet::new);
-                                if sanitizer_states.is_empty() {
-                                    // Universal sanitizer - mark as sanitized for all states
-                                    var_sanitized.insert(FlowState::Sql);
-                                    var_sanitized.insert(FlowState::Html);
-                                    var_sanitized.insert(FlowState::Shell);
-                                    var_sanitized.insert(FlowState::Path);
-                                    var_sanitized.insert(FlowState::Ldap);
-                                    var_sanitized.insert(FlowState::Xml);
-                                    var_sanitized.insert(FlowState::Generic);
-                                } else {
-                                    // Context-specific sanitizer
-                                    for state in sanitizer_states {
-                                        var_sanitized.insert(state);
+                                // Check if the sanitizer has tainted arguments
+                                let has_tainted_args = rhs.children.iter().any(|arg| {
+                                    self.is_node_tainted(arg, tainted_vars)
+                                });
+
+                                if has_tainted_args {
+                                    sanitizer_with_tainted_input = true;
+                                    // Record that this variable has been sanitized for specific states
+                                    let var_sanitized = sanitized_for_vars.entry(name.clone()).or_insert_with(HashSet::new);
+                                    if sanitizer_states.is_empty() {
+                                        // Universal sanitizer - mark as sanitized for all states
+                                        var_sanitized.insert(FlowState::Sql);
+                                        var_sanitized.insert(FlowState::Html);
+                                        var_sanitized.insert(FlowState::Shell);
+                                        var_sanitized.insert(FlowState::Path);
+                                        var_sanitized.insert(FlowState::Ldap);
+                                        var_sanitized.insert(FlowState::Xml);
+                                        var_sanitized.insert(FlowState::Generic);
+                                    } else {
+                                        // Context-specific sanitizer
+                                        for state in sanitizer_states {
+                                            var_sanitized.insert(state);
+                                        }
                                     }
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("[DEBUG]     -> Marked '{}' as sanitized for states: {:?}", name, var_sanitized);
+
+                                    // IMPORTANT: Keep the variable in tainted_vars so we can check
+                                    // sanitization at sinks. The variable is still "tainted" but
+                                    // sanitized for specific flow states. This allows context-specific
+                                    // sanitization: escapeHtml sanitizes for HTML but not SQL/TrustBoundary.
+                                    tainted_vars.insert(name.clone());
                                 }
-                                #[cfg(debug_assertions)]
-                                eprintln!("[DEBUG]     -> Marked '{}' as sanitized for states: {:?}", name, var_sanitized);
                             }
                         }
 
-                        if rhs_tainted {
-                            // Add taint if RHS is tainted
-                            tainted_vars.insert(name.clone());
-                            #[cfg(debug_assertions)]
-                            eprintln!("[DEBUG]     -> Added taint to '{}'", name);
-                        } else if branch_depth == 0 {
-                            // STRONG UPDATE: If not inside a branch and RHS is clean,
-                            // we can safely remove taint from LHS.
-                            // This is the key fix for precision - when we see:
-                            //   x = tainted;
-                            //   x = "safe";  // <-- this kills the taint
-                            //   sink(x);     // <-- should NOT report
-                            tainted_vars.remove(name);
-                            // Also clear sanitization tracking for the variable
-                            sanitized_for_vars.remove(name);
-                            #[cfg(debug_assertions)]
-                            eprintln!("[DEBUG]     -> Removed taint from '{}' (strong update)", name);
+                        if !sanitizer_with_tainted_input {
+                            if rhs_tainted {
+                                // Add taint if RHS is tainted
+                                tainted_vars.insert(name.clone());
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG]     -> Added taint to '{}'", name);
+                            } else if branch_depth == 0 {
+                                // STRONG UPDATE: If not inside a branch and RHS is clean,
+                                // we can safely remove taint from LHS.
+                                // This is the key fix for precision - when we see:
+                                //   x = tainted;
+                                //   x = "safe";  // <-- this kills the taint
+                                //   sink(x);     // <-- should NOT report
+                                tainted_vars.remove(name);
+                                // Also clear sanitization tracking for the variable
+                                sanitized_for_vars.remove(name);
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG]     -> Removed taint from '{}' (strong update)", name);
+                            }
                         }
                         // NOTE: When branch_depth > 0, we're inside a conditional
                         // (if/else/switch/loop), so we can't do strong updates
@@ -2239,8 +2274,9 @@ impl InterproceduralTaintAnalysis {
             return true;
         }
 
-        // Special case: setAttribute on session objects is a trust boundary violation sink
-        let is_session_set_attribute = method_name_lower == "setattribute"
+        // Special case: setAttribute/putValue on session objects is a trust boundary violation sink
+        // putValue is a deprecated method that does the same thing as setAttribute
+        let is_session_set_attribute = (method_name_lower == "setattribute" || method_name_lower == "putvalue")
             && (name_lower.contains("getsession") || name_lower.contains("session."));
         if is_session_set_attribute {
             return true;
