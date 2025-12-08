@@ -93,7 +93,7 @@ fn convert_sink_kind(kind: &YamlSinkKind) -> TaintSinkKind {
         YamlSinkKind::HtmlOutput => TaintSinkKind::HtmlOutput,
         YamlSinkKind::LogOutput => TaintSinkKind::LogOutput,
         YamlSinkKind::NetworkSend => TaintSinkKind::NetworkSend,
-        YamlSinkKind::PathTraversal => TaintSinkKind::FileWrite, // Closest match
+        YamlSinkKind::PathTraversal => TaintSinkKind::PathTraversal,
         YamlSinkKind::Deserialization => TaintSinkKind::CodeEval, // Closest match
         YamlSinkKind::LdapQuery => TaintSinkKind::CodeEval, // Closest match
         YamlSinkKind::XPathQuery => TaintSinkKind::CodeEval, // Closest match
@@ -1427,6 +1427,67 @@ impl LanguageTaintConfig {
             sinks.push(TaintSink {
                 name: name.to_string(),
                 kind: TaintSinkKind::FileWrite,
+                node_id: 0,
+            });
+        }
+
+        // Path Traversal - file operations with user-controlled paths
+        for name in &[
+            // java.io.File constructors and methods
+            "new File",
+            "File",
+            "java.io.File",
+            "new java.io.File",
+            // java.io streams (when path is tainted)
+            "FileInputStream",
+            "new FileInputStream",
+            "java.io.FileInputStream",
+            "new java.io.FileInputStream",
+            "FileOutputStream",
+            "new FileOutputStream",
+            "java.io.FileOutputStream",
+            "new java.io.FileOutputStream",
+            "FileReader",
+            "new FileReader",
+            "java.io.FileReader",
+            "FileWriter",
+            "new FileWriter",
+            "java.io.FileWriter",
+            "RandomAccessFile",
+            "new RandomAccessFile",
+            // java.nio.file operations
+            "Paths.get",
+            "Path.of",
+            "Files.readAllBytes",
+            "Files.readAllLines",
+            "Files.readString",
+            "Files.newInputStream",
+            "Files.newOutputStream",
+            "Files.newBufferedReader",
+            "Files.newBufferedWriter",
+            "Files.copy",
+            "Files.move",
+            "Files.delete",
+            "Files.createFile",
+            "Files.createDirectory",
+            "Files.createDirectories",
+            "Files.exists",
+            "Files.isReadable",
+            "Files.isWritable",
+            "Files.list",
+            "Files.walk",
+            // Apache Commons IO
+            "FileUtils.readFileToString",
+            "FileUtils.readLines",
+            "FileUtils.writeStringToFile",
+            "FileUtils.copyFile",
+            // Spring ResourceLoader
+            "getResource",
+            "ResourceLoader.getResource",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::PathTraversal,
                 node_id: 0,
             });
         }

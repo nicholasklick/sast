@@ -45,14 +45,14 @@ if [[ ! -f "$BINARY" ]]; then
     cargo build --release
 fi
 
-# Define benchmarks
+# Define benchmarks - paths verified against actual OWASP benchmark structure
 declare -A BENCHMARKS=(
     ["java"]="BenchmarkJava/src/main/java/org/owasp/benchmark/testcode|expectedresults-1.2.csv"
-    ["python"]="BenchmarkPython/src/main/python|expectedresults-0.1.csv"
-    ["javascript"]="BenchmarkJS/src/main/js|expectedresults-0.1.csv"
-    ["typescript"]="BenchmarkTypeScript/src/main/ts|expectedresults-0.1.csv"
-    ["ruby"]="BenchmarkRuby/src/main/ruby|expectedresults-0.1.csv"
-    ["rust"]="BenchmarkRust/src/main/rust|expectedresults-0.1.csv"
+    ["python"]="BenchmarkPython/testcode|expectedresults-0.1.csv"
+    ["javascript"]="BenchmarkJS/testcode|expectedresults-0.1.csv"
+    ["typescript"]="BenchmarkTypeScript/testcode|expectedresults-0.1.csv"
+    ["ruby"]="BenchmarkRuby/testcode|expectedresults-0.1.csv"
+    ["rust"]="BenchmarkRust/testcode|expectedresults-0.1.csv"
     ["go"]="BenchmarkGolang/internal/testcases|expectedresults-0.1.csv"
 )
 

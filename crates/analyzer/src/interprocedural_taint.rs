@@ -850,14 +850,24 @@ impl InterproceduralTaintAnalysis {
                             }
                         }
                         AstNodeKind::Other { node_type: child_type } => {
-                            if child_type == "type_identifier" || child_type == "generic_type" {
+                            if child_type == "type_identifier" || child_type == "generic_type"
+                                || child_type == "scoped_type_identifier" {
                                 // Extract class name from type identifier
+                                // For scoped types like java.io.FileInputStream, use full text
                                 class_name = Some(child.text.trim().to_string());
                             } else if child_type == "argument_list" {
                                 // Check if any arguments are tainted
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG] object_creation argument_list has {} children, text='{}'", child.children.len(), child.text);
                                 for arg in &child.children {
-                                    if !matches!(&arg.kind, AstNodeKind::Other { node_type: t } if t == "(" || t == ")" || t == ",") {
-                                        if self.is_node_tainted_with_sym(arg, tainted_vars, sym_state) {
+                                    let is_punctuation = matches!(&arg.kind, AstNodeKind::Other { node_type: t } if t == "(" || t == ")" || t == ",");
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("[DEBUG]   arg: {:?} text='{}' is_punctuation={}", arg.kind, arg.text, is_punctuation);
+                                    if !is_punctuation {
+                                        let is_tainted = self.is_node_tainted_with_sym(arg, tainted_vars, sym_state);
+                                        #[cfg(debug_assertions)]
+                                        eprintln!("[DEBUG]     is_tainted={}", is_tainted);
+                                        if is_tainted {
                                             has_tainted_args = true;
                                             break;
                                         }
@@ -919,7 +929,7 @@ impl InterproceduralTaintAnalysis {
 
                             let sink = TaintSink {
                                 name: format!("new {}", cname),
-                                kind: TaintSinkKind::FileWrite,
+                                kind: TaintSinkKind::PathTraversal,
                                 node_id: node.id,
                             };
                             let message = format!(

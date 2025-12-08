@@ -96,6 +96,7 @@ RULE_TO_CATEGORY = {
     "js/arbitrary-file-write": "pathtraver",
     "java/path-traversal": "pathtraver",
     "taint/path-traversal": "pathtraver",
+    "taint/pathtraversal": "pathtraver",
     "taint/arbitrary-file-write": "pathtraver",
 
     # Weak Hash
@@ -118,10 +119,12 @@ RULE_TO_CATEGORY = {
 
     # Insecure Cookie
     "js/insecure-session-cookie": "securecookie",
+    "java/insecure-cookie": "securecookie",
 
     # Weak Random
     "js/insecure-random": "weakrand",
     "js/predictable-seed": "weakrand",
+    "java/weak-random": "weakrand",
 
     # Trust Boundary
     "js/session-fixation": "trustbound",
