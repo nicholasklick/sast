@@ -1686,6 +1686,30 @@ impl InterproceduralTaintAnalysis {
             }
 
             AstNodeKind::CallExpression { callee, .. } => {
+                // Handle methods that propagate taint from receiver to return value
+                // e.g., names.nextElement(), iter.next(), entry.getValue(), str.toCharArray()
+                let receiver_propagating_methods = [
+                    ".nextElement", ".next", ".getValue", ".getKey",
+                    ".toCharArray", ".getBytes", ".toString", ".toUpperCase", ".toLowerCase",
+                    ".trim", ".strip", ".substring", ".split", ".replace", ".replaceAll",
+                    ".concat", ".format", ".valueOf",
+                ];
+                for method_suffix in &receiver_propagating_methods {
+                    if callee.ends_with(method_suffix) {
+                        // Check if receiver is tainted
+                        let parts: Vec<&str> = callee.rsplitn(2, '.').collect();
+                        if parts.len() == 2 {
+                            let receiver_var = parts[1];
+                            if tainted_vars.contains(receiver_var) {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG] is_node_tainted: receiver '{}' is tainted, propagating through {}", receiver_var, method_suffix);
+                                return true;
+                            }
+                        }
+                        break;
+                    }
+                }
+
                 // Handle map.get() or list.get() - check if specific key/index is tainted
                 if callee.ends_with(".get") {
                     #[cfg(debug_assertions)]
@@ -2108,6 +2132,39 @@ impl InterproceduralTaintAnalysis {
             }
         }
 
+        // Match helper class methods that wrap request.getParameter
+        // OWASP Benchmark uses SeparateClassRequest.getTheParameter() and similar patterns
+        // These are wrapper methods that internally call request.getParameter()
+        // Be careful: only match "get" patterns, not "set" patterns
+        let is_getter = method_lower.starts_with("get") || method_lower.starts_with("read")
+            || method_lower.starts_with("fetch") || method_lower.starts_with("retrieve");
+        if is_getter && (method_lower.contains("parameter") || method_lower.contains("param")) {
+            // Getter method with "parameter" or "param" - likely returns user input
+            // e.g., getTheParameter, getParam, getParameterValue, readParam
+            #[cfg(debug_assertions)]
+            eprintln!("[DEBUG] is_source_function: '{}' matched as parameter getter method", name);
+            return true;
+        }
+        if is_getter && method_lower.contains("header") {
+            // Header getter methods
+            #[cfg(debug_assertions)]
+            eprintln!("[DEBUG] is_source_function: '{}' matched as header getter method", name);
+            return true;
+        }
+        if is_getter && method_lower.contains("cookie") {
+            // Cookie getter methods
+            #[cfg(debug_assertions)]
+            eprintln!("[DEBUG] is_source_function: '{}' matched as cookie getter method", name);
+            return true;
+        }
+        if is_getter && (method_lower.contains("body") || method_lower.contains("content")
+            || method_lower.contains("input") || method_lower.contains("data")) {
+            // Request body/content getter methods
+            #[cfg(debug_assertions)]
+            eprintln!("[DEBUG] is_source_function: '{}' matched as body/input getter method", name);
+            return true;
+        }
+
         // Fall back to legacy sources
         let result = self.sources.iter().any(|s| {
             let source_lower = s.name.to_lowercase();
@@ -2189,6 +2246,29 @@ impl InterproceduralTaintAnalysis {
             return true;
         }
 
+        // Special case: Spring JdbcTemplate SQL methods - these are SQL sinks even though
+        // "query", "update" are in common_methods. The context (JdbcTemplate) makes them sinks.
+        let is_jdbc_template_sink = (method_name_lower == "query"
+            || method_name_lower == "queryforobject"
+            || method_name_lower == "queryforlist"
+            || method_name_lower == "queryformap"
+            || method_name_lower == "update"
+            || method_name_lower == "batchupdate"
+            || method_name_lower == "execute")
+            && (name_lower.contains("jdbctemplate") || name_lower.contains("namedparameterjdbctemplate"));
+        if is_jdbc_template_sink {
+            return true;
+        }
+
+        // Special case: EntityManager JPA methods - createQuery, createNativeQuery are SQL sinks
+        let is_entity_manager_sink = (method_name_lower == "createquery"
+            || method_name_lower == "createnativequery"
+            || method_name_lower == "nativequery")
+            && name_lower.contains("entitymanager");
+        if is_entity_manager_sink {
+            return true;
+        }
+
         let is_common_method = common_methods.contains(&method_name_lower.as_str());
 
         // Fall back to legacy sinks
@@ -2206,15 +2286,26 @@ impl InterproceduralTaintAnalysis {
             // e.g., "executeQuery" ends with "query" sink, "doQuery" ends with "query"
             // But only if the sink method is not a common method
             if !is_common_method && sink_method.len() >= 4 {
-                // Check if the method name ends with the sink method name
-                // This handles cases like "doExecute" matching "execute" sink
-                if method_name_lower.ends_with(&sink_method) {
-                    return true;
-                }
-                // Check if the method name starts with the sink method name
-                // This handles cases like "executeQuery" matching "execute" sink
-                if method_name_lower.starts_with(&sink_method) {
-                    return true;
+                // For prefix/suffix matching, require class context to match if the sink has a class
+                // This prevents "Arrays.copyOf" from matching "Files.copy"
+                let sink_class = s.name.split('.').next().unwrap_or("");
+                let caller_class = name.split('.').rev().nth(1).unwrap_or("");
+                let class_matches = sink_class.is_empty()
+                    || sink_class.to_lowercase() == caller_class.to_lowercase()
+                    || name_lower.contains(&sink_class.to_lowercase());
+
+                // Only do prefix/suffix matching if class context matches
+                if class_matches {
+                    // Check if the method name ends with the sink method name
+                    // This handles cases like "doExecute" matching "execute" sink
+                    if method_name_lower.ends_with(&sink_method) {
+                        return true;
+                    }
+                    // Check if the method name starts with the sink method name
+                    // This handles cases like "executeQuery" matching "execute" sink
+                    if method_name_lower.starts_with(&sink_method) {
+                        return true;
+                    }
                 }
             }
 

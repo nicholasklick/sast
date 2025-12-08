@@ -1516,13 +1516,17 @@ impl ExtendedStandardLibrary {
     }
 
     fn ldap_injection_query() -> Query {
+        // LDAP injection patterns - avoid generic terms like "add" which match addCookie, etc.
+        // Focus on LDAP-specific method names like search, bind, lookup on DirContext/InitialContext
         Query::new(
             FromClause::new(EntityType::MethodCall, "mc".to_string()),
             Some(WhereClause::new(vec![
                 Predicate::MethodName {
                     variable: "mc".to_string(),
                     operator: ComparisonOp::Matches,
-                    value: "(?i)(search|bind|modify|add|delete|lookup)".to_string(),
+                    // Specific LDAP methods - removed generic "add" and "delete" which cause FPs
+                    // Keep: search, bind, rebind, lookup, modifyAttributes, createSubcontext
+                    value: "(?i)^(search|bind|rebind|lookup|modifyAttributes|createSubcontext)$".to_string(),
                 },
                 Predicate::FunctionCall {
                     variable: "mc".to_string(),

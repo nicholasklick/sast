@@ -196,8 +196,10 @@ impl Parser {
             "block" | "statement_block" => AstNodeKind::Block,
 
             // Control flow
-            "switch_statement" | "match_expression" => self.parse_switch_statement(node, source),
-            "switch_case" | "case_clause" | "expression_case" | "match_arm" | "switch_label" => {
+            // Java uses switch_expression (not switch_statement) and switch_block
+            "switch_statement" | "switch_expression" | "switch_block" | "match_expression" => self.parse_switch_statement(node, source),
+            // Java uses switch_block_statement_group for case bodies
+            "switch_case" | "case_clause" | "expression_case" | "match_arm" | "switch_label" | "switch_block_statement_group" => {
                 self.parse_switch_case(node, source)
             }
             "break_statement" | "break_expression" => self.parse_break_statement(node, source),

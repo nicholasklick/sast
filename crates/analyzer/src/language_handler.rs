@@ -566,19 +566,19 @@ impl LanguageTaintHandler for JavaTaintHandler {
     fn detect_safe_sink_pattern(&self, callee: &str, node: &AstNode) -> SafeSinkPattern {
         let callee_lower = callee.to_lowercase();
 
-        // Check for PreparedStatement usage
-        if callee_lower.contains("preparedstatement") ||
-           callee_lower.contains("preparestatement") ||
-           callee_lower.contains("preparequery") {
-            return SafeSinkPattern::PreparedStatement;
-        }
+        // IMPORTANT: Do NOT unconditionally treat prepareStatement as safe!
+        // prepareStatement(sql) is STILL vulnerable if sql was built with tainted concatenation.
+        // Example: sql = "SELECT * WHERE id=" + userInput; prepareStatement(sql); // VULNERABLE
+        //
+        // The safety of prepared statements comes from using parameter placeholders (?)
+        // AND not having tainted data concatenated into the SQL string.
+        // We cannot determine at this point whether the SQL argument is tainted,
+        // so we must NOT skip the taint check for prepareStatement calls.
 
-        // Check for parameterized query via method name patterns
-        if self.is_prepared_statement_usage(node) {
-            return SafeSinkPattern::PreparedStatement;
-        }
+        // Only check for truly safe patterns where the operation itself is safe
+        // regardless of input (like compiling an XPath expression)
 
-        // Check for compiled XPath
+        // Check for compiled XPath (compiling an expression is not itself dangerous)
         if callee_lower.contains("xpath") && callee_lower.contains("compile") {
             return SafeSinkPattern::CompiledXPath;
         }
@@ -633,7 +633,10 @@ impl LanguageTaintHandler for JavaTaintHandler {
             "StringEscapeUtils.escapeHtml".into(),
             "ESAPI.encoder".into(),
             "Encode.forHtml".into(),
-            "PreparedStatement".into(),
+            // NOTE: PreparedStatement is NOT a sanitizer!
+            // Calling prepareStatement(taintedSQL) is still vulnerable.
+            // PreparedStatement only prevents SQL injection when used with
+            // parameter placeholders (?) and setString() for actual values.
         ]
     }
 }
