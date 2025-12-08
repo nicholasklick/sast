@@ -94,10 +94,11 @@ fn convert_sink_kind(kind: &YamlSinkKind) -> TaintSinkKind {
         YamlSinkKind::LogOutput => TaintSinkKind::LogOutput,
         YamlSinkKind::NetworkSend => TaintSinkKind::NetworkSend,
         YamlSinkKind::PathTraversal => TaintSinkKind::PathTraversal,
-        YamlSinkKind::Deserialization => TaintSinkKind::CodeEval, // Closest match
-        YamlSinkKind::LdapQuery => TaintSinkKind::CodeEval, // Closest match
-        YamlSinkKind::XPathQuery => TaintSinkKind::CodeEval, // Closest match
-        YamlSinkKind::XmlParse => TaintSinkKind::CodeEval, // Closest match
+        YamlSinkKind::Deserialization => TaintSinkKind::Deserialization,
+        YamlSinkKind::LdapQuery => TaintSinkKind::LdapQuery,
+        YamlSinkKind::XPathQuery => TaintSinkKind::XPathQuery,
+        YamlSinkKind::XmlParse => TaintSinkKind::XmlParse,
+        YamlSinkKind::TrustBoundary => TaintSinkKind::TrustBoundary,
     }
 }
 
@@ -1596,6 +1597,11 @@ impl LanguageTaintConfig {
             "session.setAttribute",
             "getSession().setAttribute",
             "request.getSession().setAttribute",
+            // HttpSession.putValue (deprecated but still used)
+            "HttpSession.putValue",
+            "session.putValue",
+            "getSession().putValue",
+            "request.getSession().putValue",
             // Servlet context
             "ServletContext.setAttribute",
             "context.setAttribute",

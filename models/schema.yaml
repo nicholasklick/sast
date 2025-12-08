@@ -24,7 +24,7 @@
 # ============================================================================
 # sinks:
 #   - name: "function_or_method_name"
-#     kind: SqlQuery | CommandExecution | FileWrite | CodeEval | HtmlOutput | LogOutput | NetworkSend | PathTraversal | Deserialization | LdapQuery | XPathQuery | XmlParse
+#     kind: SqlQuery | CommandExecution | FileWrite | CodeEval | HtmlOutput | LogOutput | NetworkSend | PathTraversal | Deserialization | LdapQuery | XPathQuery | XmlParse | TrustBoundary
 #     package: "optional.package.path"
 #     description: "Human-readable description"
 #     argument: 0  # Optional: which argument is the sink (0-indexed)

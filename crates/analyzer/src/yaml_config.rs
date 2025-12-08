@@ -92,6 +92,7 @@ pub enum SinkKind {
     LdapQuery,
     XPathQuery,
     XmlParse,
+    TrustBoundary,
 }
 
 /// What kinds of taint a sanitizer removes

@@ -282,6 +282,31 @@ sinks:
     description: "Script evaluation"
     argument: 0
 
+  # Trust Boundary - storing user data in trusted contexts (session, context)
+  - name: "setAttribute"
+    kind: TrustBoundary
+    package: "javax.servlet.http.HttpSession"
+    description: "Session attribute setting"
+    argument: 1
+
+  - name: "putValue"
+    kind: TrustBoundary
+    package: "javax.servlet.http.HttpSession"
+    description: "Session value setting (deprecated)"
+    argument: 1
+
+  - name: "setAttribute"
+    kind: TrustBoundary
+    package: "javax.servlet.ServletContext"
+    description: "Servlet context attribute setting"
+    argument: 1
+
+  - name: "setAttribute"
+    kind: TrustBoundary
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "Request attribute setting"
+    argument: 1
+
 sanitizers:
   # HTML Encoding
   - name: "escapeHtml"
