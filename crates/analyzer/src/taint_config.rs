@@ -1532,13 +1532,24 @@ impl LanguageTaintConfig {
             "PrintWriter.print",
             "PrintWriter.println",
             "PrintWriter.write",
+            "PrintWriter.format",
+            "PrintWriter.printf",
+            "PrintWriter.append",
             "writer.print",
             "writer.println",
             "writer.write",
+            "writer.format",
+            "writer.printf",
+            "writer.append",
+            // Format methods on response writer
+            "format",
+            "printf",
             // JSP implicit objects
             "out.print",
             "out.println",
             "out.write",
+            "out.format",
+            "out.printf",
             // Direct response
             "response.sendRedirect",
             "sendRedirect",
@@ -1574,6 +1585,29 @@ impl LanguageTaintConfig {
             sinks.push(TaintSink {
                 name: name.to_string(),
                 kind: TaintSinkKind::FileWrite, // Using FileWrite as closest match for path traversal
+                node_id: 0,
+            });
+        }
+
+        // Trust Boundary - storing user data in trusted contexts (session, context)
+        for name in &[
+            // HttpSession methods
+            "HttpSession.setAttribute",
+            "session.setAttribute",
+            "getSession().setAttribute",
+            "request.getSession().setAttribute",
+            // Servlet context
+            "ServletContext.setAttribute",
+            "context.setAttribute",
+            "getServletContext().setAttribute",
+            // Portlet session
+            "PortletSession.setAttribute",
+            // Request attributes (can cross trust boundary)
+            "request.setAttribute",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::TrustBoundary,
                 node_id: 0,
             });
         }

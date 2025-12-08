@@ -117,6 +117,11 @@ RULE_TO_CATEGORY = {
     "java/xpath-injection": "xpathi",
     "taint/xpath-injection": "xpathi",
 
+    # Trust Boundary Violation
+    "taint/trustboundary": "trustbound",
+    "taint/trust-boundary": "trustbound",
+    "java/trust-boundary": "trustbound",
+
     # Insecure Cookie
     "js/insecure-session-cookie": "securecookie",
     "java/insecure-cookie": "securecookie",

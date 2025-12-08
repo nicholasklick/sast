@@ -208,6 +208,7 @@ impl ParallelAnalyzer {
                 gittera_analyzer::taint::TaintSinkKind::PathTraversal => "path-traversal",
                 gittera_analyzer::taint::TaintSinkKind::Deserialization => "insecure-deserialization",
                 gittera_analyzer::taint::TaintSinkKind::XmlParse => "xxe",
+                gittera_analyzer::taint::TaintSinkKind::TrustBoundary => "trustboundary",
             };
 
             let finding = Finding {
@@ -324,6 +325,7 @@ impl ParallelAnalyzer {
                 gittera_analyzer::taint::TaintSinkKind::PathTraversal => "path-traversal",
                 gittera_analyzer::taint::TaintSinkKind::Deserialization => "insecure-deserialization",
                 gittera_analyzer::taint::TaintSinkKind::XmlParse => "xxe",
+                gittera_analyzer::taint::TaintSinkKind::TrustBoundary => "trustboundary",
             };
 
             let finding = Finding {
