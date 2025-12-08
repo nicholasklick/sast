@@ -372,6 +372,20 @@ fn scan_single_file(path: &PathBuf, format_str: &str, output: Option<&Path>, sui
     let queries = library.get_suite(suite);
     let mut all_findings = Vec::new();
 
+    // Add interprocedural taint analysis findings
+    for vuln in &taint_results.vulnerabilities {
+        all_findings.push(gittera_query::Finding {
+            file_path: vuln.file_path.clone(),
+            line: vuln.line,
+            column: vuln.column,
+            message: vuln.message.clone(),
+            severity: vuln.severity.as_str().to_string(),
+            rule_id: format!("taint/{:?}", vuln.sink.kind).to_lowercase(),
+            category: "taint-analysis".to_string(),
+            code_snippet: String::new(),
+        });
+    }
+
     // Get language string for filtering
     let lang_str = match lang {
         Language::JavaScript => "javascript",

@@ -777,6 +777,19 @@ impl InterproceduralTaintAnalysis {
                                 } else {
                                     #[cfg(debug_assertions)]
                                     eprintln!("[DEBUG]   Creating vulnerability for sink: {}", sink.name);
+                                    let message = format!(
+                                        "{} vulnerability - untrusted data in {}",
+                                        match sink.kind {
+                                            TaintSinkKind::SqlQuery => "SQL injection",
+                                            TaintSinkKind::CommandExecution => "Command injection",
+                                            TaintSinkKind::FileWrite => "Path traversal",
+                                            TaintSinkKind::CodeEval => "Code injection",
+                                            TaintSinkKind::HtmlOutput => "Cross-site scripting (XSS)",
+                                            TaintSinkKind::LogOutput => "Log injection",
+                                            TaintSinkKind::NetworkSend => "Server-side request forgery",
+                                        },
+                                        sink.name
+                                    );
                                     vulnerabilities.push(TaintVulnerability {
                                         sink: sink.clone(),
                                         tainted_value: TaintValue::new(
@@ -784,6 +797,10 @@ impl InterproceduralTaintAnalysis {
                                             TaintSourceKind::UserInput,
                                         ),
                                         severity: Severity::High,
+                                        file_path: node.location.file_path.clone(),
+                                        line: node.location.span.start_line,
+                                        column: node.location.span.start_column,
+                                        message,
                                     });
                                 }
                             }
@@ -853,6 +870,10 @@ impl InterproceduralTaintAnalysis {
                             kind: TaintSinkKind::CommandExecution,
                             node_id: node.id,
                         };
+                        let message = format!(
+                            "Command injection vulnerability - untrusted data in new {}",
+                            cname
+                        );
                         vulnerabilities.push(TaintVulnerability {
                             sink,
                             tainted_value: TaintValue::new(
@@ -860,6 +881,10 @@ impl InterproceduralTaintAnalysis {
                                 TaintSourceKind::UserInput,
                             ),
                             severity: Severity::High,
+                            file_path: node.location.file_path.clone(),
+                            line: node.location.span.start_line,
+                            column: node.location.span.start_column,
+                            message,
                         });
                     }
                 }
