@@ -43,6 +43,11 @@ pub enum TaintSinkKind {
     HtmlOutput,
     LogOutput,
     NetworkSend,
+    XPathQuery,
+    LdapQuery,
+    PathTraversal,
+    Deserialization,
+    XmlParse,
 }
 
 /// The flow state tracks what kind of sink the taint is flowing toward.
@@ -79,6 +84,11 @@ impl FlowState {
             TaintSinkKind::HtmlOutput => FlowState::Html,
             TaintSinkKind::LogOutput => FlowState::Generic, // Log can leak any data
             TaintSinkKind::NetworkSend => FlowState::Generic,
+            TaintSinkKind::XPathQuery => FlowState::Xml,
+            TaintSinkKind::LdapQuery => FlowState::Ldap,
+            TaintSinkKind::PathTraversal => FlowState::Path,
+            TaintSinkKind::Deserialization => FlowState::Generic,
+            TaintSinkKind::XmlParse => FlowState::Xml,
         }
     }
 
@@ -89,9 +99,9 @@ impl FlowState {
             FlowState::Sql => matches!(sink, TaintSinkKind::SqlQuery),
             FlowState::Html => matches!(sink, TaintSinkKind::HtmlOutput),
             FlowState::Shell => matches!(sink, TaintSinkKind::CommandExecution | TaintSinkKind::CodeEval),
-            FlowState::Path => matches!(sink, TaintSinkKind::FileWrite),
-            FlowState::Ldap => false, // No LDAP sink kind yet
-            FlowState::Xml => false,  // No XML sink kind yet
+            FlowState::Path => matches!(sink, TaintSinkKind::FileWrite | TaintSinkKind::PathTraversal),
+            FlowState::Ldap => matches!(sink, TaintSinkKind::LdapQuery),
+            FlowState::Xml => matches!(sink, TaintSinkKind::XPathQuery | TaintSinkKind::XmlParse),
             FlowState::Regex => false, // No Regex sink kind yet
         }
     }

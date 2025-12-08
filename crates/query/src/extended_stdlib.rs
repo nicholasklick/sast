@@ -609,7 +609,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![327])
                 .owasp("A02:2021 - Cryptographic Failures")
                 .sans_top_25()
-                .languages(vec!["javascript".to_string(), "typescript".to_string()])
+                .languages(vec!["javascript".to_string(), "typescript".to_string(), "java".to_string()])
                 .build()
         );
 
@@ -673,6 +673,39 @@ impl ExtendedStandardLibrary {
                 .sans_top_25()
                 .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
                 .languages(vec!["javascript".to_string(), "typescript".to_string()])
+                .build()
+        );
+
+        // Java Weak Randomness - Detects java.util.Random and Math.random (but NOT SecureRandom)
+        self.register(
+            "java/weak-random",
+            Self::java_weak_random_query(),
+            QueryMetadata::builder("java/weak-random", "Weak Randomness")
+                .description("Detects use of java.util.Random or Math.random() for security purposes")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![330])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .sans_top_25()
+                .suites(vec![QuerySuite::Default, QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["java".to_string()])
+                .build()
+        );
+
+        // Java Insecure Cookie - Detects setSecure(false)
+        self.register(
+            "java/insecure-cookie",
+            Self::java_insecure_cookie_query(),
+            QueryMetadata::builder("java/insecure-cookie", "Insecure Cookie")
+                .description("Detects cookies without secure flag (setSecure(false))")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::High)
+                .cwes(vec![614])
+                .owasp("A05:2021 - Security Misconfiguration")
+                .suites(vec![QuerySuite::Default, QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["java".to_string()])
                 .build()
         );
 
@@ -1986,11 +2019,14 @@ impl ExtendedStandardLibrary {
                 Predicate::Comparison {
                     left: Expression::PropertyAccess {
                         object: Box::new(Expression::Variable("call".to_string())),
-                        property: "callee".to_string(),
+                        property: "text".to_string(),
                     },
                     operator: ComparisonOp::Matches,
-                    // Use word boundaries to avoid matching "nodes", "describes", etc.
-                    right: Expression::String("(?i)(\\bdes\\b|\\brc4\\b|\\b3des\\b|createCipher.*(des|rc4)|DES|RC4)".to_string()),
+                    // Match weak ciphers in call text:
+                    // - Java: Cipher.getInstance("DES/..."), KeyGenerator.getInstance("DES")
+                    // - JS: createCipher("des"), createCipheriv("des", ...)
+                    // - Python: DES.new(), DES3.new()
+                    right: Expression::String("(?i)(getInstance\\s*\\(\\s*['\"]DES|getInstance\\s*\\(\\s*['\"]RC4|getInstance\\s*\\(\\s*['\"]DESede|createCipher.*['\"]des|createCipher.*['\"]rc4|\\bDES\\.new|\\bDES3\\.new|\\bRC4\\.new)".to_string()),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
@@ -2081,6 +2117,61 @@ impl ExtendedStandardLibrary {
             SelectClause::new(vec![SelectItem::Both {
                 variable: "member".to_string(),
                 message: "Insecure randomness - use crypto.randomBytes()".to_string(),
+            }]),
+        )
+    }
+
+    /// Java weak randomness detection
+    /// Detects:
+    /// - new java.util.Random() and its methods (nextInt, nextFloat, nextDouble, nextLong, etc.)
+    /// - java.lang.Math.random()
+    /// Does NOT detect:
+    /// - java.security.SecureRandom (which is secure)
+    fn java_weak_random_query() -> Query {
+        Query::new(
+            // Use AnyNode since new X() isn't classified as CallExpression
+            FromClause::new(EntityType::AnyNode, "node".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("node".to_string())),
+                        property: "text".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    // Match java.util.Random (but NOT SecureRandom) and Math.random
+                    // Pattern is very specific to avoid matching on assignments, variable names, etc.
+                    // Only matches actual usage like: new java.util.Random().nextFloat()
+                    // or: Math.random()
+                    right: Expression::String(r"new\s+(java\.util\.)?Random\s*\(\s*\)\s*\.\s*next\w+\s*\(|Math\.random\s*\(".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "node".to_string(),
+                message: "Weak randomness - use java.security.SecureRandom instead".to_string(),
+            }]),
+        )
+    }
+
+    /// Java insecure cookie detection
+    /// Detects cookies without secure flag:
+    /// - cookie.setSecure(false)
+    fn java_insecure_cookie_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::Comparison {
+                    left: Expression::PropertyAccess {
+                        object: Box::new(Expression::Variable("call".to_string())),
+                        property: "text".to_string(),
+                    },
+                    operator: ComparisonOp::Matches,
+                    // Match setSecure(false) but NOT setSecure(true)
+                    right: Expression::String(r"\.setSecure\s*\(\s*false\s*\)".to_string()),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Cookie without secure flag - use setSecure(true)".to_string(),
             }]),
         )
     }
