@@ -36,6 +36,16 @@ fn get_yaml_registry() -> Option<&'static TaintConfigRegistry> {
     YAML_REGISTRY.get().and_then(|opt| opt.as_ref())
 }
 
+/// Get sanitizer flow states from YAML config for a given language and function name.
+/// Returns None if the function is not a sanitizer, Some(empty) for universal sanitizers,
+/// or Some(states) for context-specific sanitizers.
+pub fn get_yaml_sanitizer_flow_states(language: Language, name: &str) -> Option<std::collections::HashSet<crate::taint::FlowState>> {
+    let registry = get_yaml_registry()?;
+    let lang_name = language_to_string(language);
+    let yaml_config = registry.get(&lang_name)?;
+    yaml_config.get_sanitizer_flow_states(name)
+}
+
 /// Convert Language enum to string for YAML lookup
 fn language_to_string(language: Language) -> String {
     match language {
