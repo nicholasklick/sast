@@ -20,6 +20,7 @@ use crate::flow_summary::FlowSummaryRegistry;
 use crate::language_handler::{LanguageTaintHandler, SafeSinkPattern, get_handler_for_language, evaluate_node_symbolic};
 use crate::symbolic::{SymbolicValue, SymbolicState, BinaryOperator, UnaryOperator};
 use crate::taint::{TaintAnalysisResult, TaintSink, TaintSource, TaintSourceKind, TaintValue, TaintVulnerability, Severity, TaintSinkKind, FlowState};
+use crate::taint_config::get_yaml_sanitizer_flow_states;
 use gittera_parser::ast::{AstNode, AstNodeKind, LiteralValue};
 use gittera_parser::language::Language;
 use std::collections::{HashMap, HashSet};
@@ -2158,6 +2159,27 @@ impl InterproceduralTaintAnalysis {
             return Some(states);
         }
 
+        // Type conversion functions are universal sanitizers
+        // Converting to a numeric type makes injection impossible
+        // Java: Integer.parseInt, Long.parseLong, Double.parseDouble, etc.
+        // Python: int(), float(), str() when used for validation
+        // JavaScript: parseInt(), parseFloat(), Number()
+        // Go: strconv.Atoi, strconv.ParseInt, strconv.ParseFloat
+        // Ruby: to_i, to_f
+        if name_lower.contains("parseint") || name_lower.contains("parselong")
+            || name_lower.contains("parsedouble") || name_lower.contains("parsefloat")
+            || name_lower.contains("parseBoolean")
+            || name_lower == "int" || name_lower == "float" || name_lower == "long" || name_lower == "double"
+            || name_lower.contains("atoi") || name_lower.contains("atol") || name_lower.contains("atof")
+            || name_lower == "number" || name_lower == "boolean"
+            || name_lower == "to_i" || name_lower == "to_f" || name_lower == "to_s"
+            || name_lower.contains("strconv.atoi") || name_lower.contains("strconv.parseint")
+            || name_lower.contains("strconv.parsefloat") || name_lower.contains("strconv.parsebool")
+            || name_lower.contains("valueof") {
+            // Type conversions are universal sanitizers - they make injection impossible
+            return Some(HashSet::new());
+        }
+
         // Universal sanitizers (validation, encoding functions that sanitize all types)
         if name_lower.contains("validate") || name_lower.contains("isvalid")
             || name_lower.contains("whitelist") || name_lower.contains("allowlist") {
@@ -2169,6 +2191,11 @@ impl InterproceduralTaintAnalysis {
         if self.is_sanitizer_function(name) {
             // Generic sanitizer - sanitizes all states
             return Some(HashSet::new());
+        }
+
+        // Check YAML config for sanitizers defined in MaD format
+        if let Some(states) = get_yaml_sanitizer_flow_states(self.language_handler.language(), name) {
+            return Some(states);
         }
 
         None

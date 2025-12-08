@@ -104,6 +104,19 @@ pub enum SanitizeKind {
     All,
 }
 
+impl SanitizeKind {
+    /// Convert to FlowState for integration with taint analysis
+    pub fn to_flow_state(&self) -> Option<crate::taint::FlowState> {
+        match self {
+            SanitizeKind::Html => Some(crate::taint::FlowState::Html),
+            SanitizeKind::Sql => Some(crate::taint::FlowState::Sql),
+            SanitizeKind::Shell => Some(crate::taint::FlowState::Shell),
+            SanitizeKind::Path => Some(crate::taint::FlowState::Path),
+            SanitizeKind::All => None, // All means universal, represented by empty set
+        }
+    }
+}
+
 /// How taint flows through a function
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -183,6 +196,26 @@ impl TaintConfigYaml {
     /// Get flow summary for a function name
     pub fn get_summary(&self, name: &str) -> Option<&SummaryConfig> {
         self.summaries.iter().find(|s| name.contains(&s.name) || name.ends_with(&s.name))
+    }
+
+    /// Get the FlowStates that a sanitizer is effective for.
+    /// Returns None if not a sanitizer, Some(empty HashSet) for universal sanitizers (All),
+    /// or Some(states) for context-specific sanitizers.
+    pub fn get_sanitizer_flow_states(&self, name: &str) -> Option<std::collections::HashSet<crate::taint::FlowState>> {
+        let sanitizer = self.get_sanitizer(name)?;
+        let mut states = std::collections::HashSet::new();
+
+        for kind in &sanitizer.sanitizes {
+            match kind.to_flow_state() {
+                Some(state) => { states.insert(state); }
+                None => {
+                    // SanitizeKind::All - return empty set to indicate universal
+                    return Some(std::collections::HashSet::new());
+                }
+            }
+        }
+
+        Some(states)
     }
 }
 
