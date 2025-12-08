@@ -244,6 +244,12 @@ impl TaintAnalysisPipeline {
         // Convert candidates to vulnerabilities
         for candidate in candidates {
             if candidate.confidence >= self.config.min_confidence {
+                let message = format!(
+                    "{:?} vulnerability from {} to {}",
+                    candidate.sink.kind,
+                    candidate.source.name,
+                    candidate.sink.name
+                );
                 result.vulnerabilities.push(TaintVulnerability {
                     sink: candidate.sink.clone(),
                     tainted_value: TaintValue::new(
@@ -251,6 +257,10 @@ impl TaintAnalysisPipeline {
                         candidate.source.kind.clone(),
                     ),
                     severity: self.calculate_severity(&candidate),
+                    file_path: String::new(), // TODO: Add source location to candidate
+                    line: 0,
+                    column: 0,
+                    message,
                 });
             }
         }

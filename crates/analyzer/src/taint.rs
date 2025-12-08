@@ -594,10 +594,18 @@ impl TaintAnalysis {
                         // This is the key to precision: escapeHtml() prevents XSS but NOT SQL injection
                         if taint_value.is_potentially_tainted_for(&sink.kind) &&
                            !taint_value.is_always_safe_for(&sink.kind) {
+                            let message = format!(
+                                "{:?} vulnerability - tainted data from {:?} reaches {}",
+                                sink.kind, taint_value.source, sink.name
+                            );
                             vulnerabilities.push(TaintVulnerability {
                                 sink: sink.clone(),
                                 tainted_value: taint_value.clone(),
                                 severity: self.calculate_severity(&sink.kind, &taint_value.source),
+                                file_path: String::new(), // CFG-based analysis doesn't have file path
+                                line: 0,
+                                column: 0,
+                                message,
                             });
                         }
                     }
@@ -976,6 +984,14 @@ pub struct TaintVulnerability {
     pub sink: TaintSink,
     pub tainted_value: TaintValue,
     pub severity: Severity,
+    /// File path where the vulnerability was found
+    pub file_path: String,
+    /// Line number of the vulnerability
+    pub line: usize,
+    /// Column number of the vulnerability
+    pub column: usize,
+    /// Human-readable vulnerability message
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
