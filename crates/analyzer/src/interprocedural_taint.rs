@@ -787,6 +787,11 @@ impl InterproceduralTaintAnalysis {
                                             TaintSinkKind::HtmlOutput => "Cross-site scripting (XSS)",
                                             TaintSinkKind::LogOutput => "Log injection",
                                             TaintSinkKind::NetworkSend => "Server-side request forgery",
+                                            TaintSinkKind::XPathQuery => "XPath injection",
+                                            TaintSinkKind::LdapQuery => "LDAP injection",
+                                            TaintSinkKind::PathTraversal => "Path traversal",
+                                            TaintSinkKind::Deserialization => "Insecure deserialization",
+                                            TaintSinkKind::XmlParse => "XML external entity (XXE)",
                                         },
                                         sink.name
                                     );
@@ -853,39 +858,76 @@ impl InterproceduralTaintAnalysis {
                     }
                 }
 
-                // Check if the class is a sink (e.g., ProcessBuilder, Runtime)
+                // Check if the class is a sink (e.g., ProcessBuilder, Runtime, FileInputStream)
                 if let Some(ref cname) = class_name {
                     let cname_lower = cname.to_lowercase();
+
                     // Check for command execution constructors
                     let is_cmd_sink = cname_lower.contains("processbuilder")
                         || cname_lower.contains("runtime")
                         || cname_lower.contains("commandline");
 
-                    if is_cmd_sink && has_tainted_args {
-                        #[cfg(debug_assertions)]
-                        eprintln!("[DEBUG] Found tainted object creation sink: new {}(...)", cname);
+                    // Check for path traversal constructors (file I/O)
+                    let is_path_sink = cname_lower.contains("fileinputstream")
+                        || cname_lower.contains("fileoutputstream")
+                        || cname_lower.contains("filereader")
+                        || cname_lower.contains("filewriter")
+                        || cname_lower.contains("randomaccessfile")
+                        || cname_lower.contains("printwriter")
+                        || cname_lower == "file";
 
-                        let sink = TaintSink {
-                            name: format!("new {}", cname),
-                            kind: TaintSinkKind::CommandExecution,
-                            node_id: node.id,
-                        };
-                        let message = format!(
-                            "Command injection vulnerability - untrusted data in new {}",
-                            cname
-                        );
-                        vulnerabilities.push(TaintVulnerability {
-                            sink,
-                            tainted_value: TaintValue::new(
-                                cname.clone(),
-                                TaintSourceKind::UserInput,
-                            ),
-                            severity: Severity::High,
-                            file_path: node.location.file_path.clone(),
-                            line: node.location.span.start_line,
-                            column: node.location.span.start_column,
-                            message,
-                        });
+                    if has_tainted_args {
+                        if is_cmd_sink {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG] Found tainted command sink: new {}(...)", cname);
+
+                            let sink = TaintSink {
+                                name: format!("new {}", cname),
+                                kind: TaintSinkKind::CommandExecution,
+                                node_id: node.id,
+                            };
+                            let message = format!(
+                                "Command injection vulnerability - untrusted data in new {}",
+                                cname
+                            );
+                            vulnerabilities.push(TaintVulnerability {
+                                sink,
+                                tainted_value: TaintValue::new(
+                                    cname.clone(),
+                                    TaintSourceKind::UserInput,
+                                ),
+                                severity: Severity::High,
+                                file_path: node.location.file_path.clone(),
+                                line: node.location.span.start_line,
+                                column: node.location.span.start_column,
+                                message,
+                            });
+                        } else if is_path_sink {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG] Found tainted path traversal sink: new {}(...)", cname);
+
+                            let sink = TaintSink {
+                                name: format!("new {}", cname),
+                                kind: TaintSinkKind::FileWrite,
+                                node_id: node.id,
+                            };
+                            let message = format!(
+                                "Path traversal vulnerability - untrusted data in new {}",
+                                cname
+                            );
+                            vulnerabilities.push(TaintVulnerability {
+                                sink,
+                                tainted_value: TaintValue::new(
+                                    cname.clone(),
+                                    TaintSourceKind::UserInput,
+                                ),
+                                severity: Severity::High,
+                                file_path: node.location.file_path.clone(),
+                                line: node.location.span.start_line,
+                                column: node.location.span.start_column,
+                                message,
+                            });
+                        }
                     }
                 }
 
@@ -2451,6 +2493,16 @@ impl InterproceduralTaintAnalysis {
             self.sinks.push(TaintSink {
                 name: sink_name.to_string(),
                 kind: TaintSinkKind::CommandExecution,
+                node_id: 0,
+            });
+        }
+
+        // XPath injection sinks
+        let xpath_sinks = vec!["evaluate", "compile", "selectNodes", "selectSingleNode"];
+        for sink_name in xpath_sinks {
+            self.sinks.push(TaintSink {
+                name: sink_name.to_string(),
+                kind: TaintSinkKind::XPathQuery,
                 node_id: 0,
             });
         }

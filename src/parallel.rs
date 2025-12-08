@@ -203,6 +203,11 @@ impl ParallelAnalyzer {
                 gittera_analyzer::taint::TaintSinkKind::HtmlOutput => "xss",
                 gittera_analyzer::taint::TaintSinkKind::LogOutput => "log-injection",
                 gittera_analyzer::taint::TaintSinkKind::NetworkSend => "ssrf",
+                gittera_analyzer::taint::TaintSinkKind::XPathQuery => "xpath-injection",
+                gittera_analyzer::taint::TaintSinkKind::LdapQuery => "ldap-injection",
+                gittera_analyzer::taint::TaintSinkKind::PathTraversal => "path-traversal",
+                gittera_analyzer::taint::TaintSinkKind::Deserialization => "insecure-deserialization",
+                gittera_analyzer::taint::TaintSinkKind::XmlParse => "xxe",
             };
 
             let finding = Finding {
@@ -314,6 +319,11 @@ impl ParallelAnalyzer {
                 gittera_analyzer::taint::TaintSinkKind::HtmlOutput => "xss",
                 gittera_analyzer::taint::TaintSinkKind::LogOutput => "log-injection",
                 gittera_analyzer::taint::TaintSinkKind::NetworkSend => "ssrf",
+                gittera_analyzer::taint::TaintSinkKind::XPathQuery => "xpath-injection",
+                gittera_analyzer::taint::TaintSinkKind::LdapQuery => "ldap-injection",
+                gittera_analyzer::taint::TaintSinkKind::PathTraversal => "path-traversal",
+                gittera_analyzer::taint::TaintSinkKind::Deserialization => "insecure-deserialization",
+                gittera_analyzer::taint::TaintSinkKind::XmlParse => "xxe",
             };
 
             let finding = Finding {
