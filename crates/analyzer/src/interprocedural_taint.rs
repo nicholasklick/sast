@@ -557,7 +557,7 @@ impl InterproceduralTaintAnalysis {
             AstNodeKind::CallExpression { callee, .. } => {
                 #[cfg(debug_assertions)]
                 {
-                    if callee.contains(".put") || callee.contains(".get") {
+                    if callee.contains(".put") || callee.contains(".get") || callee.contains("format") || callee.contains("printf") {
                         eprintln!("[DEBUG] CallExpression: callee='{}' with {} children", callee, node.children.len());
                         for (i, child) in node.children.iter().enumerate() {
                             eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
@@ -738,7 +738,12 @@ impl InterproceduralTaintAnalysis {
                 // its RESULT.
 
                 // Check if this is a sink with tainted data
-                if self.is_sink_function(callee) {
+                let is_sink = self.is_sink_function(callee);
+                #[cfg(debug_assertions)]
+                if callee.contains("format") || callee.contains("printf") || callee.contains("getWriter") {
+                    eprintln!("[DEBUG] is_sink_function('{}') = {}", callee, is_sink);
+                }
+                if is_sink {
                     #[cfg(debug_assertions)]
                     eprintln!("[DEBUG] Checking sink '{}' at branch_depth={}", callee, branch_depth);
 
@@ -761,8 +766,39 @@ impl InterproceduralTaintAnalysis {
                             // Create vulnerability
                             let sink_found = self.find_sink_by_name(callee);
                             #[cfg(debug_assertions)]
-                            eprintln!("[DEBUG]   find_sink_by_name('{}') = {:?}", callee, sink_found.is_some());
-                            if let Some(sink) = sink_found {
+                            eprintln!("[DEBUG] find_sink_by_name('{}') = {:?}, but is_sink_function={}", callee, sink_found, is_sink);
+
+                            // If is_sink_function returned true but find_sink_by_name didn't find a match,
+                            // create a default sink based on the callee name pattern
+                            let sink: Option<TaintSink> = match sink_found {
+                                Some(s) => Some(s.clone()),
+                                None => {
+                                    // Determine sink kind based on callee pattern
+                                    let callee_lower = callee.to_lowercase();
+                                    let kind = if callee_lower.contains("getwriter") || callee_lower.contains("printwriter")
+                                        || callee_lower.contains("format") || callee_lower.contains("printf") {
+                                        Some(TaintSinkKind::HtmlOutput)
+                                    } else if callee_lower.contains("exec") || callee_lower.contains("runtime") {
+                                        Some(TaintSinkKind::CommandExecution)
+                                    } else if callee_lower.contains("sql") || callee_lower.contains("query") {
+                                        Some(TaintSinkKind::SqlQuery)
+                                    } else if callee_lower.contains("file") || callee_lower.contains("path") {
+                                        Some(TaintSinkKind::PathTraversal)
+                                    } else if callee_lower.contains("setattribute") && callee_lower.contains("session") {
+                                        Some(TaintSinkKind::TrustBoundary)
+                                    } else {
+                                        None  // Can't determine sink type
+                                    };
+                                    kind.map(|k| TaintSink {
+                                        name: callee.clone(),
+                                        kind: k,
+                                        node_id: 0,
+                                    })
+                                }
+                            };
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG]   find_sink_by_name('{}') = {}", callee, sink.is_some());
+                            if let Some(sink) = sink {
                                 // Get the FlowState for this sink
                                 let sink_flow_state = FlowState::from_sink_kind(&sink.kind);
 
@@ -802,6 +838,7 @@ impl InterproceduralTaintAnalysis {
                                                 TaintSinkKind::PathTraversal => "Path traversal",
                                                 TaintSinkKind::Deserialization => "Insecure deserialization",
                                                 TaintSinkKind::XmlParse => "XML external entity (XXE)",
+                                                TaintSinkKind::TrustBoundary => "Trust boundary violation",
                                             },
                                             sink.name
                                         );
@@ -889,13 +926,15 @@ impl InterproceduralTaintAnalysis {
                         || cname_lower.contains("commandline");
 
                     // Check for path traversal constructors (file I/O)
+                    // Extract just the class name for matching (e.g., "File" from "java.io.File")
+                    let simple_class_name = cname_lower.split('.').last().unwrap_or(&cname_lower);
                     let is_path_sink = cname_lower.contains("fileinputstream")
                         || cname_lower.contains("fileoutputstream")
                         || cname_lower.contains("filereader")
                         || cname_lower.contains("filewriter")
                         || cname_lower.contains("randomaccessfile")
                         || cname_lower.contains("printwriter")
-                        || cname_lower == "file";
+                        || simple_class_name == "file";
 
                     if has_tainted_args {
                         if is_cmd_sink {
@@ -2132,6 +2171,24 @@ impl InterproceduralTaintAnalysis {
             "query", "update", "insert", "delete", "select",
         ];
         let method_name_lower = method_name.to_lowercase();
+        let name_lower = name.to_lowercase();
+
+        // Special case: format/printf on HTTP response writers should be treated as sinks
+        // These write user data directly to HTTP response, causing XSS
+        let is_response_writer_output = (method_name_lower == "format" || method_name_lower == "printf")
+            && (name_lower.contains("getwriter") || name_lower.contains("printwriter")
+                || name_lower.contains("out.") || name_lower.contains("writer."));
+        if is_response_writer_output {
+            return true;
+        }
+
+        // Special case: setAttribute on session objects is a trust boundary violation sink
+        let is_session_set_attribute = method_name_lower == "setattribute"
+            && (name_lower.contains("getsession") || name_lower.contains("session."));
+        if is_session_set_attribute {
+            return true;
+        }
+
         let is_common_method = common_methods.contains(&method_name_lower.as_str());
 
         // Fall back to legacy sinks
