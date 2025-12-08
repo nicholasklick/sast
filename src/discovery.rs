@@ -38,11 +38,34 @@ impl Default for DiscoveryConfig {
             max_file_size: Some(10 * 1024 * 1024), // 10MB default
             include_patterns: vec![],
             exclude_patterns: vec![
+                // Package managers and build outputs
                 "node_modules/**".to_string(),
                 "target/**".to_string(),
                 "build/**".to_string(),
                 "dist/**".to_string(),
                 ".git/**".to_string(),
+                // Vendor/third-party code - major source of noise
+                "**/vendor/**".to_string(),
+                "**/vendors/**".to_string(),
+                "**/third_party/**".to_string(),
+                "**/third-party/**".to_string(),
+                "**/bower_components/**".to_string(),
+                // Static assets - often contain minified/bundled code
+                "**/static/js/**".to_string(),
+                "**/assets/vendor/**".to_string(),
+                "**/assets/js/vendor/**".to_string(),
+                "**/public/vendor/**".to_string(),
+                "**/public/js/vendor/**".to_string(),
+                // Minified files - not useful for SAST
+                "**/*.min.js".to_string(),
+                "**/*.min.css".to_string(),
+                "**/*.bundle.js".to_string(),
+                // Common framework directories
+                "**/site-packages/**".to_string(),
+                "**/gems/**".to_string(),
+                // Test fixtures and mocks
+                "**/fixtures/**".to_string(),
+                "**/mocks/**".to_string(),
             ],
         }
     }

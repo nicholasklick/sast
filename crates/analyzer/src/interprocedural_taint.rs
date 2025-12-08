@@ -775,38 +775,49 @@ impl InterproceduralTaintAnalysis {
                                     #[cfg(debug_assertions)]
                                     eprintln!("[DEBUG]   Skipping vulnerability - tainted args are sanitized for {:?}", sink_flow_state);
                                 } else {
-                                    #[cfg(debug_assertions)]
-                                    eprintln!("[DEBUG]   Creating vulnerability for sink: {}", sink.name);
-                                    let message = format!(
-                                        "{} vulnerability - untrusted data in {}",
-                                        match sink.kind {
-                                            TaintSinkKind::SqlQuery => "SQL injection",
-                                            TaintSinkKind::CommandExecution => "Command injection",
-                                            TaintSinkKind::FileWrite => "Path traversal",
-                                            TaintSinkKind::CodeEval => "Code injection",
-                                            TaintSinkKind::HtmlOutput => "Cross-site scripting (XSS)",
-                                            TaintSinkKind::LogOutput => "Log injection",
-                                            TaintSinkKind::NetworkSend => "Server-side request forgery",
-                                            TaintSinkKind::XPathQuery => "XPath injection",
-                                            TaintSinkKind::LdapQuery => "LDAP injection",
-                                            TaintSinkKind::PathTraversal => "Path traversal",
-                                            TaintSinkKind::Deserialization => "Insecure deserialization",
-                                            TaintSinkKind::XmlParse => "XML external entity (XXE)",
-                                        },
-                                        sink.name
-                                    );
-                                    vulnerabilities.push(TaintVulnerability {
-                                        sink: sink.clone(),
-                                        tainted_value: TaintValue::new(
-                                            callee.clone(),
-                                            TaintSourceKind::UserInput,
-                                        ),
-                                        severity: Severity::High,
-                                        file_path: node.location.file_path.clone(),
-                                        line: node.location.span.start_line,
-                                        column: node.location.span.start_column,
-                                        message,
-                                    });
+                                    // Skip findings on line 1 for shebang false positives
+                                    // Shebang lines (#!/usr/bin/env python) on line 1 are
+                                    // sometimes incorrectly parsed and matched as sinks
+                                    let start_line = node.location.span.start_line;
+                                    let skip_line_1 = start_line <= 1;
+                                    if skip_line_1 {
+                                        #[cfg(debug_assertions)]
+                                        eprintln!("[DEBUG]   Skipping line 1 finding (likely shebang): {}", sink.name);
+                                    }
+                                    if !skip_line_1 {
+                                        #[cfg(debug_assertions)]
+                                        eprintln!("[DEBUG]   Creating vulnerability for sink: {}", sink.name);
+                                        let message = format!(
+                                            "{} vulnerability - untrusted data in {}",
+                                            match sink.kind {
+                                                TaintSinkKind::SqlQuery => "SQL injection",
+                                                TaintSinkKind::CommandExecution => "Command injection",
+                                                TaintSinkKind::FileWrite => "Path traversal",
+                                                TaintSinkKind::CodeEval => "Code injection",
+                                                TaintSinkKind::HtmlOutput => "Cross-site scripting (XSS)",
+                                                TaintSinkKind::LogOutput => "Log injection",
+                                                TaintSinkKind::NetworkSend => "Server-side request forgery",
+                                                TaintSinkKind::XPathQuery => "XPath injection",
+                                                TaintSinkKind::LdapQuery => "LDAP injection",
+                                                TaintSinkKind::PathTraversal => "Path traversal",
+                                                TaintSinkKind::Deserialization => "Insecure deserialization",
+                                                TaintSinkKind::XmlParse => "XML external entity (XXE)",
+                                            },
+                                            sink.name
+                                        );
+                                        vulnerabilities.push(TaintVulnerability {
+                                            sink: sink.clone(),
+                                            tainted_value: TaintValue::new(
+                                                callee.clone(),
+                                                TaintSourceKind::UserInput,
+                                            ),
+                                            severity: Severity::High,
+                                            file_path: node.location.file_path.clone(),
+                                            line: node.location.span.start_line,
+                                            column: node.location.span.start_column,
+                                            message,
+                                        });
+                                    }
                                 }
                             }
                         }

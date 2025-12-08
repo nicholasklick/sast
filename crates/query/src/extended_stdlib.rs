@@ -1792,22 +1792,38 @@ impl ExtendedStandardLibrary {
     }
 
     // Authentication queries
+    // NOTE: This query is intentionally strict to reduce false positives.
+    // It matches variable declarations where:
+    // 1. The variable has a sensitive name (password, secret, apiKey, etc.)
+    // 2. AND the value is a hardcoded string literal that looks like a real credential
+    //    (not a variable reference, function call, or placeholder text)
     fn hardcoded_credentials_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::VariableDeclaration, "vd".to_string()),
+            FromClause::new(EntityType::AnyNode, "node".to_string()),
             Some(WhereClause::new(vec![
                 Predicate::Comparison {
                     left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("vd".to_string())),
-                        property: "name".to_string(),
+                        object: Box::new(Expression::Variable("node".to_string())),
+                        property: "text".to_string(),
                     },
                     operator: ComparisonOp::Matches,
-                    right: Expression::String("(?i)(password|passwd|pwd|secret|api[_-]?key|token|credential)".to_string()),
+                    // Match patterns like: password = "actual_value" or apiKey: "sk-xxxxx"
+                    // Requires:
+                    // - Sensitive variable name (password, secret, apiKey, token, etc.)
+                    // - Assignment operator (= or :)
+                    // - A quoted string literal with credential-like value (6+ alphanumeric chars)
+                    // Excludes:
+                    // - Function calls: password = getPassword()
+                    // - Variable references: password = req.body.password
+                    // - Empty/placeholder: password = ""
+                    right: Expression::String(
+                        r#"(?i)(password|passwd|pwd|secret|api[_-]?key|private[_-]?key|access[_-]?key|auth[_-]?token)\s*[=:]\s*["'][a-zA-Z0-9!@#$%^&*_\-+=./]{6,}["']"#.to_string()
+                    ),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "vd".to_string(),
-                message: "Hardcoded credentials detected".to_string(),
+                variable: "node".to_string(),
+                message: "Hardcoded credential - use environment variables or secrets manager".to_string(),
             }]),
         )
     }
