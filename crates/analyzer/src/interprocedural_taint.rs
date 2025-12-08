@@ -2059,12 +2059,14 @@ impl InterproceduralTaintAnalysis {
         // Common method names that should NOT match by method name alone
         // These are too generic and cause false positives when matching specific sinks
         // Note: Do NOT add "digest" here - needed for hash detection (MessageDigest.digest)
-        // Note: Do NOT add "query", "select", "insert", "delete" - needed for SQL detection
         let common_methods = [
             "get", "set", "put", "add", "remove", "contains", "size", "length",
             "open", "close", "read", "write", "run", "call", "send", "recv",
             "parse", "format", "str", "int", "float", "list", "dict",
             "append", // Common non-security method
+            // SQL-related names that are too generic without class context
+            // Note: "execute" is NOT here - Statement.execute() is distinctive enough
+            "query", "update", "insert", "delete", "select",
         ];
         let method_name_lower = method_name.to_lowercase();
         let is_common_method = common_methods.contains(&method_name_lower.as_str());
@@ -2080,15 +2082,18 @@ impl InterproceduralTaintAnalysis {
                 return true;
             }
 
-            // Match by full name (name contains sink or vice versa)
-            // But only if it's not a common method causing a false match
-            if !is_common_method {
-                // Check if name contains the sink (e.g., "my.execute" contains "execute")
-                if name_lower.contains(&sink_lower) {
+            // Match by method name ending with sink method
+            // e.g., "executeQuery" ends with "query" sink, "doQuery" ends with "query"
+            // But only if the sink method is not a common method
+            if !is_common_method && sink_method.len() >= 4 {
+                // Check if the method name ends with the sink method name
+                // This handles cases like "doExecute" matching "execute" sink
+                if method_name_lower.ends_with(&sink_method) {
                     return true;
                 }
-                // Check if sink contains name - but be careful with substrings
-                if sink_lower.ends_with(&format!(".{}", name_lower)) || sink_lower == name_lower {
+                // Check if the method name starts with the sink method name
+                // This handles cases like "executeQuery" matching "execute" sink
+                if method_name_lower.starts_with(&sink_method) {
                     return true;
                 }
             }
@@ -2350,10 +2355,14 @@ impl InterproceduralTaintAnalysis {
 
         // Common method names that should NOT match by method name alone
         // These require class/object context to match
+        // Also includes method names that are too short/generic (query, update, etc.)
         let common_methods = [
             "get", "set", "put", "add", "remove", "contains", "size", "length",
             "open", "close", "read", "write", "run", "call", "send", "recv",
             "parse", "format", "str", "int", "float", "list", "dict",
+            // SQL-related names that are too generic without class context
+            // Note: "execute" is NOT here - Statement.execute() is distinctive enough
+            "query", "update", "insert", "delete", "select",
         ];
         let is_common_method = common_methods.contains(&method_name.as_str());
 
@@ -2369,17 +2378,16 @@ impl InterproceduralTaintAnalysis {
                 return true;
             }
 
-            // Match by full name (name contains sink or vice versa)
-            // But only if it's not a common method causing a false match
-            // e.g., "open" should not match "os.popen" just because popen contains open
-            if !is_common_method {
-                // Check if name contains the sink (e.g., "my.execute" contains "execute")
-                if name_lower.contains(&sink_lower) {
+            // Match by method name ending or starting with sink method
+            // e.g., "doQuery" ends with "query" sink, "executeQuery" starts with "execute"
+            // But only if the sink method is not a common method
+            if !is_common_method && sink_method.len() >= 4 {
+                // Check if the method name ends with the sink method name
+                if method_name.ends_with(&sink_method) {
                     return true;
                 }
-                // Check if sink contains name - but be careful with substrings
-                // Only match if the name appears as a complete word in the sink
-                if sink_lower.ends_with(&format!(".{}", name_lower)) || sink_lower == name_lower {
+                // Check if the method name starts with the sink method name
+                if method_name.starts_with(&sink_method) {
                     return true;
                 }
             }
@@ -2423,7 +2431,13 @@ impl InterproceduralTaintAnalysis {
 
     /// Configure default sinks
     pub fn with_default_sinks(mut self) -> Self {
-        let sql_sinks = vec!["execute", "query", "exec", "raw", "prepare", "executeQuery"];
+        // Note: Generic names like "query", "update" are NOT included here
+        // because they cause false positives. These should be matched via YAML configs
+        // with proper class/package context (e.g., JdbcTemplate.query)
+        // However, "execute" is included because Statement.execute() is common and distinctive enough
+        let sql_sinks = vec!["execute", "executeQuery", "executeUpdate", "prepareStatement", "prepareCall",
+                             "queryForObject", "queryForList", "queryForMap", "createQuery",
+                             "createNativeQuery", "nativeQuery"];
         for sink_name in sql_sinks {
             self.sinks.push(TaintSink {
                 name: sink_name.to_string(),
@@ -2528,8 +2542,13 @@ mod tests {
             .with_default_sinks();
 
         assert!(analysis.is_sink_function("executeQuery"));
-        assert!(analysis.is_sink_function("query"));
+        // "query" alone is too generic - should NOT match without class context
+        assert!(!analysis.is_sink_function("query"));
+        // But specific methods like queryForObject should still match
+        assert!(analysis.is_sink_function("queryForObject"));
         assert!(!analysis.is_sink_function("normalFunction"));
+        // Variable names containing "query" should NOT match as sinks
+        assert!(!analysis.is_sink_function("queryString.indexOf"));
     }
 
     #[test]
