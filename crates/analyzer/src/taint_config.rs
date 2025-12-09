@@ -1235,15 +1235,18 @@ impl LanguageTaintConfig {
             });
         }
 
-        // File Read
+        // File Read - only match read operations, not constructors
+        // FileInputStream and FileReader constructors are SINKS (for path traversal),
+        // while their read operations are SOURCES (for file read vulnerabilities)
         for name in &[
             "Files.readString",
             "Files.readAllLines",
             "Files.readAllBytes",
-            "FileInputStream",
-            "FileReader",
             "BufferedReader.readLine",
             "Scanner.nextLine",
+            "FileInputStream.read",   // Actual read operation
+            "FileReader.read",        // Actual read operation
+            "InputStreamReader.read", // Actual read operation
         ] {
             sources.push(TaintSource {
                 name: name.to_string(),
