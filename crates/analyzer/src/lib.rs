@@ -356,6 +356,7 @@ pub mod interprocedural_taint;
 pub mod points_to;
 pub mod symbolic;
 pub mod type_system;      // Type system integration for enhanced analysis precision
+pub mod collection_ops;   // Language-agnostic collection operation tracking
 
 pub use cfg::{ControlFlowGraph, CfgNode, CfgEdge, CfgBuilder};
 pub use dataflow::{DataFlowAnalysis, DataFlowDirection, TransferFunction};
@@ -375,3 +376,4 @@ pub use interprocedural_taint::{InterproceduralTaintAnalysis, FunctionTaintSumma
 pub use points_to::{PointsToAnalysis, PointsToAnalysisBuilder, AbstractLocation, PointsToConstraint, PointsToStats};
 pub use symbolic::{SymbolicExecutor, SymbolicExecutorBuilder, SymbolicValue, SymbolicState, ExecutionPath, SymbolicExecutionResult, Constraint, BinaryOperator, UnaryOperator};
 pub use type_system::{TypeContext, TypeInfo, TypeCategory, TypeContextStats};
+pub use collection_ops::{CollectionOperation, detect_collection_op_from_call, detect_collection_op_from_subscript, make_taint_key};
