@@ -183,6 +183,66 @@ sinks:
     description: "TypeORM query builder"
     argument: 0
 
+  # SQL Injection - Sequelize
+  - name: "sequelize.query"
+    kind: SqlQuery
+    package: "sequelize"
+    description: "Sequelize raw query"
+    argument: 0
+
+  - name: "sequelize.literal"
+    kind: SqlQuery
+    package: "sequelize"
+    description: "Sequelize literal SQL"
+    argument: 0
+
+  - name: "Sequelize.literal"
+    kind: SqlQuery
+    description: "Sequelize literal SQL"
+    argument: 0
+
+  # SQL Injection - Knex
+  - name: "knex.raw"
+    kind: SqlQuery
+    description: "Knex raw query"
+    argument: 0
+
+  - name: "whereRaw"
+    kind: SqlQuery
+    description: "Knex whereRaw"
+    argument: 0
+
+  # NoSQL Injection - MongoDB
+  - name: "find"
+    kind: SqlQuery
+    description: "MongoDB find"
+    argument: 0
+
+  - name: "findOne"
+    kind: SqlQuery
+    description: "MongoDB findOne"
+    argument: 0
+
+  - name: "aggregate"
+    kind: SqlQuery
+    description: "MongoDB aggregate"
+    argument: 0
+
+  - name: "findOneAndUpdate"
+    kind: SqlQuery
+    description: "MongoDB findOneAndUpdate"
+    argument: 0
+
+  - name: "updateOne"
+    kind: SqlQuery
+    description: "MongoDB updateOne"
+    argument: 0
+
+  - name: "$where"
+    kind: CodeEval
+    description: "MongoDB $where allows JS execution"
+    argument: 0
+
   # File operations
   - name: "fs.writeFile"
     kind: FileWrite
@@ -277,6 +337,28 @@ sanitizers:
   - name: "encodeURI"
     sanitizes: [Path]
     description: "URL encode"
+
+  # Path traversal sanitizers
+  - name: "path.basename"
+    sanitizes: [Path]
+    description: "Extract filename only - prevents directory traversal"
+
+  - name: "basename"
+    sanitizes: [Path]
+    description: "Extract filename only - prevents directory traversal"
+
+  # Custom/OWASP sanitizers
+  - name: "escapeForHtml"
+    sanitizes: [Html]
+    description: "OWASP benchmark HTML escape utility"
+
+  - name: "escapeHtml"
+    sanitizes: [Html]
+    description: "HTML escape function"
+
+  - name: "htmlEscape"
+    sanitizes: [Html]
+    description: "HTML escape function"
 
 summaries:
   # String operations
