@@ -16,6 +16,7 @@
 //! ```
 
 use crate::call_graph::CallGraph;
+use crate::collection_ops::{CollectionOperation, detect_collection_op_from_call, make_taint_key};
 use crate::flow_summary::FlowSummaryRegistry;
 use crate::language_handler::{LanguageTaintHandler, SafeSinkPattern, get_handler_for_language, evaluate_node_symbolic};
 use crate::symbolic::{SymbolicValue, SymbolicState, BinaryOperator, UnaryOperator};
@@ -65,6 +66,8 @@ pub struct InterproceduralTaintAnalysis {
     method_cache: HashMap<String, AstNode>,
     /// Language-specific handler for AST and taint patterns
     language_handler: Box<dyn LanguageTaintHandler>,
+    /// The language being analyzed (for collection operation detection)
+    language: Language,
 }
 
 impl InterproceduralTaintAnalysis {
@@ -83,6 +86,7 @@ impl InterproceduralTaintAnalysis {
             flow_registry: FlowSummaryRegistry::java_stdlib(),
             method_cache: HashMap::new(),
             language_handler: get_handler_for_language(language),
+            language,
         }
     }
 
@@ -618,172 +622,10 @@ impl InterproceduralTaintAnalysis {
                         }
                     }
                 }
-                // Track map.put() operations for content tracking
-                // Pattern: mapVar.put("key", value)
-                if callee.ends_with(".put") {
-                    #[cfg(debug_assertions)]
-                    eprintln!("[DEBUG] Processing map.put() for content tracking");
-                    let parts: Vec<&str> = callee.rsplitn(2, '.').collect();
-                    if parts.len() == 2 {
-                        let map_var = parts[1]; // Variable name before .put
-                        #[cfg(debug_assertions)]
-                        eprintln!("[DEBUG]   map_var='{}', looking for argument_list", map_var);
-                        // Look for arguments: first is key, second is value
-                        // Children structure: [receiver, arguments] or [arguments]
-                        // Find the argument list
-                        for (idx, child) in node.children.iter().enumerate() {
-                            #[cfg(debug_assertions)]
-                            eprintln!("[DEBUG]   child[{}]: kind={:?} text='{}'", idx, child.kind, child.text.lines().next().unwrap_or(""));
-                            if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list") {
-                                #[cfg(debug_assertions)]
-                                eprintln!("[DEBUG]   Found argument_list with {} children", child.children.len());
-                                let args: Vec<&AstNode> = child.children.iter()
-                                    .filter(|c| !matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "(" || node_type == ")" || node_type == ","))
-                                    .collect();
-                                #[cfg(debug_assertions)]
-                                {
-                                    eprintln!("[DEBUG]   Filtered args: {} items", args.len());
-                                    for (i, arg) in args.iter().enumerate() {
-                                        eprintln!("[DEBUG]     arg[{}]: kind={:?} text='{}'", i, arg.kind, arg.text.lines().next().unwrap_or(""));
-                                    }
-                                }
-                                if args.len() >= 2 {
-                                    // Get the key (first arg) - handle both String literal and string with quotes
-                                    let key_opt = match &args[0].kind {
-                                        AstNodeKind::Literal { value: LiteralValue::String(key) } => {
-                                            // Strip quotes if present
-                                            let k = key.trim_matches('"');
-                                            Some(k.to_string())
-                                        }
-                                        _ => {
-                                            // Try to extract from text (for Java string_literal parsed as Other)
-                                            let text = args[0].text.trim();
-                                            if text.starts_with('"') && text.ends_with('"') {
-                                                Some(text[1..text.len()-1].to_string())
-                                            } else {
-                                                None
-                                            }
-                                        }
-                                    };
-                                    #[cfg(debug_assertions)]
-                                    eprintln!("[DEBUG]   Extracted key: {:?}", key_opt);
-                                    if let Some(key) = key_opt {
-                                        // Get the value (second arg) symbolically
-                                        let val_sym = self.evaluate_symbolic(args[1], sym_state);
-                                        let val_tainted = self.is_node_tainted_with_sym(args[1], tainted_vars, sym_state);
-
-                                        // Store in symbolic state as mapVar["key"]
-                                        let map_key = format!("{}[{}]", map_var, key);
-                                        sym_state.set(map_key, val_sym);
-
-                                        // Track taint for the map key
-                                        let map_key_taint = format!("{}[{}]", map_var, key);
-                                        #[cfg(debug_assertions)]
-                                        eprintln!("[DEBUG]   Setting map_key='{}', val_tainted={}", map_key_taint, val_tainted);
-                                        if val_tainted {
-                                            tainted_vars.insert(map_key_taint);
-                                        } else {
-                                            tainted_vars.remove(&map_key_taint);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Track list.add() operations for ArrayList content tracking with index precision
-                // Pattern: listVar.add(value) - track taint at specific index
-                if callee.ends_with(".add") {
-                    let parts: Vec<&str> = callee.rsplitn(2, '.').collect();
-                    if parts.len() == 2 {
-                        let list_var = parts[1];
-                        // Find the argument
-                        for child in &node.children {
-                            if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list") {
-                                let args: Vec<&AstNode> = child.children.iter()
-                                    .filter(|c| !matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "(" || node_type == ")" || node_type == ","))
-                                    .collect();
-                                if !args.is_empty() {
-                                    let val_tainted = self.is_node_tainted_with_sym(args[0], tainted_vars, sym_state);
-                                    // Get current list size and increment
-                                    let current_size = list_sizes.get(list_var).copied().unwrap_or(0);
-                                    #[cfg(debug_assertions)]
-                                    eprintln!("[DEBUG] list.add() - list_var='{}', index={}, val_tainted={}", list_var, current_size, val_tainted);
-                                    if val_tainted {
-                                        // Track taint at specific index: listVar@index
-                                        tainted_vars.insert(format!("{}@{}", list_var, current_size));
-                                    }
-                                    // Increment list size
-                                    list_sizes.insert(list_var.to_string(), current_size + 1);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Track list.remove(index) operations - shift tainted indices
-                // Pattern: listVar.remove(index) - shift all taint markers above index down by 1
-                if callee.ends_with(".remove") {
-                    let parts: Vec<&str> = callee.rsplitn(2, '.').collect();
-                    if parts.len() == 2 {
-                        let list_var = parts[1];
-                        // Find the index argument
-                        for child in &node.children {
-                            if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list") {
-                                let args: Vec<&AstNode> = child.children.iter()
-                                    .filter(|c| !matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "(" || node_type == ")" || node_type == ","))
-                                    .collect();
-                                if !args.is_empty() {
-                                    // Try to get the index value
-                                    let removed_index: Option<usize> = match &args[0].kind {
-                                        AstNodeKind::Literal { value: LiteralValue::Number(n) } => {
-                                            n.parse::<usize>().ok()
-                                        }
-                                        _ => {
-                                            // Try to evaluate symbolically
-                                            match self.evaluate_symbolic(args[0], sym_state) {
-                                                SymbolicValue::Concrete(n) if n >= 0 => Some(n as usize),
-                                                _ => None,
-                                            }
-                                        }
-                                    };
-
-                                    if let Some(idx) = removed_index {
-                                        let current_size = list_sizes.get(list_var).copied().unwrap_or(0);
-                                        #[cfg(debug_assertions)]
-                                        eprintln!("[DEBUG] list.remove({}) - list_var='{}', shifting indices", idx, list_var);
-
-                                        // Remove taint at removed index
-                                        tainted_vars.remove(&format!("{}@{}", list_var, idx));
-
-                                        // Shift all indices above the removed one down by 1
-                                        // Collect indices to shift first
-                                        let mut to_shift: Vec<usize> = Vec::new();
-                                        for i in (idx + 1)..current_size {
-                                            if tainted_vars.contains(&format!("{}@{}", list_var, i)) {
-                                                to_shift.push(i);
-                                            }
-                                        }
-
-                                        // Now perform the shifts
-                                        for i in to_shift {
-                                            tainted_vars.remove(&format!("{}@{}", list_var, i));
-                                            tainted_vars.insert(format!("{}@{}", list_var, i - 1));
-                                            #[cfg(debug_assertions)]
-                                            eprintln!("[DEBUG]   Shifted {}@{} to {}@{}", list_var, i, list_var, i - 1);
-                                        }
-
-                                        // Decrement list size
-                                        if current_size > 0 {
-                                            list_sizes.insert(list_var.to_string(), current_size - 1);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                // Track collection operations using language-agnostic abstraction
+                // Supports: list.add/append/push, map.put, list.remove/pop, map.remove
+                // Works for Java, Python, JavaScript, and other supported languages
+                self.process_collection_operation(callee, node, tainted_vars, sym_state, list_sizes);
 
                 // Note: Source function detection is now handled in AssignmentExpression
                 // and VariableDeclaration handlers via is_node_tainted_with_sym().
@@ -2606,6 +2448,163 @@ impl InterproceduralTaintAnalysis {
                 || path_lower.contains(&source_lower)
                 || source_lower.contains(&path_lower)
         })
+    }
+
+    /// Process a collection operation (list append, map put, list remove, etc.)
+    /// Uses the language-agnostic CollectionOperation abstraction for multi-language support.
+    /// Returns true if a collection operation was detected and processed.
+    fn process_collection_operation(
+        &self,
+        callee: &str,
+        node: &AstNode,
+        tainted_vars: &mut HashSet<String>,
+        sym_state: &mut SymbolicState,
+        list_sizes: &mut HashMap<String, usize>,
+    ) -> bool {
+        // Try to detect a collection operation from the callee name and node
+        if let Some(op) = detect_collection_op_from_call(callee, node, self.language) {
+            #[cfg(debug_assertions)]
+            eprintln!("[DEBUG] Detected collection operation: {:?}", op);
+
+            match &op {
+                CollectionOperation::ListAppend { collection_var, value_node_idx }
+                | CollectionOperation::ListInsert { collection_var, value_node_idx, .. }
+                | CollectionOperation::ListPrepend { collection_var, value_node_idx }
+                | CollectionOperation::ListSet { collection_var, value_node_idx, .. } => {
+                    // Find the value argument
+                    let value_node = self.find_arg_at_index(node, *value_node_idx);
+                    let val_tainted = value_node
+                        .map(|n| self.is_node_tainted_with_sym(n, tainted_vars, sym_state))
+                        .unwrap_or(false);
+
+                    // Generate the taint key for this operation
+                    let current_size = list_sizes.get(collection_var.as_str()).copied().unwrap_or(0);
+                    if let Some(taint_key) = make_taint_key(collection_var, &op, current_size) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] Collection op: taint_key='{}', val_tainted={}", taint_key, val_tainted);
+                        if val_tainted {
+                            tainted_vars.insert(taint_key);
+                        }
+                    }
+
+                    // Update list size for append operations
+                    if matches!(op, CollectionOperation::ListAppend { .. } | CollectionOperation::ListInsert { .. } | CollectionOperation::ListPrepend { .. }) {
+                        list_sizes.insert(collection_var.clone(), current_size + 1);
+                    }
+                    return true;
+                }
+
+                CollectionOperation::MapPut { collection_var, key, value_node_idx } => {
+                    // Find the value argument
+                    let value_node = self.find_arg_at_index(node, *value_node_idx);
+                    let val_tainted = value_node
+                        .map(|n| self.is_node_tainted_with_sym(n, tainted_vars, sym_state))
+                        .unwrap_or(false);
+
+                    // Get symbolic value if available
+                    if let Some(val_node) = value_node {
+                        let val_sym = self.evaluate_symbolic(val_node, sym_state);
+                        if let Some(k) = key {
+                            let map_key = format!("{}[{}]", collection_var, k);
+                            sym_state.set(map_key, val_sym);
+                        }
+                    }
+
+                    // Generate the taint key for this operation
+                    if let Some(taint_key) = make_taint_key(collection_var, &op, 0) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] Map put: taint_key='{}', val_tainted={}", taint_key, val_tainted);
+                        if val_tainted {
+                            tainted_vars.insert(taint_key.clone());
+                        } else {
+                            tainted_vars.remove(&taint_key);
+                        }
+                    }
+                    return true;
+                }
+
+                CollectionOperation::ListRemoveAt { collection_var, index } => {
+                    let current_size = list_sizes.get(collection_var.as_str()).copied().unwrap_or(0);
+                    let removed_idx = index.unwrap_or(0);
+                    Self::handle_list_remove(collection_var, removed_idx, current_size, tainted_vars, list_sizes);
+                    return true;
+                }
+
+                CollectionOperation::ListRemoveLast { collection_var } => {
+                    let current_size = list_sizes.get(collection_var.as_str()).copied().unwrap_or(0);
+                    let removed_idx = current_size.saturating_sub(1);
+                    Self::handle_list_remove(collection_var, removed_idx, current_size, tainted_vars, list_sizes);
+                    return true;
+                }
+
+                CollectionOperation::ListRemoveFirst { collection_var } => {
+                    let current_size = list_sizes.get(collection_var.as_str()).copied().unwrap_or(0);
+                    let removed_idx = 0;
+                    Self::handle_list_remove(collection_var, removed_idx, current_size, tainted_vars, list_sizes);
+                    return true;
+                }
+
+                CollectionOperation::MapRemove { collection_var, key } => {
+                    // Remove taint for this map key
+                    if let Some(k) = key {
+                        let taint_key = format!("{}[{}]", collection_var, k);
+                        tainted_vars.remove(&taint_key);
+                    }
+                    return true;
+                }
+
+                CollectionOperation::ListGet { .. } | CollectionOperation::MapGet { .. } => {
+                    // Get operations don't modify taint state, they're handled during expression evaluation
+                    return false;
+                }
+            }
+        }
+        false
+    }
+
+    /// Helper function to handle list remove operations (shift indices down)
+    fn handle_list_remove(
+        collection_var: &str,
+        removed_idx: usize,
+        current_size: usize,
+        tainted_vars: &mut HashSet<String>,
+        list_sizes: &mut HashMap<String, usize>,
+    ) {
+        #[cfg(debug_assertions)]
+        eprintln!("[DEBUG] List remove: collection='{}', removed_idx={}, current_size={}", collection_var, removed_idx, current_size);
+
+        // Remove taint at removed index
+        tainted_vars.remove(&format!("{}@{}", collection_var, removed_idx));
+
+        // Shift all indices above the removed one down by 1
+        let mut to_shift: Vec<usize> = Vec::new();
+        for i in (removed_idx + 1)..current_size {
+            if tainted_vars.contains(&format!("{}@{}", collection_var, i)) {
+                to_shift.push(i);
+            }
+        }
+        for i in to_shift {
+            tainted_vars.remove(&format!("{}@{}", collection_var, i));
+            tainted_vars.insert(format!("{}@{}", collection_var, i - 1));
+        }
+
+        // Decrement list size
+        if current_size > 0 {
+            list_sizes.insert(collection_var.to_string(), current_size - 1);
+        }
+    }
+
+    /// Find the argument at a specific index in a CallExpression node
+    fn find_arg_at_index<'a>(&self, node: &'a AstNode, index: usize) -> Option<&'a AstNode> {
+        for child in &node.children {
+            if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list" || node_type == "arguments") {
+                let args: Vec<&AstNode> = child.children.iter()
+                    .filter(|c| !matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "(" || node_type == ")" || node_type == ","))
+                    .collect();
+                return args.get(index).copied();
+            }
+        }
+        None
     }
 
     fn is_sink_function(&self, name: &str) -> bool {
