@@ -300,6 +300,26 @@ pub fn allows_implicit_read(container_var: &str, content_path: &str) -> bool {
         }
     }
 
+    // Check for index-precise notation: container@N (list@0, list@1, etc.)
+    // This handles collection operations that use make_taint_key format
+    if content_path.contains('@') {
+        // content_path is like "list@0" - extract base name before @
+        if let Some(base) = content_path.split('@').next() {
+            if base == container_var {
+                return true;
+            }
+        }
+    }
+
+    // Check for map key notation: container[key]
+    if content_path.contains('[') && content_path.contains(']') {
+        if let Some(base) = content_path.split('[').next() {
+            if base == container_var {
+                return true;
+            }
+        }
+    }
+
     // Allow if the content path starts with the container variable
     content_path.starts_with(container_var)
 }

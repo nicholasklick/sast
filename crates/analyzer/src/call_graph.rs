@@ -216,6 +216,8 @@ pub struct CallGraphBuilder {
     function_stack: Vec<String>,
     /// Current class name (for method resolution)
     current_class: Option<String>,
+    /// Counter for generating unique lambda names
+    lambda_counter: usize,
 }
 
 impl CallGraphBuilder {
@@ -225,6 +227,7 @@ impl CallGraphBuilder {
             graph: CallGraph::new(),
             function_stack: Vec::new(),
             current_class: None,
+            lambda_counter: 0,
         }
     }
 
@@ -247,6 +250,10 @@ impl CallGraphBuilder {
 
             AstNodeKind::ClassDeclaration { name, .. } => {
                 self.process_class_declaration(name, node);
+            }
+
+            AstNodeKind::ArrowFunction { .. } => {
+                self.process_arrow_function(node);
             }
 
             AstNodeKind::CallExpression { callee, .. } => {
@@ -334,6 +341,30 @@ impl CallGraphBuilder {
         }
 
         self.current_class = prev_class;
+    }
+
+    /// Process an arrow function (anonymous/lambda)
+    fn process_arrow_function(&mut self, node: &AstNode) {
+        // Generate synthetic name using node id for uniqueness
+        let lambda_name = format!("__arrow_{}", node.id);
+        self.lambda_counter += 1;
+
+        let node_def = CallGraphNode {
+            name: lambda_name.clone(),
+            kind: CallableKind::Lambda,
+            node_id: node.id,
+        };
+
+        self.graph.add_node(node_def);
+
+        // Push lambda onto stack and visit body
+        self.function_stack.push(lambda_name);
+
+        for child in &node.children {
+            self.visit_node(child);
+        }
+
+        self.function_stack.pop();
     }
 
     /// Process a function call

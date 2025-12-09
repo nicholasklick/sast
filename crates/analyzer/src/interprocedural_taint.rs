@@ -611,6 +611,26 @@ impl InterproceduralTaintAnalysis {
                 }
             }
 
+            // Expression statement - contains a standalone expression (often a function call)
+            // This is common in Python: query_parts.append("hello") is an expression_statement
+            // containing a call. We need to process the child CallExpression for collection ops.
+            AstNodeKind::ExpressionStatement => {
+                // Process children to find any CallExpression for collection operations
+                for child in &node.children {
+                    if let AstNodeKind::CallExpression { callee, .. } = &child.kind {
+                        #[cfg(debug_assertions)]
+                        if callee.contains("append") || callee.contains("insert") || callee.contains("push") {
+                            eprintln!("[DEBUG] ExpressionStatement CallExpression: callee='{}' text='{}'", callee, child.text.lines().next().unwrap_or(""));
+                        }
+                        // Process collection operations (list.append, etc.)
+                        self.process_collection_operation(callee, child, tainted_vars, sym_state, list_sizes);
+                    }
+                    // Recursively process children - this will handle sink detection via CallExpression handler
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
+                }
+                return; // Don't process children again below
+            }
+
             // Function call
             AstNodeKind::CallExpression { callee, .. } => {
                 #[cfg(debug_assertions)]
@@ -1875,6 +1895,73 @@ impl InterproceduralTaintAnalysis {
                     }
                 }
 
+                // Handle list.pop() or list.pop(index) - check if specific index is tainted
+                // Python: list.pop() removes and returns last, list.pop(i) removes and returns element at i
+                // JavaScript: arr.pop() removes and returns last (no index arg in JS)
+                if callee.ends_with(".pop") {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] is_node_tainted: Checking .pop() callee='{}'", callee);
+                    let parts: Vec<&str> = callee.rsplitn(2, '.').collect();
+                    if parts.len() == 2 {
+                        let container_var = parts[1];
+                        // Find the argument (the index) - if no argument, it's the last element
+                        for child in &node.children {
+                            if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list" || node_type == "arguments") {
+                                let args: Vec<&AstNode> = child.children.iter()
+                                    .filter(|c| !matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "(" || node_type == ")" || node_type == ","))
+                                    .collect();
+
+                                let index_opt: Option<usize> = if args.is_empty() {
+                                    // pop() with no args - returns last element
+                                    // Without list_sizes info here, conservatively check all indices
+                                    None
+                                } else {
+                                    // pop(index) - returns element at specific index
+                                    match &args[0].kind {
+                                        AstNodeKind::Literal { value: LiteralValue::Number(n) } => n.parse::<usize>().ok(),
+                                        AstNodeKind::Other { node_type } if node_type == "integer" => {
+                                            args[0].text.trim().parse::<usize>().ok()
+                                        }
+                                        _ => {
+                                            // Try to evaluate symbolically
+                                            match self.evaluate_symbolic(args[0], sym_state) {
+                                                SymbolicValue::Concrete(n) if n >= 0 => Some(n as usize),
+                                                _ => args[0].text.trim().parse::<usize>().ok(),
+                                            }
+                                        }
+                                    }
+                                };
+
+                                if let Some(idx) = index_opt {
+                                    // Check if this specific index is tainted
+                                    let list_idx_key = format!("{}@{}", container_var, idx);
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("[DEBUG]   list.pop({}) - checking '{}', tainted={}", idx, list_idx_key, tainted_vars.contains(&list_idx_key));
+                                    if tainted_vars.contains(&list_idx_key) {
+                                        return true;
+                                    }
+                                    // Check if any index is tracked for this list (meaning we're tracking it)
+                                    let any_tracked = tainted_vars.iter().any(|v| v.starts_with(&format!("{}@", container_var)));
+                                    if any_tracked {
+                                        // We are tracking this list - return false since this specific index is not tainted
+                                        #[cfg(debug_assertions)]
+                                        eprintln!("[DEBUG]   List is tracked, index {} not tainted, returning false", idx);
+                                        return false;
+                                    }
+                                }
+                            }
+                        }
+                        // If we couldn't find arguments or determine index, conservatively check all
+                        // Check if any element of this list is tainted
+                        let any_element_tainted = tainted_vars.iter().any(|v| v.starts_with(&format!("{}@", container_var)));
+                        if any_element_tainted {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG]   .pop() on list with tainted elements (unknown index), returning true");
+                            return true;
+                        }
+                    }
+                }
+
                 // Check if this is a source function
                 if self.is_source_function(callee) {
                     return true;
@@ -3117,6 +3204,9 @@ impl InterproceduralTaintAnalysis {
 
         // Update the language handler to match the language
         self.language_handler = get_handler_for_language(language);
+
+        // Update the language field (used for collection operation detection)
+        self.language = language;
 
         self
     }

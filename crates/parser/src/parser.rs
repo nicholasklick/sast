@@ -275,6 +275,7 @@ impl Parser {
             "parenthesized_expression" => AstNodeKind::ParenthesizedExpression,
             "tagged_template_expression" => self.parse_tagged_template_expression(node, source),
             "function_expression" | "function" => self.parse_function_expression(node, source),
+            "arrow_function" => self.parse_arrow_function(node, source),
             "class_expression" => self.parse_class_expression(node, source),
             "array_pattern" => self.parse_array_pattern(node, source),
             "object_pattern" => self.parse_object_pattern(node, source),
@@ -779,6 +780,18 @@ impl Parser {
             return_type,
             is_async,
             is_generator,
+        }
+    }
+
+    fn parse_arrow_function(&self, node: &Node, source: &str) -> AstNodeKind {
+        let parameters = self.extract_parameters_detailed(node, source);
+        let return_type = self.extract_return_type(node, source);
+        let is_async = self.is_async_function(node, source);
+
+        AstNodeKind::ArrowFunction {
+            parameters,
+            return_type,
+            is_async,
         }
     }
 

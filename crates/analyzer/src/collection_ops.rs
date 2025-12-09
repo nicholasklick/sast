@@ -148,6 +148,10 @@ pub fn detect_collection_op_from_call(
     node: &AstNode,
     language: Language,
 ) -> Option<CollectionOperation> {
+    #[cfg(debug_assertions)]
+    if callee.contains("append") || callee.contains("insert") || callee.contains("push") {
+        eprintln!("[DEBUG] detect_collection_op_from_call: callee='{}' language={:?}", callee, language);
+    }
     match language {
         Language::Java | Language::Kotlin | Language::Scala => detect_java_collection_op(callee, node),
         Language::Python => detect_python_collection_op(callee, node),
@@ -268,6 +272,11 @@ fn detect_python_collection_op(callee: &str, node: &AstNode) -> Option<Collectio
 
     let args = get_call_arguments(node);
     let arg_count = args.len();
+
+    #[cfg(debug_assertions)]
+    if method == "append" || method == "insert" {
+        eprintln!("[DEBUG] detect_python_collection_op: callee='{}' method='{}' arg_count={}", callee, method, arg_count);
+    }
 
     match method {
         "append" => {
