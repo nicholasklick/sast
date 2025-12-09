@@ -1878,12 +1878,20 @@ impl InterproceduralTaintAnalysis {
                                             if tainted_vars.contains(&map_key) {
                                                 return true;
                                             }
-                                            // If we tracked this key and it's not tainted, it's safe
-                                            // Check if we have any symbolic info about this key
+                                            // Check if any key is tracked for this map (meaning we're tracking it)
+                                            // Similar to the list tracking check above
+                                            let any_tracked = tainted_vars.iter().any(|v| v.starts_with(&format!("{}[", container_var)));
+                                            if any_tracked {
+                                                // We are tracking this map - return false since this specific key is not tainted
+                                                #[cfg(debug_assertions)]
+                                                eprintln!("[DEBUG]   Map is tracked, key '{}' not tainted, returning false", key);
+                                                return false;
+                                            }
+                                            // Also check if we have symbolic info about this key
                                             if sym_state.get(&map_key) != SymbolicValue::Unknown {
                                                 // We have tracked this key - use our tracked taint status
                                                 #[cfg(debug_assertions)]
-                                                eprintln!("[DEBUG]   Key was tracked, returning false (not tainted)");
+                                                eprintln!("[DEBUG]   Key was tracked (sym_state), returning false (not tainted)");
                                                 return false;
                                             }
                                         }

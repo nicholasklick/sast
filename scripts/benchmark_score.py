@@ -101,6 +101,7 @@ RULE_TO_CATEGORY = {
 
     # Weak Hash
     "js/weak-hash": "hash",
+    "java/weak-hash-variable": "hash",
 
     # Weak Cipher/Crypto
     "js/weak-cipher": "crypto",

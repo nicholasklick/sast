@@ -597,6 +597,22 @@ impl ExtendedStandardLibrary {
                 .build()
         );
 
+        // Java Weak Hash - detects MessageDigest.getInstance with variable algorithm from properties
+        // This catches cases where algorithm comes from external configuration (potentially weak)
+        self.register(
+            "java/weak-hash-variable",
+            Self::java_weak_hash_variable_query(),
+            QueryMetadata::builder("java/weak-hash-variable", "Weak Hash Algorithm (Variable)")
+                .description("Detects MessageDigest.getInstance() with algorithm from external configuration")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::High)
+                .cwes(vec![327, 328])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .languages(vec!["java".to_string()])
+                .build()
+        );
+
         // Weak Cipher (DES/RC4) - JS/TS only due to createCipher pattern
         self.register(
             "js/weak-cipher",
@@ -2028,6 +2044,59 @@ impl ExtendedStandardLibrary {
             SelectClause::new(vec![SelectItem::Both {
                 variable: "call".to_string(),
                 message: "Weak hash algorithm (MD5/SHA1)".to_string(),
+            }]),
+        )
+    }
+
+    /// Java-specific weak hash detection for MessageDigest.getInstance with variable algorithm
+    /// This catches cases like: String alg = props.getProperty("hashAlg1", "SHA512"); MessageDigest.getInstance(alg)
+    /// where the algorithm comes from external configuration and may be weak (MD5)
+    fn java_weak_hash_variable_query() -> Query {
+        // Match MessageDigest.getInstance(variable) where variable is NOT a hardcoded strong algorithm
+        // Pattern: MessageDigest.getInstance(someVar) where someVar is an identifier, not a string literal
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::And {
+                    left: Box::new(Predicate::And {
+                        // Match MessageDigest.getInstance() on the callee (not text, to avoid string literal matches)
+                        left: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "callee".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            // Match callee that ends with MessageDigest.getInstance
+                            right: Expression::String("MessageDigest\\.getInstance$".to_string()),
+                        }),
+                        // AND the text has a variable argument (not a quoted string)
+                        right: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            // Match getInstance(variable) where argument starts with letter/underscore (not quote)
+                            right: Expression::String("getInstance\\s*\\(\\s*[a-zA-Z_]".to_string()),
+                        }),
+                    }),
+                    // Exclude cases where it's a hardcoded strong algorithm
+                    right: Box::new(Predicate::Not {
+                        predicate: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            // Exclude hardcoded strong algorithms: SHA-256, SHA-384, SHA-512, SHA-3
+                            right: Expression::String("(?i)getInstance\\s*\\(\\s*['\"]SHA-?(256|384|512|3)['\"]".to_string()),
+                        }),
+                    }),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Hash algorithm from variable may be weak (MD5/SHA1) - verify configuration".to_string(),
             }]),
         )
     }
