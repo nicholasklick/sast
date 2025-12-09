@@ -438,6 +438,25 @@ impl InterproceduralTaintAnalysis {
                 if !sanitizer_with_tainted_input {
                     if self.is_initializer_tainted(node, tainted_vars) {
                         tainted_vars.insert(name.clone());
+
+                        // SANITIZATION PROPAGATION: If all tainted variables in the initializer
+                        // are sanitized for certain flow states, propagate that sanitization
+                        // to the new variable. This handles cases like:
+                        //   String bar = escapeHtml(param);  // bar sanitized for Html
+                        //   Object[] obj = {bar, "b"};       // obj should also be sanitized for Html
+                        // NOTE: We exclude the variable being declared from the tainted set
+                        // since it was just added and hasn't been sanitized yet
+                        let mut tainted_without_self = tainted_vars.clone();
+                        tainted_without_self.remove(name);
+                        let inherited_states = self.compute_inherited_sanitization(node, &tainted_without_self, sanitized_for_vars);
+                        if !inherited_states.is_empty() {
+                            let var_sanitized = sanitized_for_vars.entry(name.clone()).or_insert_with(HashSet::new);
+                            for state in inherited_states {
+                                var_sanitized.insert(state);
+                            }
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG]     -> '{}' inherits sanitization: {:?}", name, var_sanitized);
+                        }
                     } else if branch_depth == 0 {
                         // STRONG UPDATE: If not in a branch and initializer is clean,
                         // this declaration shadows any previous taint
@@ -1748,11 +1767,16 @@ impl InterproceduralTaintAnalysis {
             }
 
             // Recursively check
-            if self.is_node_tainted(child, tainted_vars) {
+            let tainted = self.is_node_tainted(child, tainted_vars);
+            #[cfg(debug_assertions)]
+            eprintln!("[DEBUG] is_initializer_tainted: is_node_tainted returned {} for child {:?}", tainted, child.kind);
+            if tainted {
                 return true;
             }
         }
 
+        #[cfg(debug_assertions)]
+        eprintln!("[DEBUG] is_initializer_tainted: returning false (nothing tainted)");
         false
     }
 
@@ -2141,6 +2165,19 @@ impl InterproceduralTaintAnalysis {
                             continue; // This tainted var is sanitized, check others
                         }
                     }
+
+                    // If direct lookup failed, check if this is a method call on a sanitized variable
+                    // e.g., bar.toCharArray() where bar is sanitized
+                    if let Some(receiver) = self.extract_method_call_receiver(child) {
+                        if let Some(sanitized_states) = sanitized_for_vars.get(&receiver) {
+                            if sanitized_states.contains(sink_state) || sanitized_states.contains(&FlowState::Generic) {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG]   Method receiver '{}' is sanitized for {:?}", receiver, sink_state);
+                                continue; // Receiver is sanitized, check others
+                            }
+                        }
+                    }
+
                     // Variable is tainted but NOT sanitized for this sink
                     #[cfg(debug_assertions)]
                     eprintln!("[DEBUG]   Variable '{}' is tainted but NOT sanitized for {:?}", name, sink_state);
@@ -2180,6 +2217,150 @@ impl InterproceduralTaintAnalysis {
                 }
             }
         }
+    }
+
+    /// Extract the receiver of a method call expression.
+    /// For `bar.toCharArray()`, returns Some("bar").
+    /// This handles cases where sanitized data flows through value-preserving methods.
+    fn extract_method_call_receiver(&self, node: &AstNode) -> Option<String> {
+        // Check CallExpression with member callee
+        if let AstNodeKind::CallExpression { .. } = &node.kind {
+            // Find the member expression child which contains the object name
+            for child in &node.children {
+                if let AstNodeKind::MemberExpression { object, .. } = &child.kind {
+                    // `object` is a String containing the object name
+                    let obj_text = object.trim();
+                    if !obj_text.is_empty()
+                        && obj_text.chars().all(|c| c.is_alphanumeric() || c == '_')
+                        && !obj_text.chars().next().map(|c| c.is_numeric()).unwrap_or(true)
+                    {
+                        return Some(obj_text.to_string());
+                    }
+                }
+            }
+        }
+
+        // Try text-based parsing for "bar.method()" patterns
+        // Also handles "(bar.toCharArray())" from argument_list nodes
+        let text = node.text.trim();
+        // Strip leading/trailing parentheses that come from argument_list nodes
+        let text = text.trim_start_matches('(').trim_end_matches(')').trim();
+
+        if text.contains('.') && text.contains('(') {
+            // Extract receiver before the first dot
+            if let Some(dot_pos) = text.find('.') {
+                let receiver = &text[..dot_pos];
+                // Only return if it looks like a simple identifier
+                if !receiver.is_empty()
+                    && receiver.chars().all(|c| c.is_alphanumeric() || c == '_')
+                    && !receiver.chars().next().map(|c| c.is_numeric()).unwrap_or(true)
+                {
+                    return Some(receiver.to_string());
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Compute inherited sanitization states for a variable declaration.
+    /// When a variable is initialized with an expression containing sanitized variables,
+    /// it should inherit the sanitization if ALL tainted sources are sanitized.
+    ///
+    /// For example:
+    ///   String bar = escapeHtml(param);  // bar sanitized for Html
+    ///   Object[] obj = {bar, "b"};       // obj should inherit Html sanitization
+    ///
+    /// Returns the set of FlowStates that ALL tainted variables in the expression are sanitized for.
+    fn compute_inherited_sanitization(
+        &self,
+        node: &AstNode,
+        tainted_vars: &HashSet<String>,
+        sanitized_for_vars: &HashMap<String, HashSet<FlowState>>,
+    ) -> HashSet<FlowState> {
+        let mut tainted_refs: Vec<String> = Vec::new();
+
+        // Recursively find all tainted variable references in this node
+        self.collect_tainted_refs(node, tainted_vars, &mut tainted_refs);
+
+        if tainted_refs.is_empty() {
+            return HashSet::new();
+        }
+
+        // Compute intersection of sanitization states across all tainted refs
+        let mut result: Option<HashSet<FlowState>> = None;
+
+        for var_name in &tainted_refs {
+            if let Some(states) = sanitized_for_vars.get(var_name) {
+                match &mut result {
+                    None => {
+                        // First tainted var - start with its states
+                        result = Some(states.clone());
+                    }
+                    Some(current) => {
+                        // Intersect with this var's states
+                        *current = current.intersection(states).cloned().collect();
+                    }
+                }
+            } else {
+                // This tainted var has NO sanitization - cannot inherit anything
+                return HashSet::new();
+            }
+        }
+
+        result.unwrap_or_default()
+    }
+
+    /// Recursively collect all tainted variable references in an AST node
+    fn collect_tainted_refs(
+        &self,
+        node: &AstNode,
+        tainted_vars: &HashSet<String>,
+        refs: &mut Vec<String>,
+    ) {
+        match &node.kind {
+            AstNodeKind::Identifier { name } => {
+                if tainted_vars.contains(name) && !refs.contains(name) {
+                    refs.push(name.clone());
+                }
+            }
+            AstNodeKind::Other { node_type } if node_type == "array_initializer"
+                || node_type == "initializer_list" => {
+                // For array initializers, check the text for tainted variable names
+                // since child nodes might not be parsed as Identifiers
+                let text = &node.text;
+                for var_name in tainted_vars {
+                    // Use word boundary matching to avoid substring false positives
+                    // e.g., don't match "bar" in "foobar"
+                    if self.text_contains_word(text, var_name) && !refs.contains(var_name) {
+                        refs.push(var_name.clone());
+                    }
+                }
+            }
+            _ => {
+                // Recurse into children
+                for child in &node.children {
+                    self.collect_tainted_refs(child, tainted_vars, refs);
+                }
+            }
+        }
+    }
+
+    /// Check if text contains a word (with word boundaries)
+    fn text_contains_word(&self, text: &str, word: &str) -> bool {
+        // Simple word boundary check: the word must be surrounded by non-identifier chars
+        for (idx, _) in text.match_indices(word) {
+            let before = if idx > 0 { text.chars().nth(idx - 1) } else { None };
+            let after = text.chars().nth(idx + word.len());
+
+            let before_is_boundary = before.map_or(true, |c| !c.is_alphanumeric() && c != '_');
+            let after_is_boundary = after.map_or(true, |c| !c.is_alphanumeric() && c != '_');
+
+            if before_is_boundary && after_is_boundary {
+                return true;
+            }
+        }
+        false
     }
 
     // Helper methods
@@ -2375,11 +2556,20 @@ impl InterproceduralTaintAnalysis {
             eprintln!("[DEBUG] is_source_function: '{}' matched as cookie getter method", name);
             return true;
         }
-        if is_getter && (method_lower.contains("body") || method_lower.contains("content")
-            || method_lower.contains("input") || method_lower.contains("data")) {
-            // Request body/content getter methods
+        if is_getter && (method_lower.contains("body") || method_lower.contains("input") || method_lower.contains("data")) {
+            // Request body/input/data getter methods
             #[cfg(debug_assertions)]
             eprintln!("[DEBUG] is_source_function: '{}' matched as body/input getter method", name);
+            return true;
+        }
+        // Match content getters more specifically - exclude DOM methods like getTextContent
+        if is_getter && method_lower.contains("content")
+            && !method_lower.contains("textcontent")  // DOM Element.getTextContent()
+            && !method_lower.contains("nodecontent")  // DOM Node content
+            && (method_lower.contains("request") || name_lower.contains("request") || name_lower.contains("req.")) {
+            // HTTP request content getter methods only
+            #[cfg(debug_assertions)]
+            eprintln!("[DEBUG] is_source_function: '{}' matched as request content getter method", name);
             return true;
         }
 
