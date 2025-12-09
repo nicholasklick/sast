@@ -1236,8 +1236,140 @@ impl InterproceduralTaintAnalysis {
                 return;
             }
 
-            AstNodeKind::SwitchStatement { .. } | AstNodeKind::SwitchCase { .. } => {
-                // Inside a switch, we can't do strong updates
+            AstNodeKind::SwitchStatement { discriminant, .. } => {
+                // Try to evaluate the switch discriminant symbolically for constant propagation
+                // This handles patterns like: switch(guess.charAt(1)) where guess is "ABC"
+
+                // Find the condition node - look for parenthesized_expression or call
+                let condition_node = node.children.iter().find(|c| {
+                    matches!(&c.kind, AstNodeKind::ParenthesizedExpression |
+                                      AstNodeKind::CallExpression { .. } |
+                                      AstNodeKind::Identifier { .. })
+                });
+
+                let switch_val = if let Some(cond) = condition_node {
+                    self.evaluate_symbolic(cond, sym_state)
+                } else {
+                    // Try evaluating the discriminant string directly if it's an identifier
+                    sym_state.get(discriminant)
+                };
+
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[DEBUG] SwitchStatement: discriminant='{}', value={:?}", discriminant, switch_val);
+                    eprintln!("[DEBUG]   Switch has {} children:", node.children.len());
+                    for (i, child) in node.children.iter().enumerate() {
+                        eprintln!("[DEBUG]     switch_child[{}]: {:?}", i, child.kind);
+                    }
+                }
+
+                // If we have a concrete switch value, find the matching case
+                if let SymbolicValue::Concrete(switch_int) = switch_val {
+                    // Find matching case among children (may be direct or inside switch_block)
+                    let mut found_match = false;
+
+                    // Collect all cases - they may be direct children or inside a switch_block (nested SwitchStatement)
+                    let mut all_cases: Vec<&AstNode> = Vec::new();
+                    for child in &node.children {
+                        match &child.kind {
+                            AstNodeKind::SwitchCase { .. } => {
+                                all_cases.push(child);
+                            }
+                            AstNodeKind::SwitchStatement { .. } => {
+                                // This is actually a switch_block containing the cases
+                                for nested_child in &child.children {
+                                    if matches!(&nested_child.kind, AstNodeKind::SwitchCase { .. }) {
+                                        all_cases.push(nested_child);
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG]   Found {} case nodes", all_cases.len());
+
+                    for case_node in &all_cases {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG]   Examining case node: {:?}", case_node.kind);
+                        if let AstNodeKind::SwitchCase { test: Some(case_test), .. } = &case_node.kind {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG]     case_test='{}', looking for {}", case_test, switch_int);
+                            // Strip "case " prefix if present (parser may include it)
+                            let actual_test = case_test.strip_prefix("case ").unwrap_or(case_test).trim();
+
+                            // Parse the case test - handle char literals like 'A'
+                            let case_val: Option<i64> = if actual_test.starts_with('\'') && actual_test.ends_with('\'') && actual_test.len() == 3 {
+                                // Char literal: 'A' -> 65
+                                Some(actual_test.chars().nth(1).unwrap_or('\0') as i64)
+                            } else {
+                                // Try parsing as integer
+                                actual_test.parse::<i64>().ok()
+                            };
+
+                            if let Some(case_int) = case_val {
+                                if case_int == switch_int {
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("[DEBUG]   Matched case '{}' = {}", case_test, case_int);
+                                    found_match = true;
+                                    // Handle fallthrough: process this case and subsequent cases until break
+                                    // Find the index of the matching case
+                                    let match_idx = all_cases.iter().position(|c| std::ptr::eq(*c, *case_node)).unwrap_or(0);
+                                    for fallthrough_idx in match_idx..all_cases.len() {
+                                        let ft_case = all_cases[fallthrough_idx];
+                                        #[cfg(debug_assertions)]
+                                        eprintln!("[DEBUG]   Processing case {} (fallthrough)", fallthrough_idx);
+                                        self.track_taint_in_ast_with_depth(ft_case, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
+                                        // Check if this case has a break statement
+                                        let has_break = ft_case.children.iter().any(|child| {
+                                            matches!(&child.kind, AstNodeKind::BreakStatement { .. })
+                                            || matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "break_statement" || node_type == "BreakStatement")
+                                        });
+                                        if has_break {
+                                            #[cfg(debug_assertions)]
+                                            eprintln!("[DEBUG]   Found break, stopping fallthrough");
+                                            break;
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if !found_match {
+                        // No case matched - look for default case in collected cases
+                        for case_node in &all_cases {
+                            let is_default = match &case_node.kind {
+                                AstNodeKind::SwitchCase { test: None, .. } => true,
+                                AstNodeKind::SwitchCase { test: Some(t), .. } => {
+                                    t == "default" || t.contains("default")
+                                }
+                                _ => false,
+                            };
+                            if is_default {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG]   Using default case");
+                                self.track_taint_in_ast_with_depth(case_node, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
+                                break;
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                // Unknown switch value - conservatively analyze all cases
+                #[cfg(debug_assertions)]
+                eprintln!("[DEBUG]   Unknown switch value, analyzing all cases");
+                for child in &node.children {
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
+                }
+                return;
+            }
+
+            AstNodeKind::SwitchCase { .. } => {
+                // Individual case - process normally
                 for child in &node.children {
                     self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
                 }
@@ -1542,8 +1674,54 @@ impl InterproceduralTaintAnalysis {
                 SymbolicValue::Unknown
             }
 
-            // For call expressions, function results, etc. - return Unknown
-            // (we don't know what they return without executing them)
+            // Handle Java/C# method calls that can be evaluated symbolically
+            // Most importantly: str.charAt(index) -> returns the character at index
+            AstNodeKind::CallExpression { callee, .. } => {
+                // Handle String.charAt(index) for switch statement constant propagation
+                // Pattern: varName.charAt or "literal".charAt
+                if callee.ends_with(".charAt") {
+                    let receiver_name = callee.strip_suffix(".charAt").unwrap_or("");
+
+                    // Get receiver value from symbolic state or as literal
+                    let receiver_val = sym_state.get(receiver_name);
+
+                    // Find the argument (the index)
+                    let index_val: Option<i64> = node.children.iter()
+                        .find_map(|child| {
+                            if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list") {
+                                // Find numeric argument
+                                for arg in &child.children {
+                                    match &arg.kind {
+                                        AstNodeKind::Literal { value: LiteralValue::Number(n) } => {
+                                            return n.parse::<i64>().ok();
+                                        }
+                                        _ => {
+                                            // Try symbolic evaluation
+                                            let arg_val = self.evaluate_symbolic(arg, sym_state);
+                                            if let SymbolicValue::Concrete(n) = arg_val {
+                                                return Some(n);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            None
+                        });
+
+                    if let (SymbolicValue::ConcreteString(s), Some(idx)) = (receiver_val, index_val) {
+                        if idx >= 0 && (idx as usize) < s.len() {
+                            let ch = s.chars().nth(idx as usize).unwrap_or('\0');
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG] charAt: '{}'.charAt({}) = '{}' (code {})", s, idx, ch, ch as i64);
+                            // Return as integer for switch comparison (char is compared as int)
+                            return SymbolicValue::Concrete(ch as i64);
+                        }
+                    }
+                }
+                SymbolicValue::Unknown
+            }
+
+            // For other expressions - return Unknown
             _ => SymbolicValue::Unknown,
         }
     }
@@ -1847,13 +2025,15 @@ impl InterproceduralTaintAnalysis {
                 // This handles inner class helper methods like Test.doSomething()
                 let method_name = callee.split('.').last().unwrap_or(callee);
                 if let Some(method) = self.method_cache.get(method_name).cloned() {
-                    // Find which argument positions are tainted
+                    // Find argument count and which positions are tainted
                     let mut tainted_param_indices = HashSet::new();
+                    let mut arg_count = 0;
                     for child in &node.children {
                         if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list") {
                             let args: Vec<&AstNode> = child.children.iter()
                                 .filter(|c| !matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "(" || node_type == ")" || node_type == ","))
                                 .collect();
+                            arg_count = args.len();
                             for (idx, arg) in args.iter().enumerate() {
                                 if self.is_node_tainted_with_sym(arg, tainted_vars, sym_state) {
                                     // For Java inner class methods, first param is often HttpServletRequest
@@ -1864,11 +2044,14 @@ impl InterproceduralTaintAnalysis {
                         }
                     }
 
-                    if !tainted_param_indices.is_empty() {
+                    // Verify the cached method has matching parameter count
+                    // This prevents using Test.doSomething(request, param) for thing.doSomething(param)
+                    let cached_params = self.extract_parameters(&method);
+                    if cached_params.len() == arg_count && !tainted_param_indices.is_empty() {
                         // Use inter-procedural analysis to determine if return is tainted
                         return self.analyze_method_return_taint(&method, &tainted_param_indices);
                     }
-                    return false;
+                    // If parameter count doesn't match, fall through to default taint propagation
                 }
 
                 // Check for XPath/SQL quote escaping pattern: .replace("'", "&apos;")
