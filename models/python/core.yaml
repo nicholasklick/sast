@@ -84,6 +84,92 @@ sources:
     kind: Network
     description: "HTTPX GET request"
 
+  # Flask HTTP Sources
+  - name: "request.args"
+    kind: UserInput
+    description: "Flask query parameters"
+
+  - name: "request.args.get"
+    kind: UserInput
+    description: "Flask query parameter getter"
+
+  - name: "request.form"
+    kind: UserInput
+    description: "Flask form data"
+
+  - name: "request.form.get"
+    kind: UserInput
+    description: "Flask form data getter"
+
+  - name: "request.data"
+    kind: UserInput
+    description: "Flask raw request data"
+
+  - name: "request.json"
+    kind: UserInput
+    description: "Flask JSON body"
+
+  - name: "request.cookies"
+    kind: UserInput
+    description: "Flask cookies"
+
+  - name: "request.cookies.get"
+    kind: UserInput
+    description: "Flask cookie getter"
+
+  - name: "request.headers"
+    kind: UserInput
+    description: "Flask request headers"
+
+  - name: "request.headers.get"
+    kind: UserInput
+    description: "Flask header getter"
+
+  - name: "request.values"
+    kind: UserInput
+    description: "Flask combined args/form"
+
+  - name: "request.values.get"
+    kind: UserInput
+    description: "Flask combined getter"
+
+  - name: "request.files"
+    kind: UserInput
+    description: "Flask uploaded files"
+
+  # Django HTTP Sources
+  - name: "request.GET"
+    kind: UserInput
+    description: "Django GET parameters"
+
+  - name: "request.GET.get"
+    kind: UserInput
+    description: "Django GET parameter getter"
+
+  - name: "request.POST"
+    kind: UserInput
+    description: "Django POST parameters"
+
+  - name: "request.POST.get"
+    kind: UserInput
+    description: "Django POST parameter getter"
+
+  - name: "request.COOKIES"
+    kind: UserInput
+    description: "Django cookies"
+
+  - name: "request.COOKIES.get"
+    kind: UserInput
+    description: "Django cookie getter"
+
+  - name: "request.META"
+    kind: UserInput
+    description: "Django request metadata"
+
+  - name: "request.body"
+    kind: UserInput
+    description: "Django raw body"
+
 sinks:
   # SQL Injection
   - name: "execute"
@@ -195,10 +281,30 @@ sinks:
     description: "Open file (path traversal risk)"
     argument: 0
 
+  - name: "codecs.open"
+    kind: PathTraversal
+    description: "Codecs open file (path traversal risk)"
+    argument: 0
+
+  - name: "io.open"
+    kind: PathTraversal
+    description: "IO open file (path traversal risk)"
+    argument: 0
+
   - name: "os.path.join"
     kind: PathTraversal
     description: "Join paths"
     argument: 1
+
+  - name: "pathlib.Path"
+    kind: PathTraversal
+    description: "Pathlib path (path traversal risk)"
+    argument: 0
+
+  - name: "Path"
+    kind: PathTraversal
+    description: "Path constructor (path traversal risk)"
+    argument: 0
 
   - name: "shutil.copy"
     kind: FileWrite
@@ -207,6 +313,18 @@ sinks:
   - name: "shutil.move"
     kind: FileWrite
     description: "Move file"
+
+  - name: "os.remove"
+    kind: FileWrite
+    description: "Remove file"
+
+  - name: "os.unlink"
+    kind: FileWrite
+    description: "Unlink file"
+
+  - name: "os.rmdir"
+    kind: FileWrite
+    description: "Remove directory"
 
   # Deserialization
   - name: "pickle.loads"
