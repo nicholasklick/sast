@@ -62,6 +62,8 @@ impl Default for FlowKind {
 /// - `Argument[this]` - the receiver object
 /// - `ReturnValue` - the return value
 /// - `Argument[0].Field[data]` - field of first argument
+/// - `CallbackParam[0, 0]` - first parameter of callback at argument 0
+/// - `CallbackReturn[0]` - return value of callback at argument 0
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SummaryComponent {
     /// Function argument at position
@@ -72,6 +74,16 @@ pub enum SummaryComponent {
     Content {
         base: Box<SummaryComponent>,
         content: Content,
+    },
+    /// Parameter of a callback function passed as an argument
+    /// (callback_arg_index, param_index) - the param_index-th parameter of the callback at callback_arg_index
+    CallbackParam {
+        callback_arg: usize,
+        param_index: usize,
+    },
+    /// Return value of a callback function passed as an argument
+    CallbackReturn {
+        callback_arg: usize,
     },
 }
 
@@ -104,6 +116,22 @@ impl SummaryComponent {
         SummaryComponent::ReturnValue
     }
 
+    /// Create a callback parameter component
+    /// callback_arg: which argument is the callback (0-indexed)
+    /// param_index: which parameter of the callback (0-indexed)
+    pub fn callback_param(callback_arg: usize, param_index: usize) -> Self {
+        SummaryComponent::CallbackParam {
+            callback_arg,
+            param_index,
+        }
+    }
+
+    /// Create a callback return value component
+    /// callback_arg: which argument is the callback (0-indexed)
+    pub fn callback_return(callback_arg: usize) -> Self {
+        SummaryComponent::CallbackReturn { callback_arg }
+    }
+
     /// Create a content access on this component
     pub fn with_content(self, content: Content) -> Self {
         SummaryComponent::Content {
@@ -121,6 +149,15 @@ impl SummaryComponent {
     pub fn element(self) -> Self {
         self.with_content(Content::array_any())
     }
+
+    /// Check if this component involves a callback
+    pub fn involves_callback(&self) -> bool {
+        match self {
+            SummaryComponent::CallbackParam { .. } | SummaryComponent::CallbackReturn { .. } => true,
+            SummaryComponent::Content { base, .. } => base.involves_callback(),
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for SummaryComponent {
@@ -135,6 +172,12 @@ impl fmt::Display for SummaryComponent {
             SummaryComponent::ReturnValue => write!(f, "ReturnValue"),
             SummaryComponent::Content { base, content } => {
                 write!(f, "{}.{}", base, content)
+            }
+            SummaryComponent::CallbackParam { callback_arg, param_index } => {
+                write!(f, "CallbackParam[{}, {}]", callback_arg, param_index)
+            }
+            SummaryComponent::CallbackReturn { callback_arg } => {
+                write!(f, "CallbackReturn[{}]", callback_arg)
             }
         }
     }
@@ -628,6 +671,458 @@ impl FlowSummaryRegistry {
                 )),
         );
 
+        // Java Stream API - higher-order functions with callbacks
+        // stream.map(fn) - taint flows: this.element -> fn.param[0], fn.return -> result.element
+        registry.register(
+            SummarizedCallable::new("java.util.stream.Stream.map", "map")
+                .in_package("java.util.stream")
+                .in_class("Stream")
+                // Taint from stream element to callback parameter
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 0),
+                ))
+                // Taint from callback return to result stream element
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::callback_return(0),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // stream.filter(fn) - taint flows: this.element -> fn.param[0], this.element -> result.element
+        registry.register(
+            SummarizedCallable::new("java.util.stream.Stream.filter", "filter")
+                .in_package("java.util.stream")
+                .in_class("Stream")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 0),
+                ))
+                // Elements pass through unchanged
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // stream.forEach(fn) - taint flows: this.element -> fn.param[0]
+        registry.register(
+            SummarizedCallable::new("java.util.stream.Stream.forEach", "forEach")
+                .in_package("java.util.stream")
+                .in_class("Stream")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 0),
+                )),
+        );
+
+        // stream.flatMap(fn) - similar to map
+        registry.register(
+            SummarizedCallable::new("java.util.stream.Stream.flatMap", "flatMap")
+                .in_package("java.util.stream")
+                .in_class("Stream")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 0),
+                ))
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::callback_return(0),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // stream.reduce(identity, fn) - accumulator pattern
+        registry.register(
+            SummarizedCallable::new("java.util.stream.Stream.reduce", "reduce")
+                .in_package("java.util.stream")
+                .in_class("Stream")
+                // Initial value flows to result
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(0),
+                    SummaryComponent::return_value(),
+                ))
+                // Element flows to callback
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(1, 1),
+                ))
+                // Callback return flows to result
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::callback_return(1),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        // collect - terminal operation, element taint flows to result
+        registry.register(
+            SummarizedCallable::new("java.util.stream.Stream.collect", "collect")
+                .in_package("java.util.stream")
+                .in_class("Stream")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // findFirst/findAny - element flows to Optional result
+        registry.register(
+            SummarizedCallable::new("java.util.stream.Stream.findFirst", "findFirst")
+                .in_package("java.util.stream")
+                .in_class("Stream")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        registry.register(
+            SummarizedCallable::new("java.util.stream.Stream.findAny", "findAny")
+                .in_package("java.util.stream")
+                .in_class("Stream")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        // Optional.map - similar to Stream.map
+        registry.register(
+            SummarizedCallable::new("java.util.Optional.map", "map")
+                .in_package("java.util")
+                .in_class("Optional")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this(),
+                    SummaryComponent::callback_param(0, 0),
+                ))
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::callback_return(0),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        // Optional.orElse - value or default
+        registry.register(
+            SummarizedCallable::new("java.util.Optional.orElse", "orElse")
+                .in_package("java.util")
+                .in_class("Optional")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this(),
+                    SummaryComponent::return_value(),
+                ))
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(0),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        registry
+    }
+
+    /// Create a registry with JavaScript/TypeScript standard library summaries
+    pub fn javascript_stdlib() -> Self {
+        let mut registry = Self::new();
+
+        // Array.prototype.map(callback) - taint flows through callback
+        registry.register(
+            SummarizedCallable::new("Array.prototype.map", "map")
+                .in_class("Array")
+                // Taint from array element to callback's first parameter
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 0),
+                ))
+                // Taint from callback return to result array element
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::callback_return(0),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // Array.prototype.filter(callback) - elements pass through
+        registry.register(
+            SummarizedCallable::new("Array.prototype.filter", "filter")
+                .in_class("Array")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 0),
+                ))
+                // Filtered elements go to result
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // Array.prototype.forEach(callback)
+        registry.register(
+            SummarizedCallable::new("Array.prototype.forEach", "forEach")
+                .in_class("Array")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 0),
+                )),
+        );
+
+        // Array.prototype.find(callback) - returns element
+        registry.register(
+            SummarizedCallable::new("Array.prototype.find", "find")
+                .in_class("Array")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 0),
+                ))
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        // Array.prototype.findIndex(callback) - callback receives element
+        registry.register(
+            SummarizedCallable::new("Array.prototype.findIndex", "findIndex")
+                .in_class("Array")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 0),
+                )),
+        );
+
+        // Array.prototype.some/every(callback)
+        registry.register(
+            SummarizedCallable::new("Array.prototype.some", "some")
+                .in_class("Array")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 0),
+                )),
+        );
+
+        registry.register(
+            SummarizedCallable::new("Array.prototype.every", "every")
+                .in_class("Array")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 0),
+                )),
+        );
+
+        // Array.prototype.reduce(callback, initial)
+        registry.register(
+            SummarizedCallable::new("Array.prototype.reduce", "reduce")
+                .in_class("Array")
+                // Initial value flows to result
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(1),
+                    SummaryComponent::return_value(),
+                ))
+                // Element flows to callback's second parameter (currentValue)
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 1),
+                ))
+                // Callback return flows to result
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::callback_return(0),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        // Array.prototype.flatMap(callback)
+        registry.register(
+            SummarizedCallable::new("Array.prototype.flatMap", "flatMap")
+                .in_class("Array")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::callback_param(0, 0),
+                ))
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::callback_return(0),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // Array.prototype.sort(compareFn) - elements pass through
+        registry.register(
+            SummarizedCallable::new("Array.prototype.sort", "sort")
+                .in_class("Array")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this().element(),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // Promise.prototype.then(onFulfilled, onRejected)
+        registry.register(
+            SummarizedCallable::new("Promise.prototype.then", "then")
+                .in_class("Promise")
+                // Promise value flows to callback's first parameter
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this(),
+                    SummaryComponent::callback_param(0, 0),
+                ))
+                // Callback return flows to returned Promise
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::callback_return(0),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        // Promise.prototype.catch(onRejected)
+        registry.register(
+            SummarizedCallable::new("Promise.prototype.catch", "catch")
+                .in_class("Promise")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this(),
+                    SummaryComponent::callback_param(0, 0),
+                ))
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::callback_return(0),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        // Promise.prototype.finally(onFinally)
+        registry.register(
+            SummarizedCallable::new("Promise.prototype.finally", "finally")
+                .in_class("Promise")
+                // Value passes through
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this(),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        // Promise.all([promises]) - array of promises to promise of array
+        registry.register(
+            SummarizedCallable::new("Promise.all", "all")
+                .in_class("Promise")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(0).element(),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // Object.keys/values/entries
+        registry.register(
+            SummarizedCallable::new("Object.values", "values")
+                .in_class("Object")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(0),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        registry.register(
+            SummarizedCallable::new("Object.entries", "entries")
+                .in_class("Object")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(0),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // String methods
+        registry.register(
+            SummarizedCallable::new("String.prototype.split", "split")
+                .in_class("String")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this(),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        registry.register(
+            SummarizedCallable::new("String.prototype.replace", "replace")
+                .in_class("String")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this(),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        // JSON.parse - tainted input produces tainted result
+        registry.register(
+            SummarizedCallable::new("JSON.parse", "parse")
+                .in_class("JSON")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(0),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        registry
+    }
+
+    /// Create a registry with Python standard library summaries
+    pub fn python_stdlib() -> Self {
+        let mut registry = Self::new();
+
+        // map(fn, iterable) - higher-order function
+        registry.register(
+            SummarizedCallable::new("builtins.map", "map")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(1).element(),
+                    SummaryComponent::callback_param(0, 0),
+                ))
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::callback_return(0),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // filter(fn, iterable)
+        registry.register(
+            SummarizedCallable::new("builtins.filter", "filter")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(1).element(),
+                    SummaryComponent::callback_param(0, 0),
+                ))
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(1).element(),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // sorted(iterable, key=fn)
+        registry.register(
+            SummarizedCallable::new("builtins.sorted", "sorted")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(0).element(),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // list comprehension equivalents - list(), tuple()
+        registry.register(
+            SummarizedCallable::new("builtins.list", "list")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(0).element(),
+                    SummaryComponent::return_value().element(),
+                )),
+        );
+
+        // json.loads - tainted input produces tainted result
+        registry.register(
+            SummarizedCallable::new("json.loads", "loads")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(0),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
+        // str.join - taint flows from iterable elements
+        registry.register(
+            SummarizedCallable::new("str.join", "join")
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::argument(0).element(),
+                    SummaryComponent::return_value(),
+                ))
+                .with_propagation(FlowPropagation::taint(
+                    SummaryComponent::this(),
+                    SummaryComponent::return_value(),
+                )),
+        );
+
         registry
     }
 }
@@ -641,6 +1136,26 @@ mod tests {
         assert_eq!(SummaryComponent::argument(0).to_string(), "Argument[0]");
         assert_eq!(SummaryComponent::this().to_string(), "Argument[this]");
         assert_eq!(SummaryComponent::return_value().to_string(), "ReturnValue");
+        assert_eq!(
+            SummaryComponent::callback_param(0, 0).to_string(),
+            "CallbackParam[0, 0]"
+        );
+        assert_eq!(
+            SummaryComponent::callback_return(0).to_string(),
+            "CallbackReturn[0]"
+        );
+    }
+
+    #[test]
+    fn test_callback_involves_callback() {
+        assert!(SummaryComponent::callback_param(0, 0).involves_callback());
+        assert!(SummaryComponent::callback_return(0).involves_callback());
+        assert!(!SummaryComponent::argument(0).involves_callback());
+        assert!(!SummaryComponent::return_value().involves_callback());
+
+        // Content wrapping callback should still report involves_callback
+        let nested = SummaryComponent::callback_return(0).element();
+        assert!(nested.involves_callback());
     }
 
     #[test]

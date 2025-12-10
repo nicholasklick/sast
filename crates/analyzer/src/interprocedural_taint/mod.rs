@@ -1881,6 +1881,39 @@ impl InterproceduralTaintAnalysis {
                     }
                 }
 
+                // Handle higher-order functions that propagate taint through callbacks
+                // e.g., array.map(fn), array.filter(fn), promise.then(fn), stream.map(fn)
+                // For these methods, if the receiver has tainted elements, the result also has tainted elements
+                let higher_order_methods = [
+                    ".map", ".filter", ".find", ".findIndex", ".some", ".every",
+                    ".flatMap", ".forEach", ".reduce", ".reduceRight",
+                    ".then", ".catch", ".finally",  // Promise methods
+                    ".collect", ".findFirst", ".findAny",  // Java Stream terminal ops
+                ];
+                for method_suffix in &higher_order_methods {
+                    if callee.ends_with(method_suffix) {
+                        let parts: Vec<&str> = callee.rsplitn(2, '.').collect();
+                        if parts.len() == 2 {
+                            let receiver_var = parts[1];
+                            // Check if receiver itself is tainted
+                            if tainted_vars.contains(receiver_var) {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG] is_node_tainted: higher-order method {} on tainted receiver '{}'", method_suffix, receiver_var);
+                                return true;
+                            }
+                            // Check if any element of the collection is tainted (for array methods)
+                            let list_prefix = format!("{}@", receiver_var);
+                            let map_prefix = format!("{}[", receiver_var);
+                            if tainted_vars.iter().any(|v| v.starts_with(&list_prefix) || v.starts_with(&map_prefix)) {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG] is_node_tainted: higher-order method {} on collection '{}' with tainted elements", method_suffix, receiver_var);
+                                return true;
+                            }
+                        }
+                        break;
+                    }
+                }
+
                 // Handle map.get() or list.get() - check if specific key/index is tainted
                 if callee.ends_with(".get") {
                     #[cfg(debug_assertions)]
