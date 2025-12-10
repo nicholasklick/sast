@@ -687,10 +687,10 @@ impl ExtendedStandardLibrary {
                 .category(QueryCategory::Cryptography)
                 .severity(QuerySeverity::High)
                 .precision(QueryPrecision::Medium)
-                .cwes(vec![338])
+                .cwes(vec![330])
                 .owasp("A02:2021 - Cryptographic Failures")
                 .sans_top_25()
-                .suites(vec![QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .suites(vec![QuerySuite::Default, QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
                 .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );

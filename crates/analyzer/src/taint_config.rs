@@ -744,10 +744,66 @@ impl LanguageTaintConfig {
             });
         }
 
+        // XSS - Express response methods
+        for name in &[
+            "res.send", "res.write", "res.end", "res.json",
+            "response.send", "response.write", "response.end",
+            "ctx.body",  // Koa
+            "document.write", "document.writeln",
+            "innerHTML", "outerHTML",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::HtmlOutput,
+                node_id: 0,
+            });
+        }
+
+        // SQL Injection
+        for name in &[
+            "query", "execute", "raw",
+            "sequelize.query", "knex.raw",
+            "connection.query", "pool.query",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::SqlQuery,
+                node_id: 0,
+            });
+        }
+
+        // Path Traversal
+        for name in &[
+            "readFile", "readFileSync", "writeFile", "writeFileSync",
+            "fs.readFile", "fs.readFileSync", "fs.writeFile", "fs.writeFileSync",
+            "fs.open", "fs.openSync", "fs.createReadStream", "fs.createWriteStream",
+            "path.join", "path.resolve",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::PathTraversal,
+                node_id: 0,
+            });
+        }
+
+        // Open Redirect (using NetworkSend as closest match)
+        for name in &[
+            "res.redirect", "response.redirect",
+            "ctx.redirect",  // Koa
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::NetworkSend,
+                node_id: 0,
+            });
+        }
+
         sanitizers.extend(vec![
             "escape".to_string(),
             "sanitize".to_string(),
             "validator.escape".to_string(),
+            "escapeHtml".to_string(),
+            "utils.escapeForHtml".to_string(),
         ]);
 
         Self {

@@ -201,7 +201,7 @@ BENCHMARKS = {
         language="typescript",
         source_path="../owasp/BenchmarkTypeScript/testcode",
         expected_results="../owasp/BenchmarkTypeScript/expectedresults-0.1.csv",
-        file_extension=".ts",
+        file_extension=".js",  # TypeScript benchmark uses .js files
         category_mapping=PYTHON_CATEGORIES,
     ),
     "golang": BenchmarkConfig(
@@ -284,12 +284,85 @@ def extract_test_name(file_path: str, extension: str) -> Optional[str]:
     return None
 
 
+# Cache for Go line-to-test mappings
+_go_line_mappings: dict = {}
+
+
+def build_line_mapping(source_file: str) -> dict:
+    """Build a mapping from line numbers to test names for single-file benchmarks."""
+    import re
+    if source_file in _go_line_mappings:
+        return _go_line_mappings[source_file]
+
+    mapping = {}
+    current_test = None
+
+    try:
+        with open(source_file, 'r') as f:
+            for line_num, line in enumerate(f, 1):
+                # Look for test name patterns:
+                # Go: "BenchmarkTest00001" or RegisteredTests with BenchmarkTest00001
+                # Rust: "pub mod benchmarktest00001" or "//! BenchmarkTest00001"
+                match = re.search(r'[Bb]enchmark[Tt]est(\d+)', line, re.IGNORECASE)
+                if match:
+                    current_test = f"BenchmarkTest{match.group(1)}"
+                if current_test:
+                    mapping[line_num] = current_test
+    except Exception:
+        pass
+
+    _go_line_mappings[source_file] = mapping
+    return mapping
+
+
+def extract_test_name_with_line(file_path: str, line: int, extension: str, language: str) -> Optional[str]:
+    """Extract test name, using line number for single-file benchmarks (Go, Rust)."""
+    import re
+    import os
+
+    # First try file path extraction
+    pattern = r"(BenchmarkTest\d+)" + re.escape(extension)
+    match = re.search(pattern, file_path)
+    if match:
+        return match.group(1)
+
+    # For Go/Rust with multi-test files, use line-based mapping
+    # Go: generated.go contains all tests
+    # Rust: hash.rs, cmdi.rs, etc. contain multiple tests per file
+    if language == "golang" and "generated.go" in file_path:
+        mapping = build_line_mapping(file_path)
+        test_name = None
+        for ln in sorted(mapping.keys()):
+            if ln <= line:
+                test_name = mapping[ln]
+            else:
+                break
+        return test_name
+
+    if language == "rust" and file_path.endswith(".rs"):
+        mapping = build_line_mapping(file_path)
+        test_name = None
+        for ln in sorted(mapping.keys()):
+            if ln <= line:
+                test_name = mapping[ln]
+            else:
+                break
+        return test_name
+
+    return None
+
+
 def run_scan(config: BenchmarkConfig, sast_binary: str = "./target/release/gittera-sast") -> list:
     """Run the SAST scanner on benchmark code."""
     cmd = [sast_binary, "scan", config.source_path, "--format", "json"]
 
+    # Set larger stack size for Rust (large files can overflow default stack)
+    env = os.environ.copy()
+    if config.language == "rust":
+        env["RUST_MIN_STACK"] = "16777216"  # 16MB stack
+
     print(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
     if result.returncode != 0 and result.returncode != 1:
         print(f"Warning: Scanner returned non-zero exit code: {result.returncode}")
@@ -409,7 +482,8 @@ def score_benchmark(
 
     for finding in results:
         file_path = finding.get("file_path", finding.get("file", finding.get("path", "")))
-        test_name = extract_test_name(file_path, config.file_extension)
+        line = finding.get("line", 0)
+        test_name = extract_test_name_with_line(file_path, line, config.file_extension, config.language)
 
         if not test_name:
             continue
