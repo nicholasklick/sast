@@ -2242,6 +2242,84 @@ impl InterproceduralTaintAnalysis {
                 false
             }
 
+            // Handle spread elements: sink(...taintedArray)
+            // If the array being spread has any tainted elements, the spread is tainted
+            AstNodeKind::SpreadElement => {
+                // The spread's child is the array/iterable being spread
+                for child in &node.children {
+                    // Check if the spread operand is tainted (using implicit read)
+                    if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] SpreadElement: spread operand is tainted");
+                        return true;
+                    }
+                }
+                false
+            }
+
+            // Handle rest elements in destructuring: const [first, ...rest] = taintedArray
+            AstNodeKind::RestElement { .. } => {
+                // Rest elements gather remaining elements - if source is tainted, rest is tainted
+                for child in &node.children {
+                    if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] RestElement: rest operand is tainted");
+                        return true;
+                    }
+                }
+                false
+            }
+
+            // Handle array expressions: [a, b, tainted, c]
+            // If any element is tainted, the array is tainted
+            AstNodeKind::ArrayExpression { .. } => {
+                for child in &node.children {
+                    if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] ArrayExpression: element is tainted");
+                        return true;
+                    }
+                }
+                false
+            }
+
+            // Handle object expressions: { key: tainted }
+            // If any value is tainted, the object is tainted
+            AstNodeKind::ObjectExpression { .. } => {
+                for child in &node.children {
+                    if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] ObjectExpression: property value is tainted");
+                        return true;
+                    }
+                }
+                false
+            }
+
+            // Handle template strings: `Hello ${tainted}`
+            AstNodeKind::TemplateString { .. } => {
+                for child in &node.children {
+                    if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] TemplateString: interpolation is tainted");
+                        return true;
+                    }
+                }
+                false
+            }
+
+            // Handle tagged template expressions: tag`Hello ${tainted}`
+            AstNodeKind::TaggedTemplateExpression { .. } => {
+                for child in &node.children {
+                    if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] TaggedTemplateExpression: interpolation is tainted");
+                        return true;
+                    }
+                }
+                false
+            }
+
             _ => {
                 // Check children
                 node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
