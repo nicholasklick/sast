@@ -90,6 +90,7 @@ RULE_TO_CATEGORY = {
     "js/document-write-xss": "xss",
     "java/reflected-xss": "xss",
     "taint/xss": "xss",
+    "taint/htmloutput": "xss",
 
     # Path Traversal
     "js/path-traversal": "pathtraver",
@@ -131,6 +132,7 @@ RULE_TO_CATEGORY = {
     "js/insecure-random": "weakrand",
     "js/predictable-seed": "weakrand",
     "java/weak-random": "weakrand",
+    "python/weak-random": "weakrand",
 
     # Trust Boundary
     "js/session-fixation": "trustbound",

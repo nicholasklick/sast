@@ -2036,8 +2036,20 @@ impl OwaspRuleLibrary {
             ));
         }
 
-        // Python insecure RNG (4 rules)
-        let py_rng_funcs = vec!["random.random", "random.randint", "random.choice", "random.shuffle"];
+        // Python insecure RNG (10 rules)
+        // Note: random.SystemRandom() methods are secure and should NOT be flagged
+        let py_rng_funcs = vec![
+            "random.random",
+            "random.randint",
+            "random.choice",
+            "random.shuffle",
+            "random.normalvariate",  // Used in OWASP benchmark
+            "random.getrandbits",    // Used in OWASP benchmark
+            "random.randbytes",      // Used in OWASP benchmark
+            "random.gauss",
+            "random.uniform",
+            "random.randrange",
+        ];
         for (idx, func) in py_rng_funcs.iter().enumerate() {
             rules.push((
                 RuleMetadata {

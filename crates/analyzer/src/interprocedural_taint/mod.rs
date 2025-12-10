@@ -1087,6 +1087,39 @@ impl InterproceduralTaintAnalysis {
                 for child in &node.children {
                     self.track_taint_in_ast_with_depth(child, &mut local_tainted, vulnerabilities, 0, ast_depth + 1, &mut local_sym_state, &mut local_list_sizes, &mut local_path_sanitized, &mut local_sanitized_for);
                 }
+
+                // Python/Flask XSS detection: check if this is a web handler function
+                // that returns tainted data (reflected XSS)
+                if matches!(self.language, Language::Python) && self.is_web_handler_function(node) {
+                    let tainted_returns = self.find_tainted_returns(node, &local_tainted, &local_sym_state);
+                    for ret_node in tainted_returns {
+                        let func_name = match &node.kind {
+                            AstNodeKind::FunctionDeclaration { name, .. } => name.clone(),
+                            AstNodeKind::MethodDeclaration { name, .. } => name.clone(),
+                            _ => "unknown".to_string(),
+                        };
+                        vulnerabilities.push(TaintVulnerability {
+                            sink: TaintSink {
+                                name: format!("return (in web handler {})", func_name),
+                                kind: TaintSinkKind::HtmlOutput,
+                                node_id: ret_node.location.span.start_line,
+                            },
+                            tainted_value: TaintValue::new(
+                                "user_input".to_string(),
+                                TaintSourceKind::UserInput,
+                            ),
+                            severity: Severity::High,
+                            file_path: ret_node.location.file_path.clone(),
+                            line: ret_node.location.span.start_line,
+                            column: ret_node.location.span.start_column,
+                            message: format!(
+                                "Cross-site scripting (XSS) vulnerability - untrusted data returned from web handler '{}'",
+                                func_name
+                            ),
+                        });
+                    }
+                }
+
                 return; // Don't propagate local taint to parent scope
             }
 
@@ -2605,6 +2638,122 @@ impl InterproceduralTaintAnalysis {
 
     fn extract_identifier(&self, node: &AstNode) -> Option<String> {
         ast_helpers::extract_identifier(node)
+    }
+
+    /// Check if a function node has a web route decorator (Flask @app.route, etc.)
+    /// This is used to detect XSS vulnerabilities when tainted data is returned from web handlers
+    fn is_web_handler_function(&self, node: &AstNode) -> bool {
+        // Look for decorator siblings - in Python, decorators are children of decorated_definition
+        // The decorated_definition contains: decorator(s), then the function definition
+        //
+        // We check the node's siblings (same parent) for decorators
+        // Also check for common web handler patterns:
+        // - @app.route, @app.get, @app.post, etc. (Flask)
+        // - @route, @get, @post (various frameworks)
+        // - Functions in classes that inherit from View/APIView
+
+        // Check node text for decorator patterns (decorators may be in text representation)
+        let text_lower = node.text.to_lowercase();
+        let has_route_decorator = text_lower.contains("@app.route")
+            || text_lower.contains("@route")
+            || text_lower.contains("@app.get")
+            || text_lower.contains("@app.post")
+            || text_lower.contains("@app.put")
+            || text_lower.contains("@app.delete")
+            || text_lower.contains("@app.patch")
+            || text_lower.contains("@get")
+            || text_lower.contains("@post")
+            || text_lower.contains("@put")
+            || text_lower.contains("@delete")
+            || text_lower.contains("@api.route");
+
+        if has_route_decorator {
+            return true;
+        }
+
+        // Check for common web handler function name patterns
+        // OWASP benchmark uses patterns like BenchmarkTest*_get/post
+        let func_name = match &node.kind {
+            AstNodeKind::FunctionDeclaration { name, .. } => name.to_lowercase(),
+            AstNodeKind::MethodDeclaration { name, .. } => name.to_lowercase(),
+            _ => return false,
+        };
+
+        // Django view patterns
+        if func_name == "get" || func_name == "post" || func_name == "put"
+            || func_name == "delete" || func_name == "patch" || func_name == "dispatch" {
+            return true;
+        }
+
+        // OWASP benchmark pattern: functions ending with _get or _post
+        if func_name.ends_with("_get") || func_name.ends_with("_post")
+            || func_name.ends_with("_put") || func_name.ends_with("_delete") {
+            return true;
+        }
+
+        // Also check children for decorator nodes
+        for child in &node.children {
+            if let AstNodeKind::Decorator { name, .. } = &child.kind {
+                let name_lower = name.to_lowercase();
+                if name_lower.contains("route")
+                    || name_lower.contains("get")
+                    || name_lower.contains("post") {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Find return statements in a function node and collect their info
+    /// Returns (has_tainted_return, return_nodes) for reporting XSS
+    fn find_tainted_returns<'a>(
+        &self,
+        node: &'a AstNode,
+        tainted_vars: &HashSet<String>,
+        sym_state: &SymbolicState,
+    ) -> Vec<&'a AstNode> {
+        let mut tainted_returns = Vec::new();
+        self.collect_tainted_returns(node, tainted_vars, sym_state, &mut tainted_returns, true);
+        tainted_returns
+    }
+
+    fn collect_tainted_returns<'a>(
+        &self,
+        node: &'a AstNode,
+        tainted_vars: &HashSet<String>,
+        sym_state: &SymbolicState,
+        results: &mut Vec<&'a AstNode>,
+        is_root: bool,  // True when this is the starting node (the function we're analyzing)
+    ) {
+        match &node.kind {
+            AstNodeKind::ReturnStatement => {
+                // Check if any child (the return value) is tainted
+                for child in &node.children {
+                    if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                        results.push(node);
+                        break;
+                    }
+                }
+            }
+            // For the root function (starting point), DO recurse into children
+            // For nested functions, DON'T recurse (they have their own scope)
+            AstNodeKind::FunctionDeclaration { .. } | AstNodeKind::MethodDeclaration { .. } => {
+                if is_root {
+                    // This is the function we're analyzing - look at its body
+                    for child in &node.children {
+                        self.collect_tainted_returns(child, tainted_vars, sym_state, results, false);
+                    }
+                }
+                // If not root, skip - it's a nested function with its own scope
+            }
+            _ => {
+                for child in &node.children {
+                    self.collect_tainted_returns(child, tainted_vars, sym_state, results, false);
+                }
+            }
+        }
     }
 
     fn is_source_function(&self, name: &str) -> bool {

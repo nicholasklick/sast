@@ -712,6 +712,23 @@ impl ExtendedStandardLibrary {
                 .build()
         );
 
+        // Python Weak Randomness - Detects random module (but NOT random.SystemRandom or secrets)
+        self.register(
+            "python/weak-random",
+            Self::python_weak_random_query(),
+            QueryMetadata::builder("python/weak-random", "Weak Randomness")
+                .description("Detects use of random module for security purposes (use secrets module)")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![330])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .sans_top_25()
+                .suites(vec![QuerySuite::Default, QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["python".to_string()])
+                .build()
+        );
+
         // Java Insecure Cookie - Detects setSecure(false)
         self.register(
             "java/insecure-cookie",
@@ -2217,6 +2234,51 @@ impl ExtendedStandardLibrary {
     /// Detects:
     /// - new java.util.Random() and its methods (nextInt, nextFloat, nextDouble, nextLong, etc.)
     /// - java.lang.Math.random()
+    /// Python weak randomness detection
+    /// Detects:
+    /// - random.random(), random.randint(), random.normalvariate(), etc.
+    /// Does NOT detect:
+    /// - random.SystemRandom().* (which is secure)
+    /// - secrets.* (which is secure)
+    fn python_weak_random_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::And {
+                    left: Box::new(Predicate::Comparison {
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("call".to_string())),
+                            property: "text".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        // Match random.X() - weak random functions, must start with "random."
+                        // This ensures we match the specific call, not parent nodes
+                        right: Expression::String(r"^random\.(random|randint|choice|shuffle|normalvariate|getrandbits|randbytes|gauss|uniform|randrange|sample)\s*\(".to_string()),
+                    }),
+                    // Exclude SystemRandom - it's cryptographically secure
+                    right: Box::new(Predicate::Not {
+                        predicate: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            right: Expression::String(r"SystemRandom".to_string()),
+                        }),
+                    }),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Weak randomness - use secrets module or random.SystemRandom() instead".to_string(),
+            }]),
+        )
+    }
+
+    /// Java weak randomness detection
+    /// Detects:
+    /// - new java.util.Random().nextXxx()
+    /// - Math.random()
     /// Does NOT detect:
     /// - java.security.SecureRandom (which is secure)
     fn java_weak_random_query() -> Query {
