@@ -673,6 +673,9 @@ impl InterproceduralTaintAnalysis {
                         });
 
                         // Extract key - look for string literal in children
+                        let key_node = lhs.children.iter().skip(1).find(|child| {
+                            !matches!(child.text.as_str(), "[" | "]")
+                        });
                         let key = lhs.children.iter().find_map(|child| {
                             match &child.kind {
                                 AstNodeKind::Literal { value: LiteralValue::String(s) } => {
@@ -686,7 +689,7 @@ impl InterproceduralTaintAnalysis {
                             }
                         });
 
-                        if let (Some(base), Some(key)) = (base_var, key) {
+                        if let (Some(base), Some(key)) = (base_var.clone(), key) {
                             let map_key = format!("{}[{}]", base, key);
                             #[cfg(debug_assertions)]
                             eprintln!("[DEBUG] Subscript assignment: {} = rhs_tainted={}", map_key, rhs_tainted);
@@ -694,6 +697,49 @@ impl InterproceduralTaintAnalysis {
                                 tainted_vars.insert(map_key);
                             } else {
                                 tainted_vars.remove(&map_key);
+                            }
+                        }
+
+                        // Python trust boundary detection: flask.session[...] = tainted_value
+                        // or session[tainted_key] = value
+                        if let Some(ref base) = base_var {
+                            let is_session = base == "flask.session" || base == "session"
+                                || base.ends_with(".session") || base == "request.session";
+
+                            if is_session {
+                                // Check if value (RHS) is tainted
+                                let value_tainted = rhs_tainted;
+                                // Check if key is tainted
+                                let key_tainted = key_node.map(|k| {
+                                    self.is_node_tainted_with_sym(k, tainted_vars, sym_state)
+                                }).unwrap_or(false);
+
+                                if value_tainted || key_tainted {
+                                    let message = if key_tainted && value_tainted {
+                                        "Trust boundary violation - untrusted key and value stored in session"
+                                    } else if key_tainted {
+                                        "Trust boundary violation - untrusted key used for session storage"
+                                    } else {
+                                        "Trust boundary violation - untrusted value stored in session"
+                                    };
+
+                                    vulnerabilities.push(TaintVulnerability {
+                                        sink: TaintSink {
+                                            name: format!("{}[...]", base),
+                                            kind: TaintSinkKind::TrustBoundary,
+                                            node_id: node.location.span.start_line,
+                                        },
+                                        tainted_value: TaintValue::new(
+                                            "user_input".to_string(),
+                                            TaintSourceKind::UserInput,
+                                        ),
+                                        severity: Severity::High,
+                                        file_path: node.location.file_path.clone(),
+                                        line: node.location.span.start_line,
+                                        column: node.location.span.start_column,
+                                        message: message.to_string(),
+                                    });
+                                }
                             }
                         }
                     }
@@ -940,6 +986,65 @@ impl InterproceduralTaintAnalysis {
                 // AssignmentExpression and VariableDeclaration handlers above.
                 // The is_node_tainted() method checks if a CallExpression returns
                 // taint based on function summaries.
+            }
+
+            // Handle Python augmented assignment: x += tainted_value
+            // In Python tree-sitter, this is an "augmented_assignment" node
+            // Structure: [target, operator (+=, -=, etc), value]
+            // For +=, -=, etc., if either the target OR the value is tainted,
+            // the result should be tainted (e.g., s += param makes s tainted)
+            AstNodeKind::Other { node_type } if node_type == "augmented_assignment" => {
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[DEBUG] Augmented assignment with {} children:", node.children.len());
+                    for (i, child) in node.children.iter().enumerate() {
+                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
+                    }
+                }
+
+                // Get target (LHS) and value (RHS)
+                let target = node.children.first();
+                let value = node.children.last();
+
+                if let (Some(target_node), Some(value_node)) = (target, value) {
+                    // Extract variable name from target
+                    let var_name = if let AstNodeKind::Identifier { name } = &target_node.kind {
+                        Some(name.clone())
+                    } else {
+                        // For subscript targets like list[0] += x, extract base name
+                        target_node.children.first().and_then(|n| {
+                            if let AstNodeKind::Identifier { name } = &n.kind {
+                                Some(name.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    };
+
+                    if let Some(name) = var_name {
+                        // For augmented assignment, the result is tainted if:
+                        // 1. The target was already tainted, OR
+                        // 2. The value being added is tainted
+                        let target_tainted = tainted_vars.contains(&name);
+                        let value_tainted = self.is_node_tainted_with_sym(value_node, tainted_vars, sym_state);
+
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG]   Augmented assignment to '{}': target_tainted={}, value_tainted={}",
+                                 name, target_tainted, value_tainted);
+
+                        if target_tainted || value_tainted {
+                            tainted_vars.insert(name.clone());
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG]     -> '{}' is now tainted", name);
+                        }
+                    }
+                }
+
+                // Process children for nested expressions
+                for child in &node.children {
+                    self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
+                }
+                return;
             }
 
             // Handle Java object creation expressions: new ClassName(args)
@@ -2747,6 +2852,33 @@ impl InterproceduralTaintAnalysis {
                     }
                 }
                 // If not root, skip - it's a nested function with its own scope
+            }
+            // Block/compound statement - handle dead code after return
+            AstNodeKind::Block => {
+                // In a sequential block, stop processing after a return statement (dead code elimination)
+                for child in &node.children {
+                    // Check if this child IS a return statement
+                    let is_return = matches!(&child.kind, AstNodeKind::ReturnStatement);
+
+                    // Process this child
+                    self.collect_tainted_returns(child, tainted_vars, sym_state, results, false);
+
+                    // If we just processed a return, stop - rest is dead code
+                    if is_return {
+                        break;
+                    }
+                }
+            }
+            // Python uses "block" or no wrapper at all for function bodies
+            AstNodeKind::Other { node_type } if node_type == "block" || node_type == "compound_statement" => {
+                // In a sequential block, stop processing after a return statement (dead code elimination)
+                for child in &node.children {
+                    let is_return = matches!(&child.kind, AstNodeKind::ReturnStatement);
+                    self.collect_tainted_returns(child, tainted_vars, sym_state, results, false);
+                    if is_return {
+                        break;
+                    }
+                }
             }
             _ => {
                 for child in &node.children {

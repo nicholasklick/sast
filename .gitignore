@@ -4,3 +4,13 @@
 /fuzz/corpus
 /fuzz/artifacts
 .gittera
+GEMINI_review.md
+PLAN.md
+RECOMMENDATIONS-sast-improvements.md
+ROADMAP-FRAMEWORK-SUPPORT.md
+ROADMAP-UNIFIED.md
+ROADMAP-precision-improvements.md
+ROADMAP.md
+VALUATION-GITTERA-FULL.md
+VALUATION.md
+benchmark/

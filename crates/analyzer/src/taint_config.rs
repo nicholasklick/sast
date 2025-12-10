@@ -1595,7 +1595,7 @@ impl LanguageTaintConfig {
 
         // Trust Boundary - storing user data in trusted contexts (session, context)
         for name in &[
-            // HttpSession methods
+            // HttpSession methods (Java)
             "HttpSession.setAttribute",
             "session.setAttribute",
             "getSession().setAttribute",
@@ -1613,6 +1613,11 @@ impl LanguageTaintConfig {
             "PortletSession.setAttribute",
             // Request attributes (can cross trust boundary)
             "request.setAttribute",
+            // Python Flask session (subscript assignment sink)
+            "flask.session",
+            "session",
+            // Django session
+            "request.session",
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
