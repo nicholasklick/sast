@@ -715,9 +715,10 @@ impl LanguageTaintConfig {
         // User Input
         for name in &[
             "request.body", "request.query", "request.params", "process.argv",
-            "req.body", "req.query", "req.params",  // Express shorthand
-            "ctx.request.body", "ctx.request.query",  // Koa
-            "event.body", "event.queryStringParameters",  // AWS Lambda
+            "req.body", "req.query", "req.params", "req.cookies", "req.headers",  // Express
+            "req.get", "req.header",  // Express header getters
+            "ctx.request.body", "ctx.request.query", "ctx.cookies",  // Koa
+            "event.body", "event.queryStringParameters", "event.headers",  // AWS Lambda
         ] {
             sources.push(TaintSource {
                 name: name.to_string(),
@@ -794,6 +795,45 @@ impl LanguageTaintConfig {
             sinks.push(TaintSink {
                 name: name.to_string(),
                 kind: TaintSinkKind::NetworkSend,
+                node_id: 0,
+            });
+        }
+
+        // XPath Injection
+        for name in &[
+            "xpath.select", "xpath.select1", "xpath.evaluate",
+            "xpath.useNamespaces",
+            "document.evaluate",  // DOM XPath
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::XPathQuery,
+                node_id: 0,
+            });
+        }
+
+        // Deserialization
+        for name in &[
+            "unserialize", "serialize.unserialize",
+            "JSON.parse",  // Can be dangerous with reviver
+            "yaml.load", "yaml.safeLoad",
+            "pickle.loads",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::Deserialization,
+                node_id: 0,
+            });
+        }
+
+        // LDAP Injection
+        for name in &[
+            "ldap.search", "ldap.bind", "ldap.add", "ldap.modify",
+            "ldapjs.search", "client.search",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::LdapQuery,
                 node_id: 0,
             });
         }
@@ -1674,10 +1714,35 @@ impl LanguageTaintConfig {
             "session",
             // Django session
             "request.session",
+            // Express.js session (Node.js)
+            "req.session",
+            "res.locals",  // Express locals can cross trust boundary
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
                 kind: TaintSinkKind::TrustBoundary,
+                node_id: 0,
+            });
+        }
+
+        // XML Parsing - XXE sinks (untrusted XML input to parser)
+        for name in &[
+            // JavaScript/Node.js XML parsing
+            "parseFromString",           // DOMParser.parseFromString
+            "parser.parseFromString",    // xmldom DOMParser
+            "parseXml",                  // various XML libraries
+            "parseXmlString",            // libxmljs
+            "xml2js.parseString",        // xml2js
+            "xml2js.Parser.parseString",
+            // Java XML parsing (already have some in Java config)
+            "DocumentBuilder.parse",
+            "SAXParser.parse",
+            "XMLReader.parse",
+            "Unmarshaller.unmarshal",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::XmlParse,
                 node_id: 0,
             });
         }

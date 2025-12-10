@@ -1989,21 +1989,38 @@ impl ExtendedStandardLibrary {
     }
 
     fn insecure_session_cookie_query() -> Query {
+        // Detect res.cookie() calls without secure flag
+        // Pattern: res.cookie('name', value, { path: '/' })  // Missing secure: true
+        // Safe:    res.cookie('name', value, { secure: true, httpOnly: true })
         Query::new(
-            FromClause::new(EntityType::Literal, "obj".to_string()),
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("obj".to_string())),
-                        property: "cookie".to_string(),
-                    },
-                    operator: ComparisonOp::Contains,
-                    right: Expression::String("secure".to_string()),
+                Predicate::And {
+                    left: Box::new(Predicate::Comparison {
+                        // Match .cookie() method calls for setting cookies
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("call".to_string())),
+                            property: "callee".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        right: Expression::String(r"res\.cookie|response\.cookie".to_string()),
+                    }),
+                    right: Box::new(Predicate::Not {
+                        predicate: Box::new(Predicate::Comparison {
+                            // Does NOT have secure: true in the options
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            right: Expression::String(r"secure:\s*true".to_string()),
+                        }),
+                    }),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {
-                variable: "obj".to_string(),
-                message: "Insecure session cookie configuration".to_string(),
+                variable: "call".to_string(),
+                message: "Cookie set without secure flag - add { secure: true, httpOnly: true }".to_string(),
             }]),
         )
     }

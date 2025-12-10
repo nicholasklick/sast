@@ -137,9 +137,10 @@ RULE_TO_CATEGORY = {
     # Trust Boundary
     "js/session-fixation": "trustbound",
 
-    # Code Injection (maps to cmdi for benchmark purposes)
-    "js/code-injection": "cmdi",
-    "taint/code-injection": "cmdi",
+    # Code Injection
+    "js/code-injection": "codeinj",
+    "taint/code-injection": "codeinj",
+    "taint/codeeval": "codeinj",
 
     # Template Injection (maps to cmdi)
     "js/template-injection": "cmdi",
@@ -155,6 +156,8 @@ RULE_TO_CATEGORY = {
 
     # XXE
     "js/xxe": "xxe",
+    "taint/xxe": "xxe",
+    "taint/xmlparse": "xxe",
 }
 
 # CWE to OWASP category mapping (fallback)

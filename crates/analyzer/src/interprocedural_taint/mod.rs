@@ -515,8 +515,8 @@ impl InterproceduralTaintAnalysis {
                                     #[cfg(debug_assertions)]
                                     eprintln!("[DEBUG] Multi-return/tuple unpacking detected: variables={:?}", var_names);
 
-                                    // Check if initializer is tainted
-                                    let initializer_tainted = self.is_initializer_tainted(node, tainted_vars);
+                                    // Check if initializer is tainted (with symbolic state for ternary evaluation)
+                                    let initializer_tainted = self.is_initializer_tainted_with_sym(node, tainted_vars, sym_state);
 
                                     if initializer_tainted {
                                         // Different handling based on language conventions:
@@ -597,9 +597,9 @@ impl InterproceduralTaintAnalysis {
                     }
                 }
 
-                // Check if initializer is tainted (but not already handled by sanitizer)
+                // Check if initializer is tainted (with symbolic state for ternary evaluation)
                 if !sanitizer_with_tainted_input {
-                    if self.is_initializer_tainted(node, tainted_vars) {
+                    if self.is_initializer_tainted_with_sym(node, tainted_vars, sym_state) {
                         tainted_vars.insert(name.clone());
 
                         // SANITIZATION PROPAGATION: If all tainted variables in the initializer
@@ -741,6 +741,41 @@ impl InterproceduralTaintAnalysis {
                                     });
                                 }
                             }
+                        }
+                    }
+
+                    // Handle JavaScript/TypeScript member expression assignment: obj.prop = value
+                    // This catches patterns like: req.session.userid = bar
+                    if matches!(&lhs.kind, AstNodeKind::MemberExpression { .. }) {
+                        let lhs_text = lhs.text.trim();
+
+                        // Check if this is a session assignment
+                        // Patterns: req.session.*, session.*, request.session.*, res.locals.*
+                        let is_session_assign = lhs_text.starts_with("req.session.")
+                            || lhs_text.starts_with("session.")
+                            || lhs_text.starts_with("request.session.")
+                            || lhs_text.starts_with("res.locals.");
+
+                        if is_session_assign && rhs_tainted {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG] Trust boundary: member expression assignment {} = tainted", lhs_text);
+
+                            vulnerabilities.push(TaintVulnerability {
+                                sink: TaintSink {
+                                    name: lhs_text.to_string(),
+                                    kind: TaintSinkKind::TrustBoundary,
+                                    node_id: node.location.span.start_line,
+                                },
+                                tainted_value: TaintValue::new(
+                                    "user_input".to_string(),
+                                    TaintSourceKind::UserInput,
+                                ),
+                                severity: Severity::High,
+                                file_path: node.location.file_path.clone(),
+                                line: node.location.span.start_line,
+                                column: node.location.span.start_column,
+                                message: "Trust boundary violation - untrusted value stored in session".to_string(),
+                            });
                         }
                     }
 
@@ -1904,8 +1939,8 @@ impl InterproceduralTaintAnalysis {
         }
     }
 
-    /// Check if initializer expression is tainted
-    fn is_initializer_tainted(&self, node: &AstNode, tainted_vars: &HashSet<String>) -> bool {
+    /// Check if initializer expression is tainted (uses symbolic state for ternary evaluation)
+    fn is_initializer_tainted_with_sym(&self, node: &AstNode, tainted_vars: &HashSet<String>, sym_state: &SymbolicState) -> bool {
         // Check children for tainted references or source calls
         for child in &node.children {
             if let AstNodeKind::CallExpression { callee, .. } = &child.kind {
@@ -1925,10 +1960,10 @@ impl InterproceduralTaintAnalysis {
                 }
             }
 
-            // Recursively check
-            let tainted = self.is_node_tainted(child, tainted_vars);
+            // Recursively check with symbolic state for ternary evaluation
+            let tainted = self.is_node_tainted_with_sym(child, tainted_vars, sym_state);
             #[cfg(debug_assertions)]
-            eprintln!("[DEBUG] is_initializer_tainted: is_node_tainted returned {} for child {:?}", tainted, child.kind);
+            eprintln!("[DEBUG] is_initializer_tainted: is_node_tainted_with_sym returned {} for child {:?}", tainted, child.kind);
             if tainted {
                 return true;
             }
@@ -1937,6 +1972,11 @@ impl InterproceduralTaintAnalysis {
         #[cfg(debug_assertions)]
         eprintln!("[DEBUG] is_initializer_tainted: returning false (nothing tainted)");
         false
+    }
+
+    /// Check if initializer expression is tainted (without symbolic state - legacy)
+    fn is_initializer_tainted(&self, node: &AstNode, tainted_vars: &HashSet<String>) -> bool {
+        self.is_initializer_tainted_with_sym(node, tainted_vars, &SymbolicState::new())
     }
 
     /// Check if a node contains tainted data
