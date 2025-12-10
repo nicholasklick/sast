@@ -5,6 +5,7 @@
 //!
 //! ## Submodules
 //!
+//! - `ast_helpers`: Pure AST extraction and helper functions
 //! - `collection_tracking`: Index-precise taint tracking through collections (lists, maps)
 //! - `sanitizer_handling`: Detection and flow-state-aware sanitization
 //!
@@ -20,10 +21,25 @@
 //! sink(bar);  // NOT a vulnerability
 //! ```
 
+pub mod ast_helpers;
 pub mod collection_tracking;
 pub mod sanitizer_handling;
 
 // Re-export commonly used types from submodules
+pub use ast_helpers::{
+    extract_variable_name,
+    extract_method_call_receiver,
+    extract_identifier,
+    find_arg_at_index,
+    text_contains_word,
+    find_function_node,
+    extract_parameters,
+    has_early_return,
+    is_collection_init,
+    extract_call_arguments,
+    get_method_name,
+    is_getter_method,
+};
 pub use collection_tracking::{CollectionTrackingState, MAX_TRACKED_LIST_SIZE, is_collection_initialization};
 pub use sanitizer_handling::{
     is_sanitizer_name,
@@ -2414,72 +2430,14 @@ impl InterproceduralTaintAnalysis {
 
     /// Extract variable name from a node for sanitization checking
     fn extract_variable_name(&self, node: &AstNode) -> Option<String> {
-        match &node.kind {
-            AstNodeKind::Identifier { name } => Some(name.clone()),
-            AstNodeKind::MemberExpression { .. } => {
-                // For member expressions like obj.field, return the whole thing
-                Some(node.text.trim().to_string())
-            }
-            _ => {
-                // Try to find an identifier in children
-                for child in &node.children {
-                    if let AstNodeKind::Identifier { name } = &child.kind {
-                        return Some(name.clone());
-                    }
-                }
-                // Last resort: use the text
-                let text = node.text.trim();
-                if !text.is_empty() && text.len() < 100 {
-                    Some(text.to_string())
-                } else {
-                    None
-                }
-            }
-        }
+        ast_helpers::extract_variable_name(node)
     }
 
     /// Extract the receiver of a method call expression.
     /// For `bar.toCharArray()`, returns Some("bar").
     /// This handles cases where sanitized data flows through value-preserving methods.
     fn extract_method_call_receiver(&self, node: &AstNode) -> Option<String> {
-        // Check CallExpression with member callee
-        if let AstNodeKind::CallExpression { .. } = &node.kind {
-            // Find the member expression child which contains the object name
-            for child in &node.children {
-                if let AstNodeKind::MemberExpression { object, .. } = &child.kind {
-                    // `object` is a String containing the object name
-                    let obj_text = object.trim();
-                    if !obj_text.is_empty()
-                        && obj_text.chars().all(|c| c.is_alphanumeric() || c == '_')
-                        && !obj_text.chars().next().map(|c| c.is_numeric()).unwrap_or(true)
-                    {
-                        return Some(obj_text.to_string());
-                    }
-                }
-            }
-        }
-
-        // Try text-based parsing for "bar.method()" patterns
-        // Also handles "(bar.toCharArray())" from argument_list nodes
-        let text = node.text.trim();
-        // Strip leading/trailing parentheses that come from argument_list nodes
-        let text = text.trim_start_matches('(').trim_end_matches(')').trim();
-
-        if text.contains('.') && text.contains('(') {
-            // Extract receiver before the first dot
-            if let Some(dot_pos) = text.find('.') {
-                let receiver = &text[..dot_pos];
-                // Only return if it looks like a simple identifier
-                if !receiver.is_empty()
-                    && receiver.chars().all(|c| c.is_alphanumeric() || c == '_')
-                    && !receiver.chars().next().map(|c| c.is_numeric()).unwrap_or(true)
-                {
-                    return Some(receiver.to_string());
-                }
-            }
-        }
-
-        None
+        ast_helpers::extract_method_call_receiver(node)
     }
 
     /// Compute inherited sanitization states for a variable declaration.
@@ -2567,56 +2525,17 @@ impl InterproceduralTaintAnalysis {
 
     /// Check if text contains a word (with word boundaries)
     fn text_contains_word(&self, text: &str, word: &str) -> bool {
-        // Simple word boundary check: the word must be surrounded by non-identifier chars
-        for (idx, _) in text.match_indices(word) {
-            let before = if idx > 0 { text.chars().nth(idx - 1) } else { None };
-            let after = text.chars().nth(idx + word.len());
-
-            let before_is_boundary = before.map_or(true, |c| !c.is_alphanumeric() && c != '_');
-            let after_is_boundary = after.map_or(true, |c| !c.is_alphanumeric() && c != '_');
-
-            if before_is_boundary && after_is_boundary {
-                return true;
-            }
-        }
-        false
+        ast_helpers::text_contains_word(text, word)
     }
 
     // Helper methods
 
     fn find_function_node<'a>(&self, ast: &'a AstNode, func_name: &str) -> Option<&'a AstNode> {
-        match &ast.kind {
-            AstNodeKind::FunctionDeclaration { name, .. } if name == func_name => {
-                return Some(ast);
-            }
-            AstNodeKind::MethodDeclaration { name, .. } => {
-                // Handle both "ClassName.methodName" and just "methodName"
-                if func_name.ends_with(&format!(".{}", name)) || name == func_name {
-                    return Some(ast);
-                }
-            }
-            _ => {}
-        }
-
-        for child in &ast.children {
-            if let Some(found) = self.find_function_node(child, func_name) {
-                return Some(found);
-            }
-        }
-
-        None
+        ast_helpers::find_function_node(ast, func_name)
     }
 
     fn extract_parameters(&self, func: &AstNode) -> Vec<String> {
-        match &func.kind {
-            AstNodeKind::FunctionDeclaration { parameters, .. } => {
-                parameters.iter().map(|p| p.name.clone()).collect()
-            }
-            AstNodeKind::MethodDeclaration { parameters, .. } => {
-                parameters.iter().map(|p| p.name.clone()).collect()
-            }
-            _ => vec![],
-        }
+        ast_helpers::extract_parameters(func)
     }
 
     /// Analyze a method to determine if it returns tainted data given tainted parameters.
@@ -2685,17 +2604,7 @@ impl InterproceduralTaintAnalysis {
     }
 
     fn extract_identifier(&self, node: &AstNode) -> Option<String> {
-        match &node.kind {
-            AstNodeKind::Identifier { name } => Some(name.clone()),
-            _ => {
-                for child in &node.children {
-                    if let Some(id) = self.extract_identifier(child) {
-                        return Some(id);
-                    }
-                }
-                None
-            }
-        }
+        ast_helpers::extract_identifier(node)
     }
 
     fn is_source_function(&self, name: &str) -> bool {
@@ -2984,15 +2893,7 @@ impl InterproceduralTaintAnalysis {
 
     /// Find the argument at a specific index in a CallExpression node
     fn find_arg_at_index<'a>(&self, node: &'a AstNode, index: usize) -> Option<&'a AstNode> {
-        for child in &node.children {
-            if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list" || node_type == "arguments") {
-                let args: Vec<&AstNode> = child.children.iter()
-                    .filter(|c| !matches!(&c.kind, AstNodeKind::Other { node_type } if node_type == "(" || node_type == ")" || node_type == ","))
-                    .collect();
-                return args.get(index).copied();
-            }
-        }
-        None
+        ast_helpers::find_arg_at_index(node, index)
     }
 
     fn is_sink_function(&self, name: &str) -> bool {
@@ -3343,16 +3244,7 @@ impl InterproceduralTaintAnalysis {
 
     /// Check if a node or any of its descendants contains a return statement
     fn has_early_return(&self, node: &AstNode) -> bool {
-        match &node.kind {
-            AstNodeKind::ReturnStatement => true,
-            AstNodeKind::ThrowStatement { .. } => true,
-            // Also consider raise in Python (represented as CallExpression to "raise")
-            AstNodeKind::CallExpression { callee, .. } if callee == "raise" => true,
-            _ => {
-                // Check children
-                node.children.iter().any(|c| self.has_early_return(c))
-            }
-        }
+        ast_helpers::has_early_return(node)
     }
 
     fn find_sink_by_name(&self, name: &str) -> Option<&TaintSink> {
