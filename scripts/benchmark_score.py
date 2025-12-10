@@ -75,12 +75,14 @@ RULE_TO_CATEGORY = {
     "js/sql-injection-extended": "sqli",
     "java/sql-injection": "sqli",
     "taint/sql-injection": "sqli",
+    "taint/sqlquery": "sqli",
 
     # Command Injection
     "js/command-injection": "cmdi",
     "js/command-injection-extended": "cmdi",
     "java/command-injection": "cmdi",
     "taint/command-injection": "cmdi",
+    "taint/commandexecution": "cmdi",
 
     # XSS
     "js/dom-xss": "xss",
@@ -99,6 +101,7 @@ RULE_TO_CATEGORY = {
     "taint/path-traversal": "pathtraver",
     "taint/pathtraversal": "pathtraver",
     "taint/arbitrary-file-write": "pathtraver",
+    "taint/filewrite": "pathtraver",
 
     # Weak Hash
     "js/weak-hash": "hash",
@@ -113,11 +116,13 @@ RULE_TO_CATEGORY = {
     "js/ldap-injection": "ldapi",
     "java/ldap-injection": "ldapi",
     "taint/ldap-injection": "ldapi",
+    "taint/ldapquery": "ldapi",
 
     # XPath Injection
     "js/xpath-injection": "xpathi",
     "java/xpath-injection": "xpathi",
     "taint/xpath-injection": "xpathi",
+    "taint/xpathquery": "xpathi",
 
     # Trust Boundary Violation
     "taint/trustboundary": "trustbound",
@@ -133,6 +138,9 @@ RULE_TO_CATEGORY = {
     "js/predictable-seed": "weakrand",
     "java/weak-random": "weakrand",
     "python/weak-random": "weakrand",
+    "ruby/weak-random": "weakrand",
+    "go/weak-random": "weakrand",
+    "rust/weak-random": "weakrand",
 
     # Trust Boundary
     "js/session-fixation": "trustbound",
@@ -150,6 +158,7 @@ RULE_TO_CATEGORY = {
 
     # Deserialization
     "js/insecure-deserialization": "deserialization",
+    "taint/deserialization": "deserialization",
 
     # Open Redirect
     "js/open-redirect": "redirect",

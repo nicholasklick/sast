@@ -346,6 +346,7 @@ impl LanguageTaintConfig {
         // SQL Injection (ActiveRecord & Raw SQL)
         let sql_sinks = vec![
             "execute",
+            "execute_raw",      // Custom raw SQL execution
             "exec_query",
             "select_all",
             "select_one",
@@ -368,7 +369,6 @@ impl LanguageTaintConfig {
         // File Write
         let file_write_sinks = vec![
             "File.write",
-            "File.open",        // With 'w' mode
             "IO.write",
             "File.binwrite",
             "FileUtils.cp",
@@ -380,6 +380,29 @@ impl LanguageTaintConfig {
             sinks.push(TaintSink {
                 name: name.to_string(),
                 kind: TaintSinkKind::FileWrite,
+                node_id: 0,
+            });
+        }
+
+        // Path Traversal (file read with untrusted path)
+        let path_traversal_sinks = vec![
+            "File.read",
+            "File.open",
+            "File.readlines",
+            "File.binread",
+            "IO.read",
+            "IO.readlines",
+            "File.join",       // Building file paths
+            "Pathname.new",
+            "File.expand_path",
+            "send_file",       // Rails file serving
+            "send_data",
+        ];
+
+        for name in path_traversal_sinks {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::PathTraversal,
                 node_id: 0,
             });
         }

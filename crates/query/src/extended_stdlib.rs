@@ -729,6 +729,57 @@ impl ExtendedStandardLibrary {
                 .build()
         );
 
+        // Ruby Weak Randomness - Detects rand() and Random.rand() (but NOT SecureRandom)
+        self.register(
+            "ruby/weak-random",
+            Self::ruby_weak_random_query(),
+            QueryMetadata::builder("ruby/weak-random", "Weak Randomness")
+                .description("Detects use of rand() for security purposes (use SecureRandom)")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![330])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .sans_top_25()
+                .suites(vec![QuerySuite::Default, QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["ruby".to_string()])
+                .build()
+        );
+
+        // Go Weak Randomness - Detects math/rand package (but NOT crypto/rand)
+        self.register(
+            "go/weak-random",
+            Self::go_weak_random_query(),
+            QueryMetadata::builder("go/weak-random", "Weak Randomness")
+                .description("Detects use of math/rand for security purposes (use crypto/rand)")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![330])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .sans_top_25()
+                .suites(vec![QuerySuite::Default, QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["go".to_string()])
+                .build()
+        );
+
+        // Rust Weak Randomness - Detects rand crate without OS randomness
+        self.register(
+            "rust/weak-random",
+            Self::rust_weak_random_query(),
+            QueryMetadata::builder("rust/weak-random", "Weak Randomness")
+                .description("Detects use of rand crate for security purposes (use rand::rngs::OsRng)")
+                .category(QueryCategory::Cryptography)
+                .severity(QuerySeverity::High)
+                .precision(QueryPrecision::High)
+                .cwes(vec![330])
+                .owasp("A02:2021 - Cryptographic Failures")
+                .sans_top_25()
+                .suites(vec![QuerySuite::Default, QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["rust".to_string()])
+                .build()
+        );
+
         // Java Insecure Cookie - Detects setSecure(false)
         self.register(
             "java/insecure-cookie",
@@ -2319,6 +2370,127 @@ impl ExtendedStandardLibrary {
             SelectClause::new(vec![SelectItem::Both {
                 variable: "node".to_string(),
                 message: "Weak randomness - use java.security.SecureRandom instead".to_string(),
+            }]),
+        )
+    }
+
+    /// Ruby weak randomness detection
+    /// Detects:
+    /// - rand() or rand(n) - Kernel method
+    /// - rand without parens (e.g., rand * 1000)
+    /// - Random.rand() or Random.new.rand()
+    /// Does NOT detect:
+    /// - SecureRandom.* (which is secure)
+    fn ruby_weak_random_query() -> Query {
+        Query::new(
+            // Use AnyNode to catch rand without parens (which isn't a CallExpression)
+            FromClause::new(EntityType::AnyNode, "node".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::And {
+                    left: Box::new(Predicate::Comparison {
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("node".to_string())),
+                            property: "text".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        // Match rand (with or without parens) or Random.rand() or Random.new.rand()
+                        // Very specific patterns to avoid false positives
+                        right: Expression::String(r"^rand\s*\(|^rand$|^Random\.(rand|new)".to_string()),
+                    }),
+                    // Exclude SecureRandom - it's cryptographically secure
+                    right: Box::new(Predicate::Not {
+                        predicate: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("node".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            right: Expression::String(r"SecureRandom".to_string()),
+                        }),
+                    }),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "node".to_string(),
+                message: "Weak randomness - use SecureRandom instead".to_string(),
+            }]),
+        )
+    }
+
+    /// Go weak randomness detection
+    /// Detects:
+    /// - rand.Intn(), rand.Int(), rand.Float64(), etc. from math/rand
+    /// Does NOT detect:
+    /// - crypto/rand (which is secure)
+    fn go_weak_random_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::And {
+                    left: Box::new(Predicate::Comparison {
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("call".to_string())),
+                            property: "text".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        // Match rand.Intn, rand.Int, rand.Float64, rand.Read, etc.
+                        right: Expression::String(r"^rand\.(Intn|Int31|Int63|Int|Float32|Float64|Uint32|Uint64|Read|Seed|Perm|Shuffle)\s*\(".to_string()),
+                    }),
+                    // Exclude crypto/rand imports
+                    right: Box::new(Predicate::Not {
+                        predicate: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            right: Expression::String(r"crypto".to_string()),
+                        }),
+                    }),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Weak randomness - use crypto/rand instead of math/rand".to_string(),
+            }]),
+        )
+    }
+
+    /// Rust weak randomness detection
+    /// Detects:
+    /// - rand::thread_rng().gen(), rand::random(), etc.
+    /// Does NOT detect:
+    /// - rand::rngs::OsRng (which uses OS randomness)
+    fn rust_weak_random_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::And {
+                    left: Box::new(Predicate::Comparison {
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("call".to_string())),
+                            property: "text".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        // Match rand::thread_rng().gen(), rand::random(), etc.
+                        right: Expression::String(r"rand::(thread_rng|random)|\.gen\s*[:<(]".to_string()),
+                    }),
+                    // Exclude OsRng (secure)
+                    right: Box::new(Predicate::Not {
+                        predicate: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            right: Expression::String(r"OsRng".to_string()),
+                        }),
+                    }),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Weak randomness - use OsRng or getrandom crate for cryptographic purposes".to_string(),
             }]),
         )
     }

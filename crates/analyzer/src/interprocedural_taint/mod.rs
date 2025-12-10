@@ -3586,16 +3586,18 @@ impl InterproceduralTaintAnalysis {
         ];
         let is_common_method = common_methods.contains(&method_name.as_str());
 
-        // Also check if the sink would match via substring and that's problematic
-        // e.g., "open" should not match "os.popen" just because popen contains open
+        // Find the BEST matching sink (longest match wins) to avoid short sinks like "exec"
+        // matching longer methods like "execute_raw" when a more specific sink exists
+        let mut best_match: Option<&TaintSink> = None;
+        let mut best_match_len = 0;
 
-        let result = self.sinks.iter().find(|s| {
+        for s in &self.sinks {
             let sink_lower = s.name.to_lowercase();
             let sink_method = s.name.split('.').last().unwrap_or(&s.name).to_lowercase();
 
-            // Exact match (most reliable)
+            // Exact match (most reliable) - immediately return
             if name_lower == sink_lower {
-                return true;
+                return Some(s);
             }
 
             // Match by method name ending or starting with sink method
@@ -3603,30 +3605,33 @@ impl InterproceduralTaintAnalysis {
             // But only if the sink method is not a common method
             if !is_common_method && sink_method.len() >= 4 {
                 // Check if the method name ends with the sink method name
-                if method_name.ends_with(&sink_method) {
-                    return true;
+                if method_name.ends_with(&sink_method) && sink_method.len() > best_match_len {
+                    best_match = Some(s);
+                    best_match_len = sink_method.len();
+                    continue;
                 }
                 // Check if the method name starts with the sink method name
-                if method_name.starts_with(&sink_method) {
-                    return true;
+                if method_name.starts_with(&sink_method) && sink_method.len() > best_match_len {
+                    best_match = Some(s);
+                    best_match_len = sink_method.len();
+                    continue;
                 }
             }
 
             // Match by method name only if it's not a common method
             // (to avoid map.get matching Paths.get)
-            if !is_common_method && method_name == sink_method {
-                return true;
+            if !is_common_method && method_name == sink_method && sink_method.len() > best_match_len {
+                best_match = Some(s);
+                best_match_len = sink_method.len();
             }
-
-            false
-        });
+        }
 
         #[cfg(debug_assertions)]
-        if result.is_none() && self.is_sink_function(name) {
+        if best_match.is_none() && self.is_sink_function(name) {
             eprintln!("[DEBUG] find_sink_by_name('{}') = None, but is_sink_function=true", name);
         }
 
-        result
+        best_match
     }
 
     /// Configure default sources
