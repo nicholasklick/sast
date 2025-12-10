@@ -465,6 +465,77 @@ impl InterproceduralTaintAnalysis {
                     tainted_vars.retain(|v| !v.starts_with(&prefix));
                 }
 
+                // Handle multi-return/tuple unpacking assignments
+                // Go: val, err := fn()
+                // Python: a, b = func()
+                // The parser only captures the first variable name, but the node text has all of them
+                // Extract all LHS variables and handle taint for each appropriately
+                let is_multi_assign_language = matches!(self.language, Language::Go | Language::Python);
+                if is_multi_assign_language {
+                    let text = node.text.trim();
+                    // Detect assignment patterns
+                    let has_assignment = text.contains(":=") || text.contains(" = ");
+
+                    if has_assignment {
+                        // Parse LHS variable names from the text
+                        // Go format: "var1, var2, ... := expr"
+                        // Python format: "var1, var2 = expr"
+                        let lhs_rhs: Vec<&str> = if text.contains(":=") {
+                            text.splitn(2, ":=").collect()
+                        } else {
+                            text.splitn(2, " = ").collect()
+                        };
+
+                        if lhs_rhs.len() == 2 {
+                            let lhs = lhs_rhs[0].trim();
+                            // Check if LHS has multiple variables (comma-separated)
+                            if lhs.contains(',') {
+                                let var_names: Vec<&str> = lhs.split(',')
+                                    .map(|s| s.trim())
+                                    .filter(|s| !s.is_empty() && *s != "_")
+                                    .collect();
+
+                                if var_names.len() > 1 {
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("[DEBUG] Multi-return/tuple unpacking detected: variables={:?}", var_names);
+
+                                    // Check if initializer is tainted
+                                    let initializer_tainted = self.is_initializer_tainted(node, tainted_vars);
+
+                                    if initializer_tainted {
+                                        // Different handling based on language conventions:
+                                        // Go: first return value often carries data, second is error
+                                        //     data, err := fn() - data is tainted, err typically isn't
+                                        // Python: all tuple elements may carry tainted data
+                                        //     a, b = func() - both could be tainted
+
+                                        if self.language == Language::Go {
+                                            // Go convention: mark first variable (data) as tainted
+                                            if let Some(first_var) = var_names.first() {
+                                                #[cfg(debug_assertions)]
+                                                eprintln!("[DEBUG] Go multi-return: marking '{}' as tainted (first return value)", first_var);
+                                                tainted_vars.insert(first_var.to_string());
+                                            }
+                                        } else {
+                                            // Python: mark all variables as tainted (conservative)
+                                            for var_name in &var_names {
+                                                #[cfg(debug_assertions)]
+                                                eprintln!("[DEBUG] Python tuple unpacking: marking '{}' as tainted", var_name);
+                                                tainted_vars.insert(var_name.to_string());
+                                            }
+                                        }
+                                    } else {
+                                        // If not tainted, ensure all variables are clean
+                                        for var_name in &var_names {
+                                            tainted_vars.remove(*var_name);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Check if initializer is a sanitizer call - track context-specific sanitization
                 // Look for CallExpression in children (the initializer)
                 let mut sanitizer_with_tainted_input = false;
@@ -2143,6 +2214,34 @@ impl InterproceduralTaintAnalysis {
 
                 false
             }
+
+            // Handle await expressions: const result = await promise
+            // Taint flows from the awaited expression to the result
+            AstNodeKind::AwaitExpression => {
+                // The awaited expression is in the children - if it's tainted, the result is tainted
+                for child in &node.children {
+                    if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] AwaitExpression: awaited value is tainted");
+                        return true;
+                    }
+                }
+                false
+            }
+
+            // Handle yield expressions: yield value, yield* iterable
+            AstNodeKind::YieldExpression { .. } => {
+                // Yielded value taint propagates
+                for child in &node.children {
+                    if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] YieldExpression: yielded value is tainted");
+                        return true;
+                    }
+                }
+                false
+            }
+
             _ => {
                 // Check children
                 node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
