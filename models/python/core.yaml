@@ -497,3 +497,55 @@ summaries:
     input: "Argument[0]"
     output: "ReturnValue"
     kind: value
+
+  # JSON parsing - taint flows from input string to parsed object
+  - name: "json.loads"
+    package: "json"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "json.load"
+    package: "json"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "loads"
+    package: "json"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "load"
+    package: "json"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  # YAML parsing (safe loader is a sanitizer, not listed here)
+  - name: "yaml.safe_load"
+    package: "yaml"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  # XML parsing
+  - name: "fromstring"
+    package: "xml.etree.ElementTree"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "parse"
+    package: "xml.etree.ElementTree"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  # configparser
+  - name: "read_string"
+    package: "configparser"
+    input: "Argument[0]"
+    output: "Argument[this]"
+    kind: taint

@@ -15,10 +15,151 @@ sources:
     kind: UserInput
     description: "Read all lines from stdin"
 
+  - name: "STDIN.read"
+    kind: UserInput
+    description: "Read from stdin"
+
+  - name: "STDIN.gets"
+    kind: UserInput
+    description: "Read line from stdin"
+
+  # Rails - params hash (primary user input)
+  - name: "params"
+    kind: UserInput
+    description: "Rails params hash"
+
+  - name: "params[]"
+    kind: UserInput
+    description: "Rails params access"
+
+  - name: "request.params"
+    kind: UserInput
+    description: "Rails request params"
+
+  - name: "request.parameters"
+    kind: UserInput
+    description: "Rails request parameters"
+
+  # Rails - request object
+  - name: "request.body"
+    kind: UserInput
+    description: "Rails request body"
+
+  - name: "request.raw_post"
+    kind: UserInput
+    description: "Rails raw POST body"
+
+  - name: "request.query_string"
+    kind: UserInput
+    description: "Rails query string"
+
+  - name: "request.query_parameters"
+    kind: UserInput
+    description: "Rails query parameters"
+
+  - name: "request.request_parameters"
+    kind: UserInput
+    description: "Rails request parameters"
+
+  - name: "request.path"
+    kind: UserInput
+    description: "Rails request path"
+
+  - name: "request.fullpath"
+    kind: UserInput
+    description: "Rails full request path"
+
+  - name: "request.original_url"
+    kind: UserInput
+    description: "Rails original URL"
+
+  - name: "request.url"
+    kind: UserInput
+    description: "Rails request URL"
+
+  - name: "request.host"
+    kind: UserInput
+    description: "Rails request host"
+
+  - name: "request.remote_ip"
+    kind: UserInput
+    description: "Rails remote IP"
+
+  - name: "request.remote_addr"
+    kind: UserInput
+    description: "Rails remote address"
+
+  # Rails - headers
+  - name: "request.headers"
+    kind: UserInput
+    description: "Rails request headers"
+
+  - name: "request.headers[]"
+    kind: UserInput
+    description: "Rails request header access"
+
+  - name: "request.env"
+    kind: UserInput
+    description: "Rails request environment"
+
+  - name: "request.user_agent"
+    kind: UserInput
+    description: "Rails user agent"
+
+  - name: "request.referer"
+    kind: UserInput
+    description: "Rails referer header"
+
+  - name: "request.referrer"
+    kind: UserInput
+    description: "Rails referrer header"
+
+  - name: "request.content_type"
+    kind: UserInput
+    description: "Rails content type"
+
+  # Rails - cookies
+  - name: "cookies"
+    kind: UserInput
+    description: "Rails cookies hash"
+
+  - name: "cookies[]"
+    kind: UserInput
+    description: "Rails cookie access"
+
+  - name: "request.cookies"
+    kind: UserInput
+    description: "Rails request cookies"
+
+  - name: "session"
+    kind: UserInput
+    description: "Rails session (may contain user data)"
+
+  - name: "session[]"
+    kind: UserInput
+    description: "Rails session access"
+
+  # Sinatra
+  - name: "request.POST"
+    kind: UserInput
+    description: "Sinatra POST params"
+
+  - name: "request.GET"
+    kind: UserInput
+    description: "Sinatra GET params"
+
   # Environment
   - name: "ENV"
     kind: Environment
     description: "Environment variable access"
+
+  - name: "ENV[]"
+    kind: Environment
+    description: "Environment variable access"
+
+  - name: "ENV.fetch"
+    kind: Environment
+    description: "Environment variable fetch"
 
   # File I/O
   - name: "read"
@@ -35,6 +176,39 @@ sources:
     kind: File
     package: "File"
     description: "Open file"
+
+  - name: "File.read"
+    kind: File
+    description: "Read file contents"
+
+  - name: "File.open"
+    kind: File
+    description: "Open file"
+
+  - name: "File.binread"
+    kind: File
+    description: "Read binary file"
+
+  - name: "IO.read"
+    kind: File
+    description: "Read from IO"
+
+  # Network
+  - name: "Net::HTTP.get"
+    kind: Network
+    description: "HTTP GET request"
+
+  - name: "RestClient.get"
+    kind: Network
+    description: "RestClient GET"
+
+  - name: "HTTParty.get"
+    kind: Network
+    description: "HTTParty GET"
+
+  - name: "Faraday.get"
+    kind: Network
+    description: "Faraday GET"
 
 sinks:
   # Command Injection
@@ -302,5 +476,52 @@ summaries:
   - name: "last"
     package: "Array"
     input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  # JSON parsing - taint flows from input to parsed object
+  - name: "parse"
+    package: "JSON"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "JSON.parse"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "load"
+    package: "JSON"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  # YAML safe_load is safer but still propagates taint
+  - name: "safe_load"
+    package: "YAML"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "YAML.safe_load"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  # XML parsing
+  - name: "parse"
+    package: "Nokogiri"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "Nokogiri::XML"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "Nokogiri::HTML"
+    input: "Argument[0]"
     output: "ReturnValue"
     kind: taint

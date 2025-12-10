@@ -17,6 +17,16 @@ sources:
     package: "flag"
     description: "Flag int value"
 
+  - name: "flag.Arg"
+    kind: UserInput
+    package: "flag"
+    description: "Flag argument"
+
+  - name: "flag.Args"
+    kind: UserInput
+    package: "flag"
+    description: "Flag arguments"
+
   # HTTP (net/http)
   - name: "r.FormValue"
     kind: UserInput
@@ -30,21 +40,220 @@ sources:
     kind: UserInput
     description: "HTTP query parameter"
 
+  - name: "r.URL.Path"
+    kind: UserInput
+    description: "HTTP URL path"
+
+  - name: "r.URL.RawQuery"
+    kind: UserInput
+    description: "HTTP raw query string"
+
   - name: "r.PostFormValue"
     kind: UserInput
     description: "HTTP POST form value"
+
+  - name: "r.MultipartForm"
+    kind: UserInput
+    description: "HTTP multipart form"
 
   - name: "r.Header.Get"
     kind: UserInput
     description: "HTTP header value"
 
+  - name: "r.Header.Values"
+    kind: UserInput
+    description: "HTTP header values"
+
   - name: "r.Cookie"
     kind: UserInput
     description: "HTTP cookie"
 
+  - name: "r.Cookies"
+    kind: UserInput
+    description: "HTTP cookies"
+
   - name: "r.Body"
     kind: UserInput
     description: "HTTP request body"
+
+  - name: "r.Host"
+    kind: UserInput
+    description: "HTTP request host"
+
+  - name: "r.RemoteAddr"
+    kind: UserInput
+    description: "HTTP remote address"
+
+  - name: "r.RequestURI"
+    kind: UserInput
+    description: "HTTP request URI"
+
+  - name: "r.Referer"
+    kind: UserInput
+    description: "HTTP referer"
+
+  - name: "r.UserAgent"
+    kind: UserInput
+    description: "HTTP user agent"
+
+  # Gin Framework
+  - name: "c.Query"
+    kind: UserInput
+    description: "Gin query parameter"
+
+  - name: "c.DefaultQuery"
+    kind: UserInput
+    description: "Gin query parameter with default"
+
+  - name: "c.QueryArray"
+    kind: UserInput
+    description: "Gin query parameter array"
+
+  - name: "c.QueryMap"
+    kind: UserInput
+    description: "Gin query parameter map"
+
+  - name: "c.Param"
+    kind: UserInput
+    description: "Gin URL parameter"
+
+  - name: "c.PostForm"
+    kind: UserInput
+    description: "Gin POST form value"
+
+  - name: "c.DefaultPostForm"
+    kind: UserInput
+    description: "Gin POST form value with default"
+
+  - name: "c.PostFormArray"
+    kind: UserInput
+    description: "Gin POST form array"
+
+  - name: "c.PostFormMap"
+    kind: UserInput
+    description: "Gin POST form map"
+
+  - name: "c.FormFile"
+    kind: UserInput
+    description: "Gin form file"
+
+  - name: "c.MultipartForm"
+    kind: UserInput
+    description: "Gin multipart form"
+
+  - name: "c.GetHeader"
+    kind: UserInput
+    description: "Gin request header"
+
+  - name: "c.Cookie"
+    kind: UserInput
+    description: "Gin cookie"
+
+  - name: "c.GetRawData"
+    kind: UserInput
+    description: "Gin raw request body"
+
+  - name: "c.Request.Body"
+    kind: UserInput
+    description: "Gin request body"
+
+  - name: "c.ClientIP"
+    kind: UserInput
+    description: "Gin client IP"
+
+  - name: "c.FullPath"
+    kind: UserInput
+    description: "Gin full path"
+
+  # Echo Framework
+  - name: "c.QueryParam"
+    kind: UserInput
+    description: "Echo query parameter"
+
+  - name: "c.QueryParams"
+    kind: UserInput
+    description: "Echo query parameters"
+
+  - name: "c.QueryString"
+    kind: UserInput
+    description: "Echo query string"
+
+  - name: "c.FormValue"
+    kind: UserInput
+    description: "Echo form value"
+
+  - name: "c.FormParams"
+    kind: UserInput
+    description: "Echo form parameters"
+
+  - name: "c.FormFile"
+    kind: UserInput
+    description: "Echo form file"
+
+  - name: "c.MultipartForm"
+    kind: UserInput
+    description: "Echo multipart form"
+
+  - name: "c.PathParam"
+    kind: UserInput
+    description: "Echo path parameter"
+
+  - name: "c.PathParams"
+    kind: UserInput
+    description: "Echo path parameters"
+
+  - name: "c.Request().Header.Get"
+    kind: UserInput
+    description: "Echo request header"
+
+  - name: "c.Cookie"
+    kind: UserInput
+    description: "Echo cookie"
+
+  - name: "c.Cookies"
+    kind: UserInput
+    description: "Echo cookies"
+
+  - name: "c.Request().Body"
+    kind: UserInput
+    description: "Echo request body"
+
+  - name: "c.RealIP"
+    kind: UserInput
+    description: "Echo real IP"
+
+  # Fiber Framework
+  - name: "c.Query"
+    kind: UserInput
+    description: "Fiber query parameter"
+
+  - name: "c.Params"
+    kind: UserInput
+    description: "Fiber URL parameter"
+
+  - name: "c.FormValue"
+    kind: UserInput
+    description: "Fiber form value"
+
+  - name: "c.Body"
+    kind: UserInput
+    description: "Fiber request body"
+
+  - name: "c.BodyRaw"
+    kind: UserInput
+    description: "Fiber raw body"
+
+  - name: "c.Get"
+    kind: UserInput
+    description: "Fiber header"
+
+  - name: "c.Cookies"
+    kind: UserInput
+    description: "Fiber cookies"
+
+  - name: "c.IP"
+    kind: UserInput
+    description: "Fiber client IP"
 
   # File I/O
   - name: "os.ReadFile"
@@ -62,6 +271,10 @@ sources:
   - name: "bufio.NewReader"
     kind: File
     description: "Create buffered reader"
+
+  - name: "io.ReadAll"
+    kind: File
+    description: "Read all from reader"
 
   # Environment
   - name: "os.Getenv"
@@ -82,6 +295,10 @@ sources:
     description: "HTTP client GET"
 
   - name: "ioutil.ReadAll"
+    kind: Network
+    description: "Read all from reader"
+
+  - name: "io.ReadAll"
     kind: Network
     description: "Read all from reader"
 
@@ -290,3 +507,55 @@ summaries:
     input: "Argument[0]"
     output: "ReturnValue"
     kind: value
+
+  # JSON unmarshaling - taint flows from input bytes to output struct
+  - name: "json.Unmarshal"
+    package: "encoding/json"
+    input: "Argument[0]"
+    output: "Argument[1]"
+    kind: taint
+
+  - name: "Unmarshal"
+    package: "encoding/json"
+    input: "Argument[0]"
+    output: "Argument[1]"
+    kind: taint
+
+  - name: "Decode"
+    package: "encoding/json"
+    input: "Argument[this]"
+    output: "Argument[0]"
+    kind: taint
+
+  # YAML unmarshaling
+  - name: "yaml.Unmarshal"
+    package: "gopkg.in/yaml.v2"
+    input: "Argument[0]"
+    output: "Argument[1]"
+    kind: taint
+
+  - name: "yaml.Unmarshal"
+    package: "gopkg.in/yaml.v3"
+    input: "Argument[0]"
+    output: "Argument[1]"
+    kind: taint
+
+  # XML decoding
+  - name: "xml.Unmarshal"
+    package: "encoding/xml"
+    input: "Argument[0]"
+    output: "Argument[1]"
+    kind: taint
+
+  - name: "Decode"
+    package: "encoding/xml"
+    input: "Argument[this]"
+    output: "Argument[0]"
+    kind: taint
+
+  # Gob decoding
+  - name: "gob.Decode"
+    package: "encoding/gob"
+    input: "Argument[this]"
+    output: "Argument[0]"
+    kind: taint

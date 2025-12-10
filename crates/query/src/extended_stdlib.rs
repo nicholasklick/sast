@@ -598,20 +598,23 @@ impl ExtendedStandardLibrary {
         );
 
         // Java Weak Hash - detects MessageDigest.getInstance with variable algorithm from properties
-        // This catches cases where algorithm comes from external configuration (potentially weak)
-        self.register(
-            "java/weak-hash-variable",
-            Self::java_weak_hash_variable_query(),
-            QueryMetadata::builder("java/weak-hash-variable", "Weak Hash Algorithm (Variable)")
-                .description("Detects MessageDigest.getInstance() with algorithm from external configuration")
-                .category(QueryCategory::Cryptography)
-                .severity(QuerySeverity::Medium)
-                .precision(QueryPrecision::High)
-                .cwes(vec![327, 328])
-                .owasp("A02:2021 - Cryptographic Failures")
-                .languages(vec!["java".to_string()])
-                .build()
-        );
+        // DISABLED: This rule is too aggressive and flags all variable-based algorithm arguments,
+        // even when they have strong hash defaults like SHA-256/384/512. It causes 33 FPs
+        // on the OWASP benchmark. The static weak-hash rules in owasp_rules.rs correctly
+        // catch hardcoded weak algorithms (MD5, SHA1).
+        // self.register(
+        //     "java/weak-hash-variable",
+        //     Self::java_weak_hash_variable_query(),
+        //     QueryMetadata::builder("java/weak-hash-variable", "Weak Hash Algorithm (Variable)")
+        //         .description("Detects MessageDigest.getInstance() with algorithm from external configuration")
+        //         .category(QueryCategory::Cryptography)
+        //         .severity(QuerySeverity::Medium)
+        //         .precision(QueryPrecision::High)
+        //         .cwes(vec![327, 328])
+        //         .owasp("A02:2021 - Cryptographic Failures")
+        //         .languages(vec!["java".to_string()])
+        //         .build()
+        // );
 
         // Weak Cipher (DES/RC4) - JS/TS only due to createCipher pattern
         self.register(

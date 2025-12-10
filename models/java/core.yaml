@@ -2,7 +2,7 @@
 # Base sources, sinks, and sanitizers for Java applications
 
 sources:
-  # Servlet API
+  # Servlet API - HttpServletRequest
   - name: "getParameter"
     kind: UserInput
     package: "javax.servlet.http.HttpServletRequest"
@@ -18,6 +18,11 @@ sources:
     package: "javax.servlet.http.HttpServletRequest"
     description: "HTTP request parameter map"
 
+  - name: "getParameterNames"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request parameter names"
+
   - name: "getHeader"
     kind: UserInput
     package: "javax.servlet.http.HttpServletRequest"
@@ -27,6 +32,16 @@ sources:
     kind: UserInput
     package: "javax.servlet.http.HttpServletRequest"
     description: "HTTP request headers"
+
+  - name: "getHeaderNames"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request header names"
+
+  - name: "getIntHeader"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request header as int"
 
   - name: "getCookies"
     kind: UserInput
@@ -43,10 +58,30 @@ sources:
     package: "javax.servlet.http.HttpServletRequest"
     description: "HTTP request URI"
 
+  - name: "getRequestURL"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request URL"
+
   - name: "getPathInfo"
     kind: UserInput
     package: "javax.servlet.http.HttpServletRequest"
     description: "HTTP path info"
+
+  - name: "getPathTranslated"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP translated path"
+
+  - name: "getContextPath"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP context path"
+
+  - name: "getServletPath"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP servlet path"
 
   - name: "getInputStream"
     kind: UserInput
@@ -57,6 +92,79 @@ sources:
     kind: UserInput
     package: "javax.servlet.http.HttpServletRequest"
     description: "HTTP request body reader"
+
+  - name: "getRemoteUser"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "Remote user name"
+
+  - name: "getRemoteAddr"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "Remote address"
+
+  - name: "getRemoteHost"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "Remote host"
+
+  # Servlet API - Cookie
+  - name: "getValue"
+    kind: UserInput
+    package: "javax.servlet.http.Cookie"
+    description: "Cookie value"
+
+  - name: "getName"
+    kind: UserInput
+    package: "javax.servlet.http.Cookie"
+    description: "Cookie name"
+
+  - name: "getComment"
+    kind: UserInput
+    package: "javax.servlet.http.Cookie"
+    description: "Cookie comment"
+
+  - name: "getDomain"
+    kind: UserInput
+    package: "javax.servlet.http.Cookie"
+    description: "Cookie domain"
+
+  - name: "getPath"
+    kind: UserInput
+    package: "javax.servlet.http.Cookie"
+    description: "Cookie path"
+
+  # Servlet API - Part (multipart file upload)
+  - name: "getSubmittedFileName"
+    kind: UserInput
+    package: "javax.servlet.http.Part"
+    description: "Uploaded file name"
+
+  - name: "getInputStream"
+    kind: UserInput
+    package: "javax.servlet.http.Part"
+    description: "Uploaded file content stream"
+
+  - name: "getContentType"
+    kind: UserInput
+    package: "javax.servlet.http.Part"
+    description: "Uploaded file content type"
+
+  # Jakarta Servlet API (Jakarta EE 9+)
+  - name: "getParameter"
+    kind: UserInput
+    package: "jakarta.servlet.http.HttpServletRequest"
+    description: "Jakarta HTTP request parameter"
+
+  - name: "getHeader"
+    kind: UserInput
+    package: "jakarta.servlet.http.HttpServletRequest"
+    description: "Jakarta HTTP request header"
+
+  - name: "getCookies"
+    kind: UserInput
+    package: "jakarta.servlet.http.HttpServletRequest"
+    description: "Jakarta HTTP cookies"
 
   # Environment
   - name: "getenv"
