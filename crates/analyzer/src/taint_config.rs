@@ -838,6 +838,23 @@ impl LanguageTaintConfig {
             });
         }
 
+        // XML Parsing - XXE sinks
+        for name in &[
+            "parseFromString",           // DOMParser.parseFromString
+            "parser.parseFromString",    // xmldom DOMParser
+            "DOMParser.parseFromString",
+            "parseXml",
+            "parseXmlString",            // libxmljs
+            "xml2js.parseString",
+            "xml2js.Parser.parseString",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::XmlParse,
+                node_id: 0,
+            });
+        }
+
         sanitizers.extend(vec![
             "escape".to_string(),
             "sanitize".to_string(),
