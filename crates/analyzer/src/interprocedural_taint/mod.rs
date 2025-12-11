@@ -659,9 +659,10 @@ impl InterproceduralTaintAnalysis {
                     // Check if RHS is tainted (use symbolic evaluation for ternaries)
                     let rhs_tainted = self.is_node_tainted_with_sym(rhs, tainted_vars, sym_state);
 
-                    // Handle Python dictionary subscript assignment: map['key'] = value
-                    // LHS is Other { node_type: "subscript" }
-                    if matches!(&lhs.kind, AstNodeKind::Other { node_type } if node_type == "subscript") {
+                    // Handle Python/JavaScript dictionary subscript assignment: map['key'] = value
+                    // Python: Other { node_type: "subscript" }
+                    // JavaScript: Other { node_type: "subscript_expression" }
+                    if matches!(&lhs.kind, AstNodeKind::Other { node_type } if node_type == "subscript" || node_type == "subscript_expression") {
                         // Extract base variable and key from subscript
                         // Python subscript structure: base[key] -> children are [base, "[", key, "]"] or [base, key]
                         let base_var = lhs.children.first().map(|n| {
@@ -740,6 +741,22 @@ impl InterproceduralTaintAnalysis {
                                         message: message.to_string(),
                                     });
                                 }
+                            }
+                        }
+                    }
+
+                    // Handle JavaScript/TypeScript computed member expression: obj['key'] = value
+                    // Similar to Python dictionary subscript, but uses MemberExpression with is_computed=true
+                    if let AstNodeKind::MemberExpression { object, property, is_computed, .. } = &lhs.kind {
+                        if *is_computed {
+                            // This is bracket notation: data['keyB'] = param
+                            let map_key = format!("{}[{}]", object, property);
+                            #[cfg(debug_assertions)]
+                            eprintln!("[DEBUG] JS computed member assignment: {} = rhs_tainted={}", map_key, rhs_tainted);
+                            if rhs_tainted {
+                                tainted_vars.insert(map_key);
+                            } else {
+                                tainted_vars.remove(&map_key);
                             }
                         }
                     }
@@ -1847,9 +1864,10 @@ impl InterproceduralTaintAnalysis {
                 }
             }
 
-            // Handle Python subscript (string/list indexing): possible[1]
+            // Handle Python/JavaScript subscript (string/list indexing): possible[1]
             // This is critical for match statement constant propagation
-            AstNodeKind::Other { node_type } if node_type == "subscript" => {
+            // Python: "subscript", JavaScript: "subscript_expression"
+            AstNodeKind::Other { node_type } if node_type == "subscript" || node_type == "subscript_expression" => {
                 #[cfg(debug_assertions)]
                 {
                     eprintln!("[DEBUG] Subscript with {} children:", node.children.len());
@@ -2052,7 +2070,46 @@ impl InterproceduralTaintAnalysis {
             }
 
             // Handle member expressions like req.body.code, request.query.id
-            AstNodeKind::MemberExpression { object, property, .. } => {
+            AstNodeKind::MemberExpression { object, property, is_computed, .. } => {
+                // Handle computed member expressions: data['keyB'] - similar to Python subscript
+                if *is_computed {
+                    // Build the map key and check if it's tainted
+                    let map_key = format!("{}[{}]", object, property);
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] is_node_tainted: checking JS computed member '{}', result={}", map_key, tainted_vars.contains(&map_key));
+
+                    if tainted_vars.contains(&map_key) {
+                        return true;
+                    }
+
+                    // Check if the full expression is a source (e.g., req.query['param'])
+                    let full_path_bracket = format!("{}[{}]", object, property);
+                    if self.is_source_expression(&full_path_bracket) {
+                        return true;
+                    }
+
+                    // Also check dot notation equivalent for sources like req.query
+                    let full_path_dot = format!("{}.{}", object, property);
+                    if self.is_source_expression(&full_path_dot) {
+                        return true;
+                    }
+
+                    // Check if this is accessing a tainted container
+                    if tainted_vars.contains(object) {
+                        return true;
+                    }
+
+                    // Check if any key in this map is tainted (dynamic access)
+                    let map_prefix = format!("{}[", object);
+                    if tainted_vars.iter().any(|v| v.starts_with(&map_prefix)) {
+                        // Only return true if we can't determine the exact key
+                        // (property might be a variable instead of literal)
+                    }
+
+                    return false;
+                }
+
+                // Non-computed member access: obj.prop
                 // Build the full path and check if it matches a source pattern
                 let full_path = format!("{}.{}", object, property);
                 if self.is_source_expression(&full_path) {
@@ -2066,10 +2123,11 @@ impl InterproceduralTaintAnalysis {
                 node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
             }
 
-            // Handle Python subscript access: map['key'] or arr[index]
-            AstNodeKind::Other { node_type } if node_type == "subscript" => {
+            // Handle Python/JavaScript subscript access: map['key'] or arr[index]
+            // Python: "subscript", JavaScript: "subscript_expression"
+            AstNodeKind::Other { node_type } if node_type == "subscript" || node_type == "subscript_expression" => {
                 // Extract base variable and key from subscript
-                // Python subscript structure: base[key] -> children are [base, key] or [base, "[", key, "]"]
+                // Subscript structure: base[key] -> children are [base, key] or [base, "[", key, "]"]
                 let base_var: Option<String> = node.children.first().map(|n| {
                     if let AstNodeKind::Identifier { name } = &n.kind {
                         name.clone()
@@ -2097,6 +2155,15 @@ impl InterproceduralTaintAnalysis {
                     // ONLY check if this specific key is tainted, not the whole map
                     // This enables strong updates: map['keyA'] = safe_value kills taint
                     let map_key = format!("{}[{}]", base, key);
+
+                    // Check if the base is a source (e.g., req.query, request.args)
+                    // If base is a source, any access on it is tainted
+                    if self.is_source_expression(base) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] is_node_tainted: subscript '{}' is tainted - base '{}' is a source", map_key, base);
+                        return true;
+                    }
+
                     #[cfg(debug_assertions)]
                     eprintln!("[DEBUG] is_node_tainted: checking subscript '{}', result={}", map_key, tainted_vars.contains(&map_key));
 
