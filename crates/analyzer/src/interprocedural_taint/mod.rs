@@ -1092,6 +1092,44 @@ impl InterproceduralTaintAnalysis {
                             tainted_vars.insert(name.clone());
                             #[cfg(debug_assertions)]
                             eprintln!("[DEBUG]     -> '{}' is now tainted", name);
+
+                            // Propagate sanitization: if all tainted vars in value are sanitized
+                            // for a context, propagate that sanitization to the target
+                            if value_tainted && !target_tainted {
+                                let mut tainted_refs = Vec::new();
+                                self.collect_tainted_refs(value_node, tainted_vars, &mut tainted_refs);
+
+                                if !tainted_refs.is_empty() {
+                                    // Find sanitization states common to ALL tainted refs
+                                    let mut common_states: Option<HashSet<FlowState>> = None;
+                                    let mut all_sanitized = true;
+
+                                    for ref_name in &tainted_refs {
+                                        if let Some(states) = sanitized_for_vars.get(ref_name) {
+                                            if let Some(ref mut common) = common_states {
+                                                common.retain(|s| states.contains(s));
+                                            } else {
+                                                common_states = Some(states.clone());
+                                            }
+                                        } else {
+                                            // Tainted var with no sanitization
+                                            all_sanitized = false;
+                                            break;
+                                        }
+                                    }
+
+                                    // Propagate common sanitization states to target
+                                    if all_sanitized {
+                                        if let Some(states) = common_states {
+                                            if !states.is_empty() {
+                                                sanitized_for_vars.insert(name.clone(), states.clone());
+                                                #[cfg(debug_assertions)]
+                                                eprintln!("[DEBUG]     -> '{}' inherits sanitization: {:?}", name, states);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1251,8 +1289,9 @@ impl InterproceduralTaintAnalysis {
 
                 // Python/Flask XSS detection: check if this is a web handler function
                 // that returns tainted data (reflected XSS)
+                // Now checks sanitized_for_vars to exclude variables sanitized for HTML
                 if matches!(self.language, Language::Python) && self.is_web_handler_function(node) {
-                    let tainted_returns = self.find_tainted_returns(node, &local_tainted, &local_sym_state);
+                    let tainted_returns = self.find_tainted_returns(node, &local_tainted, &local_sym_state, &local_sanitized_for);
                     for ret_node in tainted_returns {
                         let func_name = match &node.kind {
                             AstNodeKind::FunctionDeclaration { name, .. } => name.clone(),
@@ -2005,6 +2044,57 @@ impl InterproceduralTaintAnalysis {
     /// Uses symbolic evaluation to handle ternary expressions properly
     fn is_node_tainted(&self, node: &AstNode, tainted_vars: &HashSet<String>) -> bool {
         self.is_node_tainted_with_sym(node, tainted_vars, &SymbolicState::new())
+    }
+
+    /// Check if a node contains tainted data that is NOT sanitized for HTML
+    /// Used for XSS detection in web handler returns
+    fn is_node_tainted_for_html(
+        &self,
+        node: &AstNode,
+        tainted_vars: &HashSet<String>,
+        sym_state: &SymbolicState,
+        sanitized_for_vars: &HashMap<String, HashSet<FlowState>>,
+    ) -> bool {
+        // First check if the node is tainted at all
+        if !self.is_node_tainted_with_sym(node, tainted_vars, sym_state) {
+            #[cfg(debug_assertions)]
+            eprintln!("[DEBUG] is_node_tainted_for_html: node not tainted at all, returning false");
+            return false;
+        }
+
+        // Find all tainted variable references in this node
+        let mut tainted_refs = Vec::new();
+        self.collect_tainted_refs(node, tainted_vars, &mut tainted_refs);
+
+        #[cfg(debug_assertions)]
+        eprintln!("[DEBUG] is_node_tainted_for_html: tainted_refs={:?}, sanitized_for_vars={:?}", tainted_refs, sanitized_for_vars);
+
+        // Check if ANY tainted variable is NOT sanitized for HTML
+        // (If all are sanitized for HTML, this is safe to return)
+        for var_name in &tainted_refs {
+            if let Some(states) = sanitized_for_vars.get(var_name) {
+                // Variable has sanitization - check if it covers HTML
+                if !states.contains(&FlowState::Html) && !states.contains(&FlowState::Generic) {
+                    // Tainted but NOT sanitized for HTML - vulnerable!
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] is_node_tainted_for_html: '{}' NOT sanitized for HTML (states={:?})", var_name, states);
+                    return true;
+                }
+                // This variable IS sanitized for HTML, continue checking others
+                #[cfg(debug_assertions)]
+                eprintln!("[DEBUG] is_node_tainted_for_html: '{}' IS sanitized for HTML (states={:?})", var_name, states);
+            } else {
+                // Tainted variable has NO sanitization at all - vulnerable!
+                #[cfg(debug_assertions)]
+                eprintln!("[DEBUG] is_node_tainted_for_html: '{}' has NO sanitization at all!", var_name);
+                return true;
+            }
+        }
+
+        // All tainted variables are sanitized for HTML - safe
+        #[cfg(debug_assertions)]
+        eprintln!("[DEBUG] is_node_tainted_for_html: all tainted vars sanitized for HTML, returning false");
+        false
     }
 
     /// Check if a node contains tainted data, using symbolic state
@@ -2974,14 +3064,16 @@ impl InterproceduralTaintAnalysis {
 
     /// Find return statements in a function node and collect their info
     /// Returns (has_tainted_return, return_nodes) for reporting XSS
+    /// Now also checks sanitized_for_vars to exclude variables sanitized for HTML
     fn find_tainted_returns<'a>(
         &self,
         node: &'a AstNode,
         tainted_vars: &HashSet<String>,
         sym_state: &SymbolicState,
+        sanitized_for_vars: &HashMap<String, HashSet<FlowState>>,
     ) -> Vec<&'a AstNode> {
         let mut tainted_returns = Vec::new();
-        self.collect_tainted_returns(node, tainted_vars, sym_state, &mut tainted_returns, true);
+        self.collect_tainted_returns(node, tainted_vars, sym_state, sanitized_for_vars, &mut tainted_returns, true);
         tainted_returns
     }
 
@@ -2990,14 +3082,15 @@ impl InterproceduralTaintAnalysis {
         node: &'a AstNode,
         tainted_vars: &HashSet<String>,
         sym_state: &SymbolicState,
+        sanitized_for_vars: &HashMap<String, HashSet<FlowState>>,
         results: &mut Vec<&'a AstNode>,
         is_root: bool,  // True when this is the starting node (the function we're analyzing)
     ) {
         match &node.kind {
             AstNodeKind::ReturnStatement => {
-                // Check if any child (the return value) is tainted
+                // Check if any child (the return value) is tainted AND not sanitized for HTML
                 for child in &node.children {
-                    if self.is_node_tainted_with_sym(child, tainted_vars, sym_state) {
+                    if self.is_node_tainted_for_html(child, tainted_vars, sym_state, sanitized_for_vars) {
                         results.push(node);
                         break;
                     }
@@ -3009,7 +3102,7 @@ impl InterproceduralTaintAnalysis {
                 if is_root {
                     // This is the function we're analyzing - look at its body
                     for child in &node.children {
-                        self.collect_tainted_returns(child, tainted_vars, sym_state, results, false);
+                        self.collect_tainted_returns(child, tainted_vars, sym_state, sanitized_for_vars, results, false);
                     }
                 }
                 // If not root, skip - it's a nested function with its own scope
@@ -3022,7 +3115,7 @@ impl InterproceduralTaintAnalysis {
                     let is_return = matches!(&child.kind, AstNodeKind::ReturnStatement);
 
                     // Process this child
-                    self.collect_tainted_returns(child, tainted_vars, sym_state, results, false);
+                    self.collect_tainted_returns(child, tainted_vars, sym_state, sanitized_for_vars, results, false);
 
                     // If we just processed a return, stop - rest is dead code
                     if is_return {
@@ -3035,7 +3128,7 @@ impl InterproceduralTaintAnalysis {
                 // In a sequential block, stop processing after a return statement (dead code elimination)
                 for child in &node.children {
                     let is_return = matches!(&child.kind, AstNodeKind::ReturnStatement);
-                    self.collect_tainted_returns(child, tainted_vars, sym_state, results, false);
+                    self.collect_tainted_returns(child, tainted_vars, sym_state, sanitized_for_vars, results, false);
                     if is_return {
                         break;
                     }
@@ -3043,7 +3136,7 @@ impl InterproceduralTaintAnalysis {
             }
             _ => {
                 for child in &node.children {
-                    self.collect_tainted_returns(child, tainted_vars, sym_state, results, false);
+                    self.collect_tainted_returns(child, tainted_vars, sym_state, sanitized_for_vars, results, false);
                 }
             }
         }
