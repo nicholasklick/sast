@@ -659,10 +659,11 @@ impl InterproceduralTaintAnalysis {
                     // Check if RHS is tainted (use symbolic evaluation for ternaries)
                     let rhs_tainted = self.is_node_tainted_with_sym(rhs, tainted_vars, sym_state);
 
-                    // Handle Python/JavaScript dictionary subscript assignment: map['key'] = value
+                    // Handle Python/JavaScript/Ruby dictionary subscript assignment: map['key'] = value
                     // Python: Other { node_type: "subscript" }
                     // JavaScript: Other { node_type: "subscript_expression" }
-                    if matches!(&lhs.kind, AstNodeKind::Other { node_type } if node_type == "subscript" || node_type == "subscript_expression") {
+                    // Ruby: Other { node_type: "element_reference" }
+                    if matches!(&lhs.kind, AstNodeKind::Other { node_type } if node_type == "subscript" || node_type == "subscript_expression" || node_type == "element_reference") {
                         // Extract base variable and key from subscript
                         // Python subscript structure: base[key] -> children are [base, "[", key, "]"] or [base, key]
                         let base_var = lhs.children.first().map(|n| {
@@ -1864,10 +1865,10 @@ impl InterproceduralTaintAnalysis {
                 }
             }
 
-            // Handle Python/JavaScript subscript (string/list indexing): possible[1]
+            // Handle Python/JavaScript/Ruby subscript (string/list indexing): possible[1]
             // This is critical for match statement constant propagation
-            // Python: "subscript", JavaScript: "subscript_expression"
-            AstNodeKind::Other { node_type } if node_type == "subscript" || node_type == "subscript_expression" => {
+            // Python: "subscript", JavaScript: "subscript_expression", Ruby: "element_reference"
+            AstNodeKind::Other { node_type } if node_type == "subscript" || node_type == "subscript_expression" || node_type == "element_reference" => {
                 #[cfg(debug_assertions)]
                 {
                     eprintln!("[DEBUG] Subscript with {} children:", node.children.len());
@@ -2123,9 +2124,9 @@ impl InterproceduralTaintAnalysis {
                 node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
             }
 
-            // Handle Python/JavaScript subscript access: map['key'] or arr[index]
-            // Python: "subscript", JavaScript: "subscript_expression"
-            AstNodeKind::Other { node_type } if node_type == "subscript" || node_type == "subscript_expression" => {
+            // Handle Python/JavaScript/Ruby subscript access: map['key'] or arr[index]
+            // Python: "subscript", JavaScript: "subscript_expression", Ruby: "element_reference"
+            AstNodeKind::Other { node_type } if node_type == "subscript" || node_type == "subscript_expression" || node_type == "element_reference" => {
                 // Extract base variable and key from subscript
                 // Subscript structure: base[key] -> children are [base, key] or [base, "[", key, "]"]
                 let base_var: Option<String> = node.children.first().map(|n| {
@@ -2192,10 +2193,19 @@ impl InterproceduralTaintAnalysis {
                 // Handle methods that propagate taint from receiver to return value
                 // e.g., names.nextElement(), iter.next(), entry.getValue(), str.toCharArray()
                 let receiver_propagating_methods = [
+                    // Java
                     ".nextElement", ".next", ".getValue", ".getKey",
                     ".toCharArray", ".getBytes", ".toString", ".toUpperCase", ".toLowerCase",
                     ".trim", ".strip", ".substring", ".split", ".replace", ".replaceAll",
                     ".concat", ".format", ".valueOf", ".slice",
+                    // Rust Option/Iterator methods
+                    ".map", ".filter", ".filter_map", ".and_then", ".or_else",
+                    ".unwrap", ".unwrap_or", ".unwrap_or_default", ".unwrap_or_else",
+                    ".cloned", ".clone", ".to_owned", ".to_string",
+                    ".get", ".first", ".last", ".pop", ".collect",
+                    ".value",  // Cookie.value()
+                    // Ruby
+                    ".chomp", ".strip", ".gsub", ".sub",
                 ];
                 for method_suffix in &receiver_propagating_methods {
                     if callee.ends_with(method_suffix) {

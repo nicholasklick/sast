@@ -207,6 +207,12 @@ impl LanguageTaintConfig {
             "request.GET",
             "request.body",
             "request.env",
+            "request.cookies",  // Cookie access - common in OWASP benchmarks
+            "request.path_info", // Path info
+            "request.path",     // Request path
+            "request.url",      // Full URL
+            "request.referrer", // HTTP referrer
+            "cookies",          // Direct cookies hash (Sinatra)
             "gets",             // STDIN
             "gets.chomp",
             "readline",
@@ -2278,11 +2284,16 @@ impl LanguageTaintConfig {
         for name in &[
             "HttpRequest.query_string",
             "HttpRequest.match_info",
+            "req.query_string",  // actix-web query string
+            "req.cookie",        // actix-web cookie access
             "req.param",
             "req.query",
+            "req.path",          // URL path
             "Query",
             "Path",
             "Form",
+            "form",              // form parameter in handler
+            "query_map",         // Common pattern for parsed query params
         ] {
             sources.push(TaintSource {
                 name: name.to_string(),
@@ -2362,6 +2373,8 @@ impl LanguageTaintConfig {
             "query",
             "sqlx::query",
             "diesel::sql_query",
+            "db::execute_raw",   // OWASP Benchmark pattern
+            "execute_raw",
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
@@ -2381,6 +2394,22 @@ impl LanguageTaintConfig {
             sinks.push(TaintSink {
                 name: name.to_string(),
                 kind: TaintSinkKind::FileWrite,
+                node_id: 0,
+            });
+        }
+
+        // Path Traversal (file read with untrusted path)
+        for name in &[
+            "std::fs::read_to_string",
+            "std::fs::read",
+            "std::fs::metadata",
+            "File::open",
+            "Path::join",      // path construction
+            "PathBuf::push",   // path construction
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::PathTraversal,
                 node_id: 0,
             });
         }
