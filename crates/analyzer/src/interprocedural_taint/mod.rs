@@ -1015,6 +1015,7 @@ impl InterproceduralTaintAnalysis {
                                                 TaintSinkKind::Deserialization => "Insecure deserialization",
                                                 TaintSinkKind::XmlParse => "XML external entity (XXE)",
                                                 TaintSinkKind::TrustBoundary => "Trust boundary violation",
+                                                TaintSinkKind::Redirect => "Open redirect",
                                             },
                                             sink.name
                                         );

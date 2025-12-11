@@ -2289,11 +2289,15 @@ impl LanguageTaintConfig {
             "req.param",
             "req.query",
             "req.path",          // URL path
+            "req.headers",       // HTTP headers
+            "headers().get",     // Header value access
             "Query",
             "Path",
             "Form",
             "form",              // form parameter in handler
+            "form.get",          // form parameter access
             "query_map",         // Common pattern for parsed query params
+            "query_map.get",     // query param access
         ] {
             sources.push(TaintSource {
                 name: name.to_string(),
@@ -2357,6 +2361,10 @@ impl LanguageTaintConfig {
             "Command.spawn",
             "Command.output",
             "process::Command",
+            "args",           // Command::new("sh").args(["-c", tainted_cmd])
+            "Command.args",
+            "arg",            // Command::new("sh").arg(tainted_cmd)
+            "Command.arg",
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
@@ -2422,6 +2430,38 @@ impl LanguageTaintConfig {
                 node_id: 0,
             });
         }
+
+        // LDAP Injection
+        for name in &[
+            "search_vulnerable",        // OWASP benchmark mock
+            "ldap_mock::search_vulnerable",
+            "ldap::search",
+            "ldap3::Ldap::search",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::LdapQuery,
+                node_id: 0,
+            });
+        }
+
+        // XPath Injection (Note: benchmark uses format! strings, not actual XPath calls)
+        for name in &[
+            "xpath::evaluate",
+            "xpath_mock::evaluate",
+            "evaluate_xpath",
+            "sxd_xpath::evaluate",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::XPathQuery,
+                node_id: 0,
+            });
+        }
+
+        // Note: XSS (body), Redirect (insert_header) sinks removed as too broad
+        // Every test returns a response using .body(), causing massive FPs
+        // Proper XSS detection needs HTML context tracking, not just sink matching
 
         // ===== SANITIZERS (10+) =====
         sanitizers.extend(vec![

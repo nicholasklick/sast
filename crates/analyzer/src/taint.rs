@@ -49,6 +49,7 @@ pub enum TaintSinkKind {
     Deserialization,
     XmlParse,
     TrustBoundary,
+    Redirect,
 }
 
 /// The flow state tracks what kind of sink the taint is flowing toward.
@@ -91,6 +92,7 @@ impl FlowState {
             TaintSinkKind::Deserialization => FlowState::Generic,
             TaintSinkKind::XmlParse => FlowState::Xml,
             TaintSinkKind::TrustBoundary => FlowState::Generic, // Trust boundary violations don't have specific sanitizers
+            TaintSinkKind::Redirect => FlowState::Generic, // Open redirect - no specific sanitizer
         }
     }
 
