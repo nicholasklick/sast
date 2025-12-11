@@ -197,6 +197,144 @@ pub fn detect_validation_guard(condition: &AstNode, _then_branch: &AstNode) -> O
     None
 }
 
+// =============================================================================
+// Impl block methods for InterproceduralTaintAnalysis
+// =============================================================================
+
+use super::InterproceduralTaintAnalysis;
+use crate::taint_config::get_yaml_sanitizer_flow_states;
+
+impl InterproceduralTaintAnalysis {
+    /// Check if a function/method is a sanitizer
+    pub(super) fn is_sanitizer_function(&self, name: &str) -> bool {
+        // Check flow registry first
+        if let Some(summary) = self.flow_registry.get(name) {
+            if summary.is_sanitizer {
+                return true;
+            }
+        }
+        // Also check by just the method name
+        let method_name = name.split('.').last().unwrap_or(name);
+        if let Some(summary) = self.flow_registry.get(method_name) {
+            if summary.is_sanitizer {
+                return true;
+            }
+        }
+
+        // Fall back to legacy sanitizers
+        let name_lower = name.to_lowercase();
+        self.sanitizers.iter().any(|s| {
+            let sanitizer_lower = s.to_lowercase();
+            name_lower.contains(&sanitizer_lower)
+        })
+    }
+
+    /// Get the FlowStates that a sanitizer function is effective for.
+    /// Returns None if not a sanitizer, Some(empty) for universal sanitizers,
+    /// or Some(states) for context-specific sanitizers.
+    pub(super) fn get_sanitizer_flow_states(&self, name: &str) -> Option<HashSet<FlowState>> {
+        let name_lower = name.to_lowercase();
+
+        // HTML/XSS sanitizers
+        if name_lower.contains("escapehtml") || name_lower.contains("htmlescape")
+            || name_lower.contains("htmlspecialchars") || name_lower.contains("htmlentities")
+            || name_lower.contains("encodeforhtml") || name_lower.contains("sanitizehtml")
+            || (name_lower.contains("escape") && name_lower.contains("html"))
+        {
+            let mut states = HashSet::new();
+            states.insert(FlowState::Html);
+            return Some(states);
+        }
+
+        // SQL sanitizers
+        if name_lower.contains("escapesql") || name_lower.contains("encodeforsql")
+            || name_lower.contains("sanitizesql") || name_lower.contains("quotesql")
+            || name_lower.contains("preparedstatement.set")
+        {
+            let mut states = HashSet::new();
+            states.insert(FlowState::Sql);
+            return Some(states);
+        }
+
+        // Command/Shell sanitizers
+        if name_lower.contains("escapeshell") || name_lower.contains("shellwords")
+            || name_lower.contains("escapejava") || name_lower.contains("encodeforcommand")
+            || name_lower.contains("processbuilder")
+        {
+            let mut states = HashSet::new();
+            states.insert(FlowState::Shell);
+            return Some(states);
+        }
+
+        // Path traversal sanitizers
+        if name_lower.contains("canonicalpath") || name_lower.contains("normalize")
+            || name_lower.contains("realpath") || name_lower.contains("escapepath")
+            || name_lower.contains("file_name") || name_lower.contains("basename")
+        {
+            let mut states = HashSet::new();
+            states.insert(FlowState::Path);
+            return Some(states);
+        }
+
+        // LDAP sanitizers
+        if name_lower.contains("escapeldap") || name_lower.contains("encodeforldn")
+            || name_lower.contains("encodefordistinguishedname")
+        {
+            let mut states = HashSet::new();
+            states.insert(FlowState::Ldap);
+            return Some(states);
+        }
+
+        // XML/XPath sanitizers
+        if name_lower.contains("escapexml") || name_lower.contains("encodeforxml")
+            || name_lower.contains("escapexpath")
+        {
+            let mut states = HashSet::new();
+            states.insert(FlowState::Xml);
+            return Some(states);
+        }
+
+        // Type conversion functions are universal sanitizers
+        if name_lower.contains("parseint") || name_lower.contains("parselong")
+            || name_lower.contains("parsedouble") || name_lower.contains("parsefloat")
+            || name_lower.contains("parseboolean")
+            || name_lower == "int" || name_lower == "float" || name_lower == "long" || name_lower == "double"
+            || name_lower.contains("atoi") || name_lower.contains("atol") || name_lower.contains("atof")
+            || name_lower == "number" || name_lower == "boolean"
+            || name_lower == "to_i" || name_lower == "to_f" || name_lower == "to_s"
+            || name_lower.contains("strconv.atoi") || name_lower.contains("strconv.parseint")
+            || name_lower.contains("strconv.parsefloat") || name_lower.contains("strconv.parsebool")
+            || name_lower.contains("valueof")
+        {
+            return Some(HashSet::new());
+        }
+
+        // Universal sanitizers (validation, encoding)
+        if name_lower.contains("validate") || name_lower.contains("isvalid")
+            || name_lower.contains("whitelist") || name_lower.contains("allowlist")
+        {
+            return Some(HashSet::new());
+        }
+
+        // Check if it's a sanitizer via is_sanitizer_function
+        if self.is_sanitizer_function(name) {
+            return Some(HashSet::new());
+        }
+
+        // Check YAML config
+        if let Some(states) = get_yaml_sanitizer_flow_states(self.language_handler.language(), name) {
+            return Some(states);
+        }
+
+        None
+    }
+
+    /// Check if a .replace() call is a quote escaping pattern
+    pub(super) fn is_quote_escaping_pattern_method(&self, node: &AstNode) -> bool {
+        is_quote_escaping_pattern(node)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
