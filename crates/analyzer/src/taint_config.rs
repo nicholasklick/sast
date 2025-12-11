@@ -786,6 +786,7 @@ impl LanguageTaintConfig {
         // SQL Injection
         for name in &[
             "query", "execute", "raw",
+            "executeRaw", "db.executeRaw",  // OWASP BenchmarkJS helper
             "sequelize.query", "knex.raw",
             "connection.query", "pool.query",
         ] {
