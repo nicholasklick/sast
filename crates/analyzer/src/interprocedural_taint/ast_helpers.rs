@@ -263,6 +263,27 @@ pub fn is_getter_method(callee: &str) -> bool {
         || method_lower.starts_with("retrieve")
 }
 
+/// Find the first CallExpression node in an AST subtree.
+/// This is useful for Go's short variable declaration syntax where
+/// CallExpression is wrapped inside expression_list nodes.
+/// Returns a tuple of (callee, CallExpression node reference).
+pub fn find_first_call_expression(node: &AstNode) -> Option<(&str, &AstNode)> {
+    match &node.kind {
+        AstNodeKind::CallExpression { callee, .. } => {
+            Some((callee.as_str(), node))
+        }
+        _ => {
+            // Recursively search children
+            for child in &node.children {
+                if let Some(result) = find_first_call_expression(child) {
+                    return Some(result);
+                }
+            }
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

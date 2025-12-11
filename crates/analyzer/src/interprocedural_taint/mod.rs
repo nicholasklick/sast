@@ -49,6 +49,7 @@ pub use ast_helpers::{
     extract_call_arguments,
     get_method_name,
     is_getter_method,
+    find_first_call_expression,
 };
 pub use collection_tracking::{CollectionTrackingState, MAX_TRACKED_LIST_SIZE, is_collection_initialization};
 pub use node_handlers::NodeHandlerContext;
@@ -563,14 +564,16 @@ impl InterproceduralTaintAnalysis {
                 }
 
                 // Check if initializer is a sanitizer call - track context-specific sanitization
-                // Look for CallExpression in children (the initializer)
+                // Look for CallExpression in children (or nested within expression_list for Go)
                 let mut sanitizer_with_tainted_input = false;
                 for child in &node.children {
-                    if let AstNodeKind::CallExpression { callee, .. } = &child.kind {
+                    // Use find_first_call_expression to handle Go's nested AST structure
+                    // where CallExpression is inside expression_list nodes
+                    if let Some((callee, call_node)) = find_first_call_expression(child) {
                         if let Some(sanitizer_states) = self.get_sanitizer_flow_states(callee) {
                             // Check if the sanitizer has tainted arguments
                             // If so, the output is still "tainted" but sanitized for specific states
-                            let has_tainted_args = child.children.iter().any(|arg| {
+                            let has_tainted_args = call_node.children.iter().any(|arg| {
                                 self.is_node_tainted(arg, tainted_vars)
                             });
 
@@ -813,11 +816,12 @@ impl InterproceduralTaintAnalysis {
                         eprintln!("[DEBUG]   Assignment to '{}': rhs_tainted={}, branch_depth={}", name, rhs_tainted, branch_depth);
 
                         // Check if RHS is a sanitizer call - track context-specific sanitization
+                        // Use find_first_call_expression to handle nested AST structures (e.g., Go expression_list)
                         let mut sanitizer_with_tainted_input = false;
-                        if let AstNodeKind::CallExpression { callee, .. } = &rhs.kind {
+                        if let Some((callee, call_node)) = find_first_call_expression(rhs) {
                             if let Some(sanitizer_states) = self.get_sanitizer_flow_states(callee) {
                                 // Check if the sanitizer has tainted arguments
-                                let has_tainted_args = rhs.children.iter().any(|arg| {
+                                let has_tainted_args = call_node.children.iter().any(|arg| {
                                     self.is_node_tainted(arg, tainted_vars)
                                 });
 
@@ -1486,6 +1490,9 @@ impl InterproceduralTaintAnalysis {
                     }
 
                     let condition = self.evaluate_symbolic(condition_node, sym_state);
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] IfStatement condition='{}' evaluated to {:?}, as_definite_bool={:?}",
+                              condition_node.text.lines().next().unwrap_or(""), condition, condition.as_definite_bool());
 
                     match condition.as_definite_bool() {
                         Some(true) => {

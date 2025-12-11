@@ -372,10 +372,11 @@ impl LanguageTaintHandler for PythonTaintHandler {
                 LiteralValue::Undefined => Some(SymbolicValue::Undefined),
             },
             // Python-specific: integer and float nodes
-            AstNodeKind::Other { node_type } if node_type == "integer" => {
+            // Go uses "int_literal", "float_literal", "rune_literal"
+            AstNodeKind::Other { node_type } if node_type == "integer" || node_type == "int_literal" || node_type == "rune_literal" => {
                 node.text.trim().parse::<i64>().ok().map(SymbolicValue::Concrete)
             }
-            AstNodeKind::Other { node_type } if node_type == "float" => {
+            AstNodeKind::Other { node_type } if node_type == "float" || node_type == "float_literal" => {
                 node.text.trim().parse::<f64>().ok()
                     .map(|f| SymbolicValue::Concrete(f as i64))
             }
@@ -1299,6 +1300,45 @@ impl LanguageTaintHandler for GenericTaintHandler {
                 LiteralValue::Null => Some(SymbolicValue::Null),
                 LiteralValue::Undefined => Some(SymbolicValue::Undefined),
             },
+            // Go uses int_literal, float_literal, rune_literal for numeric types
+            // Rust uses integer_literal, float_literal
+            // Ruby uses integer
+            AstNodeKind::Other { node_type }
+                if node_type == "int_literal"
+                    || node_type == "integer_literal"
+                    || node_type == "integer"
+                    || node_type == "rune_literal" =>
+            {
+                node.text.trim().parse::<i64>().ok().map(SymbolicValue::Concrete)
+            }
+            AstNodeKind::Other { node_type }
+                if node_type == "float_literal" || node_type == "float" =>
+            {
+                node.text.trim().parse::<f64>().ok()
+                    .map(|f| SymbolicValue::Concrete(f as i64))
+            }
+            // Go uses true/false as Other nodes, Ruby uses true/false
+            AstNodeKind::Other { node_type } if node_type == "true" => {
+                Some(SymbolicValue::ConcreteBool(true))
+            }
+            AstNodeKind::Other { node_type } if node_type == "false" => {
+                Some(SymbolicValue::ConcreteBool(false))
+            }
+            // Go uses interpreted_string_literal and raw_string_literal
+            AstNodeKind::Other { node_type }
+                if node_type == "interpreted_string_literal"
+                    || node_type == "raw_string_literal" =>
+            {
+                let text = node.text.trim();
+                // Strip outer quotes if present
+                let content = if (text.starts_with('"') && text.ends_with('"'))
+                    || (text.starts_with('`') && text.ends_with('`')) {
+                    text[1..text.len()-1].to_string()
+                } else {
+                    text.to_string()
+                };
+                Some(SymbolicValue::ConcreteString(content))
+            }
             _ => None,
         }
     }
