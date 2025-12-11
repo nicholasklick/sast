@@ -266,15 +266,19 @@ pub fn is_getter_method(callee: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gittera_parser::ast::Location;
+    use gittera_parser::ast::{Location, Span};
 
     fn test_location() -> Location {
         Location {
-            file: "test.java".to_string(),
-            line: 1,
-            column: 0,
-            end_line: 1,
-            end_column: 10,
+            file_path: "test.java".to_string(),
+            span: Span {
+                start_line: 1,
+                start_column: 0,
+                end_line: 1,
+                end_column: 10,
+                start_byte: 0,
+                end_byte: 10,
+            },
         }
     }
 

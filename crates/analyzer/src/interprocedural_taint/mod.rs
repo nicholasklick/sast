@@ -7,8 +7,12 @@
 //!
 //! - `ast_helpers`: Pure AST extraction and helper functions
 //! - `collection_tracking`: Index-precise taint tracking through collections (lists, maps)
+//! - `node_handlers`: AST node-specific taint tracking handlers
 //! - `sanitizer_handling`: Detection and flow-state-aware sanitization
 //! - `source_sink`: Source and sink detection logic
+//! - `symbolic_eval`: Symbolic evaluation for constant propagation
+//! - `taint_checks`: Taint checking utilities
+//! - `traversal`: Main AST traversal loop
 //!
 //! ## Constant Propagation for Precision
 //!
@@ -24,8 +28,12 @@
 
 pub mod ast_helpers;
 pub mod collection_tracking;
+pub mod node_handlers;
 pub mod sanitizer_handling;
 mod source_sink;
+mod symbolic_eval;
+mod taint_checks;
+mod traversal;
 
 // Re-export commonly used types from submodules
 pub use ast_helpers::{
@@ -43,6 +51,7 @@ pub use ast_helpers::{
     is_getter_method,
 };
 pub use collection_tracking::{CollectionTrackingState, MAX_TRACKED_LIST_SIZE, is_collection_initialization};
+pub use node_handlers::NodeHandlerContext;
 pub use sanitizer_handling::{
     is_sanitizer_name,
     get_sanitizer_flow_states,
@@ -58,10 +67,9 @@ pub use sanitizer_handling::{
 use crate::call_graph::CallGraph;
 use crate::collection_ops::{CollectionOperation, detect_collection_op_from_call, make_taint_key};
 use crate::flow_summary::FlowSummaryRegistry;
-use crate::language_handler::{LanguageTaintHandler, SafeSinkPattern, get_handler_for_language, evaluate_node_symbolic};
-use crate::symbolic::{SymbolicValue, SymbolicState, BinaryOperator, UnaryOperator};
+use crate::language_handler::{LanguageTaintHandler, SafeSinkPattern, get_handler_for_language};
+use crate::symbolic::{SymbolicValue, SymbolicState};
 use crate::taint::{TaintAnalysisResult, TaintSink, TaintSource, TaintSourceKind, TaintValue, TaintVulnerability, Severity, TaintSinkKind, FlowState};
-use crate::taint_config::get_yaml_sanitizer_flow_states;
 use gittera_parser::ast::{AstNode, AstNodeKind, LiteralValue};
 use gittera_parser::language::Language;
 use std::collections::{HashMap, HashSet};
@@ -1402,6 +1410,22 @@ impl InterproceduralTaintAnalysis {
                 return;
             }
 
+            // Ruby if_modifier/unless_modifier: `expr if condition` or `expr unless condition`
+            // These are conditional statements where the expression may or may not execute
+            // We need to treat them as branches to prevent strong updates
+            AstNodeKind::Other { node_type } if node_type == "if_modifier" || node_type == "unless_modifier" => {
+                #[cfg(debug_assertions)]
+                eprintln!("[DEBUG] Ruby {} - treating as branch", node_type);
+                // Process all children with incremented branch_depth to prevent strong updates
+                for child in &node.children {
+                    self.track_taint_in_ast_with_depth(
+                        child, tainted_vars, vulnerabilities,
+                        branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars
+                    );
+                }
+                return;
+            }
+
             // If statement - also use constant propagation
             // Java if_statement structure: "if" parenthesized_expression then_clause [else_clause]
             AstNodeKind::IfStatement => {
@@ -1869,211 +1893,7 @@ impl InterproceduralTaintAnalysis {
         }
     }
 
-    /// Evaluate an AST node to a symbolic value for constant propagation
-    /// Uses language handler for language-specific literal and operator evaluation
-    fn evaluate_symbolic(&self, node: &AstNode, sym_state: &SymbolicState) -> SymbolicValue {
-        // First try language handler for literals (handles Python integer, float, etc.)
-        if let Some(value) = self.language_handler.evaluate_literal(node) {
-            return value;
-        }
-
-        // Then try language handler for binary operators (Python binary_operator)
-        if let Some(value) = self.language_handler.evaluate_binary_op(node, sym_state) {
-            return value;
-        }
-
-        // Then try language handler for comparisons (Python comparison_operator)
-        if let Some(value) = self.language_handler.evaluate_comparison(node, sym_state) {
-            return value;
-        }
-
-        // Fall back to generic handling
-        match &node.kind {
-            AstNodeKind::Identifier { name } => {
-                // Look up in symbolic state
-                sym_state.get(name)
-            }
-
-            AstNodeKind::BinaryExpression { operator } => {
-                #[cfg(debug_assertions)]
-                {
-                    eprintln!("[DEBUG] BinaryExpression op='{}' with {} children:", operator, node.children.len());
-                    for (i, child) in node.children.iter().enumerate() {
-                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
-                    }
-                }
-                // Handle both 2-child (left, right) and 3-child (left, op, right) formats
-                // Java/C often use 3 children: left, operator, right
-                let (left_idx, right_idx) = if node.children.len() == 3 {
-                    (0, 2) // Skip the operator node in the middle
-                } else {
-                    (0, 1)
-                };
-                if node.children.len() >= 2 {
-                    let left = self.evaluate_symbolic(&node.children[left_idx], sym_state);
-                    let right = self.evaluate_symbolic(&node.children[right_idx], sym_state);
-                    #[cfg(debug_assertions)]
-                    eprintln!("[DEBUG]   left={:?}, right={:?}", left, right);
-
-                    let op = match operator.as_str() {
-                        "+" => BinaryOperator::Add,
-                        "-" => BinaryOperator::Subtract,
-                        "*" => BinaryOperator::Multiply,
-                        "/" => BinaryOperator::Divide,
-                        "%" => BinaryOperator::Modulo,
-                        "==" | "===" => BinaryOperator::Equal,
-                        "!=" | "!==" => BinaryOperator::NotEqual,
-                        "<" => BinaryOperator::LessThan,
-                        "<=" => BinaryOperator::LessThanOrEqual,
-                        ">" => BinaryOperator::GreaterThan,
-                        ">=" => BinaryOperator::GreaterThanOrEqual,
-                        "&&" => BinaryOperator::And,
-                        "||" => BinaryOperator::Or,
-                        "&" => BinaryOperator::BitwiseAnd,
-                        "|" => BinaryOperator::BitwiseOr,
-                        "^" => BinaryOperator::BitwiseXor,
-                        "<<" => BinaryOperator::LeftShift,
-                        ">>" => BinaryOperator::RightShift,
-                        _ => return SymbolicValue::Unknown,
-                    };
-
-                    SymbolicValue::binary(op, left, right).simplify()
-                } else {
-                    SymbolicValue::Unknown
-                }
-            }
-
-            AstNodeKind::UnaryExpression { operator } => {
-                if let Some(operand_node) = node.children.first() {
-                    let operand = self.evaluate_symbolic(operand_node, sym_state);
-
-                    let op = match operator.as_str() {
-                        "!" => UnaryOperator::Not,
-                        "-" => UnaryOperator::Negate,
-                        "~" => UnaryOperator::BitwiseNot,
-                        _ => return SymbolicValue::Unknown,
-                    };
-
-                    SymbolicValue::UnaryOp {
-                        operator: op,
-                        operand: Box::new(operand),
-                    }.simplify()
-                } else {
-                    SymbolicValue::Unknown
-                }
-            }
-
-            AstNodeKind::ParenthesizedExpression => {
-                #[cfg(debug_assertions)]
-                {
-                    eprintln!("[DEBUG] ParenthesizedExpression with {} children:", node.children.len());
-                    for (i, child) in node.children.iter().enumerate() {
-                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
-                    }
-                }
-                // The inner expression - skip leading ( and trailing )
-                // For 3 children: (expr), the expression is at index 1
-                // For 1 child: just the expression
-                let inner_idx = if node.children.len() == 3 { 1 } else { 0 };
-                if let Some(inner) = node.children.get(inner_idx) {
-                    self.evaluate_symbolic(inner, sym_state)
-                } else {
-                    SymbolicValue::Unknown
-                }
-            }
-
-            // Handle Python/JavaScript/Ruby subscript (string/list indexing): possible[1]
-            // This is critical for match statement constant propagation
-            // Python: "subscript", JavaScript: "subscript_expression", Ruby: "element_reference"
-            AstNodeKind::Other { node_type } if node_type == "subscript" || node_type == "subscript_expression" || node_type == "element_reference" => {
-                #[cfg(debug_assertions)]
-                {
-                    eprintln!("[DEBUG] Subscript with {} children:", node.children.len());
-                    for (i, child) in node.children.iter().enumerate() {
-                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
-                    }
-                }
-                // Python subscript structure: base[index]
-                // children are typically: [base, "[", index, "]"] or [base, index]
-                if let Some(base_node) = node.children.first() {
-                    let base_val = self.evaluate_symbolic(base_node, sym_state);
-
-                    // Find the index - skip "[" brackets
-                    let index_node = node.children.iter().find(|c| {
-                        !matches!(&c.kind, AstNodeKind::Other { node_type }
-                            if node_type == "[" || node_type == "]")
-                        && c.id != base_node.id
-                    });
-
-                    if let Some(idx_node) = index_node {
-                        let idx_val = self.evaluate_symbolic(idx_node, sym_state);
-
-                        // If we have a concrete string and concrete index, extract the character
-                        if let (SymbolicValue::ConcreteString(s), SymbolicValue::Concrete(idx)) = (&base_val, &idx_val) {
-                            let idx = *idx as usize;
-                            if idx < s.len() {
-                                let ch = s.chars().nth(idx).unwrap_or('\0');
-                                #[cfg(debug_assertions)]
-                                eprintln!("[DEBUG]   Subscript result: '{}'[{}] = '{}'", s, idx, ch);
-                                return SymbolicValue::ConcreteString(ch.to_string());
-                            }
-                        }
-                    }
-                }
-                SymbolicValue::Unknown
-            }
-
-            // Handle Java/C# method calls that can be evaluated symbolically
-            // Most importantly: str.charAt(index) -> returns the character at index
-            AstNodeKind::CallExpression { callee, .. } => {
-                // Handle String.charAt(index) for switch statement constant propagation
-                // Pattern: varName.charAt or "literal".charAt
-                if callee.ends_with(".charAt") {
-                    let receiver_name = callee.strip_suffix(".charAt").unwrap_or("");
-
-                    // Get receiver value from symbolic state or as literal
-                    let receiver_val = sym_state.get(receiver_name);
-
-                    // Find the argument (the index)
-                    let index_val: Option<i64> = node.children.iter()
-                        .find_map(|child| {
-                            if matches!(&child.kind, AstNodeKind::Other { node_type } if node_type == "argument_list") {
-                                // Find numeric argument
-                                for arg in &child.children {
-                                    match &arg.kind {
-                                        AstNodeKind::Literal { value: LiteralValue::Number(n) } => {
-                                            return n.parse::<i64>().ok();
-                                        }
-                                        _ => {
-                                            // Try symbolic evaluation
-                                            let arg_val = self.evaluate_symbolic(arg, sym_state);
-                                            if let SymbolicValue::Concrete(n) = arg_val {
-                                                return Some(n);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            None
-                        });
-
-                    if let (SymbolicValue::ConcreteString(s), Some(idx)) = (receiver_val, index_val) {
-                        if idx >= 0 && (idx as usize) < s.len() {
-                            let ch = s.chars().nth(idx as usize).unwrap_or('\0');
-                            #[cfg(debug_assertions)]
-                            eprintln!("[DEBUG] charAt: '{}'.charAt({}) = '{}' (code {})", s, idx, ch, ch as i64);
-                            // Return as integer for switch comparison (char is compared as int)
-                            return SymbolicValue::Concrete(ch as i64);
-                        }
-                    }
-                }
-                SymbolicValue::Unknown
-            }
-
-            // For other expressions - return Unknown
-            _ => SymbolicValue::Unknown,
-        }
-    }
+    // NOTE: evaluate_symbolic() has been moved to symbolic_eval.rs
 
     /// Check if initializer expression is tainted (uses symbolic state for ternary evaluation)
     fn is_initializer_tainted_with_sym(&self, node: &AstNode, tainted_vars: &HashSet<String>, sym_state: &SymbolicState) -> bool {
