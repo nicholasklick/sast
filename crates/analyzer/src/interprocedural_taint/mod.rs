@@ -394,21 +394,6 @@ impl InterproceduralTaintAnalysis {
             return;
         }
 
-        // TEMP DEBUG: Trace all node kinds at top level
-        if ast_depth == 0 {
-            fn print_full_tree(node: &AstNode, depth: usize) {
-                let indent = "  ".repeat(depth);
-                let kind_str = format!("{:?}", node.kind);
-                let text_preview: String = node.text.chars().take(50).collect();
-                eprintln!("[AST] {}{} = '{}'", indent, kind_str, text_preview.replace('\n', "\\n"));
-                for child in &node.children {
-                    print_full_tree(child, depth + 1);
-                }
-            }
-            eprintln!("[RUBY DEBUG] Full AST:");
-            print_full_tree(node, 0);
-        }
-
         match &node.kind {
             // Variable declaration with initialization
             AstNodeKind::VariableDeclaration { name, .. } => {
@@ -650,18 +635,11 @@ impl InterproceduralTaintAnalysis {
 
             // Assignment expression (x = taintedValue)
             AstNodeKind::AssignmentExpression { operator, .. } => {
-                // TEMP DEBUG: Always print assignment info
+                #[cfg(debug_assertions)]
                 {
-                    eprintln!("[ASSIGN DEBUG] AssignmentExpression op='{}' with {} children:", operator, node.children.len());
-                    fn print_tree(n: &AstNode, depth: usize) {
-                        let indent = "  ".repeat(depth);
-                        eprintln!("[ASSIGN DEBUG] {}child: {:?} = '{}'", indent, n.kind, n.text.lines().next().unwrap_or(""));
-                        for child in &n.children {
-                            print_tree(child, depth + 1);
-                        }
-                    }
-                    for child in &node.children {
-                        print_tree(child, 1);
+                    eprintln!("[DEBUG] AssignmentExpression op='{}' with {} children:", operator, node.children.len());
+                    for (i, child) in node.children.iter().enumerate() {
+                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
                     }
                 }
                 // AST structure: [LHS, "=", RHS] - so RHS is at index 2
@@ -682,7 +660,6 @@ impl InterproceduralTaintAnalysis {
 
                     // Check if RHS is tainted (use symbolic evaluation for ternaries)
                     let rhs_tainted = self.is_node_tainted_with_sym(rhs, tainted_vars, sym_state);
-                    eprintln!("[ASSIGN DEBUG] rhs_tainted={} for rhs '{}'", rhs_tainted, rhs.text.lines().next().unwrap_or(""));
 
                     // Handle Python/JavaScript/Ruby dictionary subscript assignment: map['key'] = value
                     // Python: Other { node_type: "subscript" }
@@ -1806,6 +1783,81 @@ impl InterproceduralTaintAnalysis {
                     self.track_taint_in_ast_with_depth(child, tainted_vars, vulnerabilities, branch_depth + 1, ast_depth + 1, sym_state, list_sizes, path_sanitized_vars, sanitized_for_vars);
                 }
                 return;
+            }
+
+            // Ruby heredoc XSS detection: detect tainted interpolation in HTML heredocs
+            // Structure: heredoc_body -> interpolation -> identifier
+            AstNodeKind::Other { node_type } if node_type == "heredoc_body" => {
+                // Check if this heredoc contains HTML (look for HTML tags in the content)
+                let heredoc_text = &node.text;
+                let looks_like_html = heredoc_text.contains("<html") || heredoc_text.contains("<!DOCTYPE")
+                    || heredoc_text.contains("<body") || heredoc_text.contains("<p>")
+                    || heredoc_text.contains("<div") || heredoc_text.contains("<span")
+                    || heredoc_text.contains("<script") || heredoc_text.contains("<style");
+
+                if looks_like_html {
+                    // Find all interpolation nodes and check if they contain tainted variables
+                    fn find_tainted_interpolations<'a>(
+                        node: &'a AstNode,
+                        tainted_vars: &HashSet<String>,
+                        sanitized_for: &HashMap<String, HashSet<FlowState>>,
+                    ) -> Vec<&'a AstNode> {
+                        let mut results = Vec::new();
+                        if let AstNodeKind::Other { node_type } = &node.kind {
+                            if node_type == "interpolation" {
+                                // Check if any identifier inside is tainted and NOT sanitized for HTML
+                                for child in &node.children {
+                                    if let AstNodeKind::Identifier { name } = &child.kind {
+                                        if tainted_vars.contains(name) {
+                                            // Check if sanitized for HTML
+                                            let is_html_sanitized = sanitized_for
+                                                .get(name)
+                                                .map(|states| states.contains(&FlowState::Html) || states.is_empty())
+                                                .unwrap_or(false);
+                                            if !is_html_sanitized {
+                                                results.push(node);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        for child in &node.children {
+                            results.extend(find_tainted_interpolations(child, tainted_vars, sanitized_for));
+                        }
+                        results
+                    }
+
+                    let tainted_interps = find_tainted_interpolations(node, tainted_vars, sanitized_for_vars);
+                    for interp in tainted_interps {
+                        // Extract the variable name from interpolation
+                        let var_name = interp.children.iter().find_map(|c| {
+                            if let AstNodeKind::Identifier { name } = &c.kind {
+                                Some(name.clone())
+                            } else {
+                                None
+                            }
+                        }).unwrap_or_else(|| "unknown".to_string());
+
+                        vulnerabilities.push(TaintVulnerability {
+                            sink: TaintSink {
+                                name: format!("heredoc interpolation #{{{}}}", var_name),
+                                kind: TaintSinkKind::HtmlOutput,
+                                node_id: interp.location.span.start_line,
+                            },
+                            tainted_value: TaintValue::new(
+                                var_name.clone(),
+                                TaintSourceKind::UserInput,
+                            ),
+                            severity: Severity::High,
+                            file_path: interp.location.file_path.clone(),
+                            line: interp.location.span.start_line,
+                            column: interp.location.span.start_column,
+                            message: format!("XSS: tainted variable '{}' interpolated in HTML heredoc", var_name),
+                        });
+                    }
+                }
+                // Continue to process children
             }
 
             _ => {}
