@@ -35,6 +35,7 @@ pub static COMMAND_SANITIZERS: &[&str] = &[
 pub static PATH_SANITIZERS: &[&str] = &[
     "realpath", "canonical", "normalize", "getCanonicalPath",
     "basename", "secure_filename", "file_name",  // Rust's equivalent of basename
+    "filepath.Base", "path.Base",  // Go's path/filepath.Base functions
 ];
 
 /// Check if a function name matches a sanitizer pattern
@@ -270,6 +271,7 @@ impl InterproceduralTaintAnalysis {
         if name_lower.contains("canonicalpath") || name_lower.contains("normalize")
             || name_lower.contains("realpath") || name_lower.contains("escapepath")
             || name_lower.contains("file_name") || name_lower.contains("basename")
+            || name_lower.contains("filepath.base") || name_lower.contains("path.base")  // Go's filepath.Base/path.Base
         {
             let mut states = HashSet::new();
             states.insert(FlowState::Path);

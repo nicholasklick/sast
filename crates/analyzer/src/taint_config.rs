@@ -2039,6 +2039,10 @@ impl LanguageTaintConfig {
             "strconv.ParseFloat".to_string(),
             // URL Encoding
             "url.QueryEscape".to_string(),
+            // Path Traversal Sanitizers
+            "filepath.Base".to_string(),
+            "path.Base".to_string(),
+            "filepath.Clean".to_string(),
         ]);
 
         Self {
