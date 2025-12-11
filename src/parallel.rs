@@ -213,8 +213,8 @@ impl ParallelAnalyzer {
 
             let finding = Finding {
                 file_path: source_file.path.to_string_lossy().to_string(),
-                line: 1, // TODO: Get actual line from sink node_id
-                column: 1,
+                line: vuln.line,
+                column: vuln.column,
                 message: format!("{} vulnerability - untrusted data flows to {}", category, vuln.sink.name),
                 severity: severity.to_string(),
                 code_snippet: vuln.sink.name.clone(),
@@ -330,8 +330,8 @@ impl ParallelAnalyzer {
 
             let finding = Finding {
                 file_path: source_file.path.to_string_lossy().to_string(),
-                line: 1, // TODO: Get actual line from sink node_id
-                column: 1,
+                line: vuln.line,
+                column: vuln.column,
                 message: format!("{} vulnerability - untrusted data flows to {}", category, vuln.sink.name),
                 severity: severity.to_string(),
                 code_snippet: vuln.sink.name.clone(),
