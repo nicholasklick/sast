@@ -15,6 +15,16 @@ pub fn extract_variable_name(node: &AstNode) -> Option<String> {
             // For member expressions like obj.field, return the whole thing
             Some(node.text.trim().to_string())
         }
+        // Handle Rust reference expressions: &var, &mut var
+        AstNodeKind::Other { node_type } if node_type == "reference_expression" => {
+            // The identifier is usually the last child
+            for child in node.children.iter().rev() {
+                if let Some(name) = extract_variable_name(child) {
+                    return Some(name);
+                }
+            }
+            None
+        }
         _ => {
             // Try to find an identifier in children
             for child in &node.children {
@@ -22,9 +32,16 @@ pub fn extract_variable_name(node: &AstNode) -> Option<String> {
                     return Some(name.clone());
                 }
             }
-            // Last resort: use the text
-            let text = node.text.trim();
-            if !text.is_empty() && text.len() < 100 {
+            // Last resort: use the text, but clean it up
+            let mut text = node.text.trim();
+            // Strip parentheses from argument lists
+            text = text.trim_start_matches('(').trim_end_matches(')').trim();
+            // Strip Rust reference operators
+            if text.starts_with('&') {
+                text = text[1..].trim_start_matches("mut").trim();
+            }
+            if !text.is_empty() && text.len() < 100
+               && text.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.') {
                 Some(text.to_string())
             } else {
                 None

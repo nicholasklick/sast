@@ -34,7 +34,7 @@ pub static COMMAND_SANITIZERS: &[&str] = &[
 /// Path traversal sanitizers
 pub static PATH_SANITIZERS: &[&str] = &[
     "realpath", "canonical", "normalize", "getCanonicalPath",
-    "basename", "secure_filename",
+    "basename", "secure_filename", "file_name",  // Rust's equivalent of basename
 ];
 
 /// Check if a function name matches a sanitizer pattern
@@ -123,6 +123,7 @@ pub fn get_sanitizer_flow_states(name: &str) -> Option<HashSet<FlowState>> {
         || name_lower.contains("realpath")
         || name_lower.contains("canonical")
         || name_lower.contains("basename")
+        || name_lower.contains("file_name")  // Rust's Path::file_name()
     {
         let mut states = HashSet::new();
         states.insert(FlowState::Path);

@@ -2436,9 +2436,10 @@ impl LanguageTaintConfig {
             "str::parse".to_string(),
             "from_str".to_string(),
             "String::from_utf8".to_string(),
-            // Path sanitization
-            "Path::new".to_string(),
-            "PathBuf::from".to_string(),
+            // Path sanitization - actual sanitizers that prevent path traversal
+            // Note: Path::new and PathBuf::from are NOT sanitizers, they just create paths
+            "file_name".to_string(),    // Extracts just the filename, prevents ../
+            "canonicalize".to_string(), // Resolves to canonical absolute path
         ]);
 
         Self {

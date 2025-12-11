@@ -3514,7 +3514,8 @@ impl InterproceduralTaintAnalysis {
 
         // Path traversal sanitizers
         if name_lower.contains("canonicalpath") || name_lower.contains("normalize")
-            || name_lower.contains("realpath") || name_lower.contains("escapepath") {
+            || name_lower.contains("realpath") || name_lower.contains("escapepath")
+            || name_lower.contains("file_name") || name_lower.contains("basename") {
             let mut states = HashSet::new();
             states.insert(FlowState::Path);
             return Some(states);
