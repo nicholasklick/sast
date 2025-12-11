@@ -394,6 +394,21 @@ impl InterproceduralTaintAnalysis {
             return;
         }
 
+        // TEMP DEBUG: Trace all node kinds at top level
+        if ast_depth == 0 {
+            fn print_full_tree(node: &AstNode, depth: usize) {
+                let indent = "  ".repeat(depth);
+                let kind_str = format!("{:?}", node.kind);
+                let text_preview: String = node.text.chars().take(50).collect();
+                eprintln!("[AST] {}{} = '{}'", indent, kind_str, text_preview.replace('\n', "\\n"));
+                for child in &node.children {
+                    print_full_tree(child, depth + 1);
+                }
+            }
+            eprintln!("[RUBY DEBUG] Full AST:");
+            print_full_tree(node, 0);
+        }
+
         match &node.kind {
             // Variable declaration with initialization
             AstNodeKind::VariableDeclaration { name, .. } => {
@@ -635,11 +650,18 @@ impl InterproceduralTaintAnalysis {
 
             // Assignment expression (x = taintedValue)
             AstNodeKind::AssignmentExpression { operator, .. } => {
-                #[cfg(debug_assertions)]
+                // TEMP DEBUG: Always print assignment info
                 {
-                    eprintln!("[DEBUG] AssignmentExpression op='{}' with {} children:", operator, node.children.len());
-                    for (i, child) in node.children.iter().enumerate() {
-                        eprintln!("[DEBUG]   child[{}]: {:?} = '{}'", i, child.kind, child.text.lines().next().unwrap_or(""));
+                    eprintln!("[ASSIGN DEBUG] AssignmentExpression op='{}' with {} children:", operator, node.children.len());
+                    fn print_tree(n: &AstNode, depth: usize) {
+                        let indent = "  ".repeat(depth);
+                        eprintln!("[ASSIGN DEBUG] {}child: {:?} = '{}'", indent, n.kind, n.text.lines().next().unwrap_or(""));
+                        for child in &n.children {
+                            print_tree(child, depth + 1);
+                        }
+                    }
+                    for child in &node.children {
+                        print_tree(child, 1);
                     }
                 }
                 // AST structure: [LHS, "=", RHS] - so RHS is at index 2
@@ -660,6 +682,7 @@ impl InterproceduralTaintAnalysis {
 
                     // Check if RHS is tainted (use symbolic evaluation for ternaries)
                     let rhs_tainted = self.is_node_tainted_with_sym(rhs, tainted_vars, sym_state);
+                    eprintln!("[ASSIGN DEBUG] rhs_tainted={} for rhs '{}'", rhs_tainted, rhs.text.lines().next().unwrap_or(""));
 
                     // Handle Python/JavaScript/Ruby dictionary subscript assignment: map['key'] = value
                     // Python: Other { node_type: "subscript" }
