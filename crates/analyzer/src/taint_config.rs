@@ -787,8 +787,9 @@ impl LanguageTaintConfig {
         for name in &[
             "query", "execute", "raw",
             "executeRaw", "db.executeRaw",  // OWASP BenchmarkJS helper
-            "sequelize.query", "knex.raw",
+            "sequelize.query", "sequelize.literal", "knex.raw",
             "connection.query", "pool.query",
+            "prisma.$queryRaw", "prisma.$executeRaw",  // Prisma ORM
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
@@ -839,9 +840,11 @@ impl LanguageTaintConfig {
         // Deserialization
         for name in &[
             "unserialize", "serialize.unserialize",
+            "node-serialize.unserialize",  // node-serialize module
             "JSON.parse",  // Can be dangerous with reviver
             "yaml.load", "yaml.safeLoad",
             "pickle.loads",
+            "js-yaml.load",  // js-yaml module
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
@@ -875,6 +878,36 @@ impl LanguageTaintConfig {
             sinks.push(TaintSink {
                 name: name.to_string(),
                 kind: TaintSinkKind::XmlParse,
+                node_id: 0,
+            });
+        }
+
+        // MongoDB / NoSQL Injection
+        for name in &[
+            "$where",                    // MongoDB $where operator
+            "collection.find",
+            "collection.findOne",
+            "db.collection.find",
+            "Model.find",                // Mongoose
+            "Model.findOne",
+            "Model.findById",
+            "Model.aggregate",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::SqlQuery,  // Using SqlQuery as closest match for NoSQL
+                node_id: 0,
+            });
+        }
+
+        // Regular Expression Injection (ReDoS)
+        for name in &[
+            "RegExp",                    // new RegExp(userInput)
+            "new RegExp",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CodeEval,  // Using CodeEval as closest match
                 node_id: 0,
             });
         }
