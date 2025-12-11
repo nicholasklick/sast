@@ -2195,7 +2195,7 @@ impl InterproceduralTaintAnalysis {
                     ".nextElement", ".next", ".getValue", ".getKey",
                     ".toCharArray", ".getBytes", ".toString", ".toUpperCase", ".toLowerCase",
                     ".trim", ".strip", ".substring", ".split", ".replace", ".replaceAll",
-                    ".concat", ".format", ".valueOf",
+                    ".concat", ".format", ".valueOf", ".slice",
                 ];
                 for method_suffix in &receiver_propagating_methods {
                     if callee.ends_with(method_suffix) {
@@ -2207,6 +2207,28 @@ impl InterproceduralTaintAnalysis {
                                 #[cfg(debug_assertions)]
                                 eprintln!("[DEBUG] is_node_tainted: receiver '{}' is tainted, propagating through {}", receiver_var, method_suffix);
                                 return true;
+                            }
+                            // Check if receiver contains a source expression (for method chains)
+                            // e.g., req.path.split('/') - check if req.path is a source
+                            if self.is_source_expression(receiver_var) {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG] is_node_tainted: receiver '{}' is a source, propagating through {}", receiver_var, method_suffix);
+                                return true;
+                            }
+                            // Check for nested source in chained method calls
+                            // e.g., req.path.split('/').filter() - receiver is "req.path.split('/')"
+                            // We need to check if "req.path" (or any prefix) is a source
+                            let mut prefix = String::new();
+                            for part in receiver_var.split('.') {
+                                if !prefix.is_empty() {
+                                    prefix.push('.');
+                                }
+                                prefix.push_str(part);
+                                if self.is_source_expression(&prefix) {
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("[DEBUG] is_node_tainted: receiver prefix '{}' is a source, propagating through {}", prefix, method_suffix);
+                                    return true;
+                                }
                             }
                         }
                         break;
@@ -2232,6 +2254,25 @@ impl InterproceduralTaintAnalysis {
                                 #[cfg(debug_assertions)]
                                 eprintln!("[DEBUG] is_node_tainted: higher-order method {} on tainted receiver '{}'", method_suffix, receiver_var);
                                 return true;
+                            }
+                            // Check if receiver contains a source expression (for method chains)
+                            if self.is_source_expression(receiver_var) {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG] is_node_tainted: higher-order method {} receiver '{}' is a source", method_suffix, receiver_var);
+                                return true;
+                            }
+                            // Check for nested source in chained method calls
+                            let mut prefix = String::new();
+                            for part in receiver_var.split('.') {
+                                if !prefix.is_empty() {
+                                    prefix.push('.');
+                                }
+                                prefix.push_str(part);
+                                if self.is_source_expression(&prefix) {
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("[DEBUG] is_node_tainted: higher-order receiver prefix '{}' is a source", prefix);
+                                    return true;
+                                }
                             }
                             // Check if any element of the collection is tainted (for array methods)
                             let list_prefix = format!("{}@", receiver_var);
