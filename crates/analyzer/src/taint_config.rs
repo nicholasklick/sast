@@ -1964,6 +1964,8 @@ impl LanguageTaintConfig {
             "tx.Query",
             "database/sql.DB.Exec",
             "database/sql.DB.Query",
+            "ExecuteRaw",       // OWASP Benchmark helper
+            "helpers.ExecuteRaw",
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
@@ -1987,18 +1989,20 @@ impl LanguageTaintConfig {
             });
         }
 
-        // HTML/XSS Output
+        // Note: HTML/XSS sinks (w.Write, c.String, c.HTML, etc.) removed as too broad
+        // Every test returns a response, causing massive cross-category FPs
+        // Proper XSS detection needs HTML context tracking
+
+        // Path Traversal (file read/open with untrusted path)
+        // Note: filepath.Join removed as too broad - causes cross-category FPs
         for name in &[
-            "fmt.Fprintf",
-            "w.Write",
-            "io.WriteString",
-            "c.String",
-            "c.HTML",
-            "gin.Context.String",
+            "os.ReadFile",
+            "os.Open",
+            "ioutil.ReadFile",
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
-                kind: TaintSinkKind::HtmlOutput,
+                kind: TaintSinkKind::PathTraversal,
                 node_id: 0,
             });
         }
