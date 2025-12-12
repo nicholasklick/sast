@@ -268,6 +268,22 @@ sinks:
     description: "Find by raw SQL"
     argument: 0
 
+  # Helper SQL sinks (common in benchmarks)
+  - name: "execute_raw"
+    kind: SqlQuery
+    description: "Execute raw SQL"
+    argument: 0
+
+  - name: "Database.execute_raw"
+    kind: SqlQuery
+    description: "Database execute raw SQL"
+    argument: 0
+
+  - name: "Helpers::Database.execute_raw"
+    kind: SqlQuery
+    description: "Helper database execute raw"
+    argument: 0
+
   # File operations
   - name: "write"
     kind: FileWrite
@@ -379,6 +395,78 @@ sinks:
     kind: Redirect
     description: "Sinatra redirect"
     argument: 0
+
+  # net-ldap LDAP Injection Sinks
+  # Note: Generic "search" removed because it conflicts with Nokogiri XPath search
+  - name: "ldap.search"
+    kind: LdapQuery
+    description: "LDAP search"
+    argument: 0
+
+  - name: "Net::LDAP.search"
+    kind: LdapQuery
+    description: "Net::LDAP search"
+    argument: 0
+
+  - name: "bind_as"
+    kind: LdapQuery
+    package: "Net::LDAP"
+    description: "LDAP bind as"
+    argument: 0
+
+  - name: "ldap.bind_as"
+    kind: LdapQuery
+    description: "LDAP bind as"
+    argument: 0
+
+  # Benchmark helper LDAP sinks - filter is argument 1
+  - name: "LdapMock.search"
+    kind: LdapQuery
+    description: "Mock LDAP search (filter at arg 1)"
+    argument: 1
+
+  - name: "Helpers::LdapMock.search"
+    kind: LdapQuery
+    description: "Helper mock LDAP search (filter at arg 1)"
+    argument: 1
+
+  # Path Traversal Sinks
+  - name: "File.read"
+    kind: PathTraversal
+    description: "Read file (path traversal risk)"
+    argument: 0
+
+  - name: "File.open"
+    kind: PathTraversal
+    description: "Open file (path traversal risk)"
+    argument: 0
+
+  - name: "File.binread"
+    kind: PathTraversal
+    description: "Read binary file"
+    argument: 0
+
+  - name: "send_file"
+    kind: PathTraversal
+    description: "Rails send_file (path traversal risk)"
+    argument: 0
+
+  # XXE Sinks
+  - name: "Nokogiri::XML"
+    kind: XmlParse
+    description: "Nokogiri XML parsing (XXE risk)"
+    argument: 0
+
+  - name: "REXML::Document.new"
+    kind: XmlParse
+    description: "REXML document parsing (XXE risk)"
+    argument: 0
+
+  # Trust Boundary
+  - name: "session[]="
+    kind: TrustBoundary
+    description: "Store value in session"
+    argument: 1
 
 sanitizers:
   # HTML sanitization
@@ -859,3 +947,124 @@ additional_sanitizers:
   - name: "Pathname.new"
     sanitizes: [Path]
     description: "Create pathname object"
+
+# =============================================================================
+# net-ldap LDAP Injection Sinks
+# =============================================================================
+
+additional_sinks_ldap:
+  - name: "search"
+    kind: LdapQuery
+    package: "Net::LDAP"
+    description: "LDAP search"
+    argument: 0
+
+  - name: "ldap.search"
+    kind: LdapQuery
+    description: "LDAP search"
+    argument: 0
+
+  - name: "Net::LDAP.search"
+    kind: LdapQuery
+    description: "Net::LDAP search"
+    argument: 0
+
+  - name: "bind_as"
+    kind: LdapQuery
+    package: "Net::LDAP"
+    description: "LDAP bind as (authentication with filter)"
+    argument: 0
+
+  - name: "ldap.bind_as"
+    kind: LdapQuery
+    description: "LDAP bind as"
+    argument: 0
+
+  - name: "LdapMock.search"
+    kind: LdapQuery
+    description: "LDAP mock search"
+    argument: 1
+
+  - name: "Helpers::LdapMock.search"
+    kind: LdapQuery
+    description: "Helper LDAP search"
+    argument: 1
+
+# =============================================================================
+# Trust Boundary - Session Storage
+# =============================================================================
+
+additional_sinks_trustboundary:
+  - name: "session[]="
+    kind: TrustBoundary
+    description: "Store value in session"
+    argument: 1
+
+  - name: "session.store"
+    kind: TrustBoundary
+    description: "Store session value"
+    argument: 1
+
+  - name: "cookies[]="
+    kind: TrustBoundary
+    description: "Store value in cookie"
+    argument: 1
+
+# =============================================================================
+# Path Traversal Sinks
+# =============================================================================
+
+additional_sinks_pathtraversal:
+  - name: "File.read"
+    kind: PathTraversal
+    description: "Read file (path traversal risk)"
+    argument: 0
+
+  - name: "File.open"
+    kind: PathTraversal
+    description: "Open file (path traversal risk)"
+    argument: 0
+
+  - name: "File.write"
+    kind: FileWrite
+    description: "Write file"
+    argument: 0
+
+  - name: "File.binread"
+    kind: PathTraversal
+    description: "Read binary file"
+    argument: 0
+
+  - name: "File.readlines"
+    kind: PathTraversal
+    description: "Read file lines"
+    argument: 0
+
+  - name: "send_file"
+    kind: PathTraversal
+    description: "Rails send_file (path traversal risk)"
+    argument: 0
+
+  - name: "send_data"
+    kind: PathTraversal
+    description: "Rails send_data with filename"
+
+# =============================================================================
+# XXE Sinks
+# =============================================================================
+
+additional_sinks_xxe:
+  - name: "Nokogiri::XML"
+    kind: XmlParse
+    description: "Nokogiri XML parsing (XXE risk with external entities)"
+    argument: 0
+
+  - name: "REXML::Document.new"
+    kind: XmlParse
+    description: "REXML document parsing (XXE risk)"
+    argument: 0
+
+  - name: "LibXML::XML::Parser.string"
+    kind: XmlParse
+    description: "LibXML parsing (XXE risk)"
+    argument: 0

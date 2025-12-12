@@ -351,6 +351,17 @@ sinks:
     description: "Transaction query SQL"
     argument: 0
 
+  # Custom helper SQL sinks (common in benchmarks)
+  - name: "ExecuteRaw"
+    kind: SqlQuery
+    description: "Execute raw SQL"
+    argument: 0
+
+  - name: "helpers.ExecuteRaw"
+    kind: SqlQuery
+    description: "Helper execute raw SQL"
+    argument: 0
+
   # File operations
   - name: "os.WriteFile"
     kind: FileWrite
@@ -422,6 +433,144 @@ sinks:
     description: "Set session value"
     argument: 1
 
+  - name: "SetValue"
+    kind: TrustBoundary
+    description: "Set session value"
+    argument: 2
+
+  - name: "GlobalSessionStore.SetValue"
+    kind: TrustBoundary
+    description: "Set global session value"
+    argument: 2
+
+  - name: "helpers.GlobalSessionStore.SetValue"
+    kind: TrustBoundary
+    description: "Helper global session value"
+    argument: 2
+
+  # html/template XSS Sinks
+  - name: "Execute"
+    kind: HtmlOutput
+    package: "html/template"
+    description: "Execute template with data"
+    argument: 1
+
+  - name: "ExecuteTemplate"
+    kind: HtmlOutput
+    package: "html/template"
+    description: "Execute named template with data"
+    argument: 2
+
+  - name: "t.Execute"
+    kind: HtmlOutput
+    description: "Template execute"
+    argument: 1
+
+  - name: "template.Execute"
+    kind: HtmlOutput
+    description: "Template execute"
+    argument: 1
+
+  # Gin Framework XSS Sinks
+  - name: "c.Data"
+    kind: HtmlOutput
+    description: "Gin Data response (XSS if HTML content-type)"
+    argument: 2
+
+  - name: "c.String"
+    kind: HtmlOutput
+    description: "Gin String response"
+    argument: 1
+
+  - name: "c.HTML"
+    kind: HtmlOutput
+    description: "Gin HTML template response"
+    argument: 2
+
+  - name: "c.Writer.Write"
+    kind: HtmlOutput
+    description: "Gin writer write"
+    argument: 0
+
+  - name: "c.Writer.WriteString"
+    kind: HtmlOutput
+    description: "Gin writer write string"
+    argument: 0
+
+  # Echo Framework XSS Sinks
+  - name: "c.HTML"
+    kind: HtmlOutput
+    package: "echo"
+    description: "Echo HTML response"
+    argument: 1
+
+  - name: "c.String"
+    kind: HtmlOutput
+    package: "echo"
+    description: "Echo String response"
+    argument: 1
+
+  - name: "c.Blob"
+    kind: HtmlOutput
+    description: "Echo Blob response"
+    argument: 2
+
+  # go-ldap LDAP Injection Sinks
+  - name: "Search"
+    kind: LdapQuery
+    package: "github.com/go-ldap/ldap"
+    description: "LDAP search"
+    argument: 0
+
+  - name: "Conn.Search"
+    kind: LdapQuery
+    description: "LDAP connection search"
+    argument: 0
+
+  - name: "l.Search"
+    kind: LdapQuery
+    description: "LDAP search"
+    argument: 0
+
+  - name: "NewSearchRequest"
+    kind: LdapQuery
+    package: "github.com/go-ldap/ldap"
+    description: "Create LDAP search request"
+    argument: 1
+
+  # encoding/xml XXE Sinks
+  - name: "NewDecoder"
+    kind: XmlParse
+    package: "encoding/xml"
+    description: "XML decoder (XXE risk)"
+    argument: 0
+
+  - name: "xml.Unmarshal"
+    kind: XmlParse
+    package: "encoding/xml"
+    description: "XML unmarshal (XXE risk)"
+    argument: 0
+
+  - name: "Decoder.Decode"
+    kind: XmlParse
+    description: "XML decode"
+    argument: 0
+
+  # Path Traversal Sinks - only actual file operations, not path construction
+  # filepath.Join removed as too broad - it constructs paths but doesn't access files
+
+  - name: "os.ReadFile"
+    kind: PathTraversal
+    package: "os"
+    description: "Read file (path traversal risk)"
+    argument: 0
+
+  - name: "os.Open"
+    kind: PathTraversal
+    package: "os"
+    description: "Open file (path traversal risk)"
+    argument: 0
+
 sanitizers:
   # HTML Escaping
   - name: "html.EscapeString"
@@ -476,6 +625,27 @@ sanitizers:
     sanitizes: [Path]
     package: "net/url"
     description: "URL query escape"
+
+  # Path sanitization - filepath.Base extracts only filename, preventing traversal
+  - name: "filepath.Base"
+    sanitizes: [Path]
+    package: "path/filepath"
+    description: "Extract base name (prevents path traversal)"
+
+  - name: "path.Base"
+    sanitizes: [Path]
+    package: "path"
+    description: "Extract base name (prevents path traversal)"
+
+  - name: "filepath.Clean"
+    sanitizes: [Path]
+    package: "path/filepath"
+    description: "Clean path (normalizes ..)"
+
+  # Helper sanitizer for benchmark
+  - name: "helpers.EscapeForHTML"
+    sanitizes: [Html]
+    description: "Helper HTML escape function"
 
 summaries:
   # String operations
@@ -789,3 +959,103 @@ additional_sanitizers:
     sanitizes: [Path]
     package: "path"
     description: "Clean path"
+
+# =============================================================================
+# html/template XSS Sinks
+# =============================================================================
+
+additional_sinks_template:
+  # html/template Execute - XSS if data contains user input
+  - name: "Execute"
+    kind: HtmlOutput
+    package: "html/template"
+    description: "Execute template with data"
+    argument: 1
+
+  - name: "ExecuteTemplate"
+    kind: HtmlOutput
+    package: "html/template"
+    description: "Execute named template with data"
+    argument: 2
+
+  - name: "t.Execute"
+    kind: HtmlOutput
+    description: "Template execute"
+    argument: 1
+
+  - name: "t.ExecuteTemplate"
+    kind: HtmlOutput
+    description: "Template execute named"
+    argument: 2
+
+  - name: "template.Execute"
+    kind: HtmlOutput
+    description: "Template execute"
+    argument: 1
+
+  # text/template (less safe than html/template)
+  - name: "Execute"
+    kind: HtmlOutput
+    package: "text/template"
+    description: "Text template execute (no escaping)"
+    argument: 1
+
+# =============================================================================
+# go-ldap LDAP Injection Sinks
+# =============================================================================
+
+additional_sinks_ldap:
+  - name: "Search"
+    kind: LdapQuery
+    package: "github.com/go-ldap/ldap"
+    description: "LDAP search"
+    argument: 0
+
+  - name: "SearchWithPaging"
+    kind: LdapQuery
+    package: "github.com/go-ldap/ldap"
+    description: "LDAP search with paging"
+    argument: 0
+
+  - name: "Conn.Search"
+    kind: LdapQuery
+    description: "LDAP connection search"
+    argument: 0
+
+  - name: "l.Search"
+    kind: LdapQuery
+    description: "LDAP search"
+    argument: 0
+
+  - name: "NewSearchRequest"
+    kind: LdapQuery
+    package: "github.com/go-ldap/ldap"
+    description: "Create LDAP search request"
+    argument: 1
+
+# =============================================================================
+# encoding/xml XXE Sinks
+# =============================================================================
+
+additional_sinks_xxe:
+  - name: "NewDecoder"
+    kind: XmlParse
+    package: "encoding/xml"
+    description: "XML decoder (XXE risk)"
+    argument: 0
+
+  - name: "Unmarshal"
+    kind: XmlParse
+    package: "encoding/xml"
+    description: "XML unmarshal (XXE risk)"
+    argument: 0
+
+  - name: "Decoder.Decode"
+    kind: XmlParse
+    description: "XML decode"
+    argument: 0
+
+  - name: "d.Decode"
+    kind: XmlParse
+    description: "XML decoder decode"
+    argument: 0
