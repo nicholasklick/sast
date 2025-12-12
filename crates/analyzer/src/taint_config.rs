@@ -339,6 +339,11 @@ impl LanguageTaintConfig {
             "method",
             "const_get",        // Constant lookup
             "constantize",      // Rails method
+            // Template injection
+            "ERB.new",          // ERB template injection
+            "Erubis::Eruby.new",
+            "Haml::Engine.new",
+            "Slim::Template.new",
         ];
 
         for name in eval_sinks {
@@ -1185,6 +1190,24 @@ impl LanguageTaintConfig {
             });
         }
 
+        // Template Injection (Jinja2, Mako, etc.)
+        for name in &[
+            "Template",               // jinja2.Template(user_input)
+            "jinja2.Template",
+            "Environment.from_string",
+            "jinja2.Environment.from_string",
+            "Template.render",
+            "mako.template.Template",
+            "Mako.Template",
+            "Chameleon.PageTemplate",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::CodeEval,  // Template injection is code execution
+                node_id: 0,
+            });
+        }
+
         // LDAP Injection
         for name in &[
             "search_s",
@@ -1827,6 +1850,48 @@ impl LanguageTaintConfig {
             });
         }
 
+        // Spring Data JPA Repository - query methods that execute user-controlled queries
+        for name in &[
+            // JpaRepository/CrudRepository - safe when using derived queries,
+            // but dangerous if @Query annotation has string concatenation
+            // These are sinks when the query string is user-controlled
+            "JpaRepository.query",
+            "CrudRepository.query",
+            // EntityManager (extending what's already in SQL Injection section)
+            "EntityManager.createQuery",         // JPQL - safe with params, dangerous with concat
+            "EntityManager.createNativeQuery",   // Native SQL - dangerous
+            "em.createQuery",
+            "em.createNativeQuery",
+            "entityManager.createQuery",
+            "entityManager.createNativeQuery",
+            // Spring Data JPA @Query annotation methods (custom queries)
+            "repository.findByNativeQuery",
+            "nativeQuery",
+            // JPA Criteria API - can be injection point
+            "CriteriaBuilder.createQuery",
+            "CriteriaQuery.where",
+            "criteriaBuilder.createQuery",
+            "cb.createQuery",
+            // Spring Data JPA Specification
+            "JpaSpecificationExecutor.findAll",
+            "Specification.where",
+            // Querydsl (popular with Spring Data)
+            "JPAQuery.from",
+            "JPAQueryFactory.from",
+            "QuerydslPredicateExecutor.findAll",
+            // jOOQ integration
+            "DSLContext.fetch",
+            "DSLContext.execute",
+            "dsl.fetch",
+            "dsl.execute",
+        ] {
+            sinks.push(TaintSink {
+                name: name.to_string(),
+                kind: TaintSinkKind::SqlQuery,
+                node_id: 0,
+            });
+        }
+
         // ===== SANITIZERS (12+) =====
         sanitizers.extend(vec![
             // HTML Escaping
@@ -1907,6 +1972,45 @@ impl LanguageTaintConfig {
             });
         }
 
+        // User Input - Echo Framework (labstack/echo)
+        for name in &[
+            "c.QueryParam",
+            "c.Param",
+            "c.FormValue",
+            "c.Cookie",
+            "c.Request",
+            "c.Bind",
+            "c.Get",
+            "echo.Context.QueryParam",
+            "echo.Context.Param",
+            "echo.Context.FormValue",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - Fiber Framework (gofiber/fiber)
+        for name in &[
+            "c.Query",
+            "c.Params",
+            "c.FormValue",
+            "c.Cookies",
+            "c.Body",
+            "c.BodyParser",
+            "fiber.Ctx.Query",
+            "fiber.Ctx.Params",
+            "fiber.Ctx.FormValue",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
         // File Read
         for name in &[
             "os.ReadFile",
@@ -1957,6 +2061,7 @@ impl LanguageTaintConfig {
 
         // SQL Injection
         for name in &[
+            // database/sql
             "db.Exec",
             "db.Query",
             "db.QueryRow",
@@ -1966,6 +2071,24 @@ impl LanguageTaintConfig {
             "database/sql.DB.Query",
             "ExecuteRaw",       // OWASP Benchmark helper
             "helpers.ExecuteRaw",
+            // GORM (gorm.io/gorm)
+            "db.Raw",
+            "db.Exec",
+            "gorm.DB.Raw",
+            "gorm.DB.Exec",
+            "DB.Raw",
+            "DB.Exec",
+            // sqlx (jmoiron/sqlx)
+            "sqlx.DB.Query",
+            "sqlx.DB.QueryRow",
+            "sqlx.DB.Exec",
+            "sqlx.DB.Select",
+            "sqlx.DB.Get",
+            "sqlx.Query",
+            "sqlx.QueryRow",
+            "sqlx.Exec",
+            "sqlx.Select",
+            "sqlx.Get",
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
