@@ -232,6 +232,67 @@ impl LanguageTaintConfig {
             });
         }
 
+        // User Input - Sidekiq job arguments (from message queue)
+        let sidekiq_sources = vec![
+            // Job arguments (external input from Redis queue)
+            "args",                 // Job arguments array
+            "arguments",            // Alternative accessor
+            "options",              // Job options hash
+            "jid",                  // Job ID (less risky but external)
+            // Sidekiq Pro batch
+            "batch.description",
+            "batch.callback_data",
+        ];
+
+        for name in sidekiq_sources {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - Devise authentication (user-controlled auth data)
+        let devise_sources = vec![
+            // Current user attributes (some may be user-controlled)
+            "current_user.email",
+            "current_user.name",
+            "current_user.username",
+            // Devise parameters
+            "devise_parameter_sanitizer",
+            "sign_in_params",
+            "sign_up_params",
+            "account_update_params",
+            // Warden/Devise request
+            "warden.user",
+            "env['warden'].user",
+        ];
+
+        for name in devise_sources {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - ActionController Parameters (bypass permit)
+        let action_controller_sources = vec![
+            // Unsafe param access (bypass strong parameters)
+            "params.to_unsafe_h",
+            "params.to_unsafe_hash",
+            "params.permit!",
+            "ActionController::Parameters.new",
+        ];
+
+        for name in action_controller_sources {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
         // File Read
         let file_sources = vec![
             "File.read",
@@ -746,13 +807,106 @@ impl LanguageTaintConfig {
         let mut sinks = Vec::new();
         let mut sanitizers = Vec::new();
 
-        // User Input
+        // User Input - Express, Koa, Lambda
         for name in &[
             "request.body", "request.query", "request.params", "process.argv",
             "req.body", "req.query", "req.params", "req.cookies", "req.headers",  // Express
             "req.get", "req.header",  // Express header getters
             "ctx.request.body", "ctx.request.query", "ctx.cookies",  // Koa
             "event.body", "event.queryStringParameters", "event.headers",  // AWS Lambda
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - NestJS (decorators and parameters)
+        for name in &[
+            // NestJS parameter decorators
+            "@Body",
+            "@Query",
+            "@Param",
+            "@Headers",
+            "@Cookies",
+            "@Req",
+            "@Request",
+            // NestJS DTO objects (user input via decorators)
+            "Body()",
+            "Query()",
+            "Param()",
+            "Headers()",
+            // NestJS request object
+            "request.body",
+            "request.query",
+            "request.params",
+            // Pipes (user input flows through)
+            "ValidationPipe",
+            "ParseIntPipe",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - Fastify
+        for name in &[
+            // Request properties
+            "request.body",
+            "request.query",
+            "request.params",
+            "request.headers",
+            "request.cookies",
+            // Fastify shorthand
+            "req.body",
+            "req.query",
+            "req.params",
+            // Multipart
+            "request.file",
+            "request.files",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - tRPC (procedure inputs)
+        for name in &[
+            // Input from procedures
+            "input",
+            "ctx.input",
+            "opts.input",
+            // Raw input
+            "opts.rawInput",
+            // Context from middleware
+            "ctx.user",
+            "ctx.session",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - Next.js API routes and Server Actions
+        for name in &[
+            // API route request
+            "req.body",
+            "req.query",
+            "req.cookies",
+            // Next.js App Router
+            "params",
+            "searchParams",
+            // Server Actions (form data)
+            "formData",
+            "formData.get",
+            "formData.getAll",
         ] {
             sources.push(TaintSource {
                 name: name.to_string(),
@@ -801,6 +955,31 @@ impl LanguageTaintConfig {
             "sequelize.query", "sequelize.literal", "knex.raw",
             "connection.query", "pool.query",
             "prisma.$queryRaw", "prisma.$executeRaw",  // Prisma ORM
+            // TypeORM
+            "createQueryBuilder",
+            "manager.query",
+            "connection.query",
+            "entityManager.query",
+            "repository.query",
+            "dataSource.query",
+            "QueryRunner.query",
+            "getRepository().query",
+            "Repository.query",
+            // TypeORM query builder (unsafe methods)
+            "where",     // When used with raw SQL
+            "andWhere",
+            "orWhere",
+            "having",
+            "orderBy",
+            "addOrderBy",
+            // MikroORM
+            "em.execute",
+            "em.getKnex().raw",
+            "EntityManager.execute",
+            // Drizzle ORM
+            "db.execute",
+            "sql.raw",
+            "drizzle.execute",
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
@@ -1015,6 +1194,89 @@ impl LanguageTaintConfig {
             "sys.stdin",
             "sys.stdin.read",
             "sys.stdin.readline",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - aiohttp (async HTTP framework)
+        for name in &[
+            // Request object
+            "request.query",
+            "request.match_info",
+            "request.post",
+            "request.json",
+            "request.text",
+            "request.read",
+            "request.content",
+            "request.headers",
+            "request.cookies",
+            // aiohttp web
+            "web.Request.query",
+            "web.Request.match_info",
+            "web.Request.post",
+            "web.Request.json",
+            "aiohttp.web.Request.query",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - Celery task arguments (task parameters are external input)
+        for name in &[
+            // Task arguments (marked as user input since they come from message queue)
+            "self.request.args",
+            "self.request.kwargs",
+            "celery.current_task.request.args",
+            "celery.current_task.request.kwargs",
+            "task.request.args",
+            "task.request.kwargs",
+            // Celery task context
+            "context.args",
+            "context.kwargs",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - boto3 / AWS SDK (external data from AWS services)
+        for name in &[
+            // S3 object content
+            "s3.get_object",
+            "s3_client.get_object",
+            "obj.get",
+            "Body.read",
+            "response['Body'].read",
+            // DynamoDB responses
+            "dynamodb.get_item",
+            "table.get_item",
+            "table.query",
+            "table.scan",
+            "response['Item']",
+            "response['Items']",
+            // SQS messages
+            "sqs.receive_message",
+            "sqs_client.receive_message",
+            "message['Body']",
+            "Messages",
+            // SNS
+            "sns.publish",
+            // Lambda event (in handler)
+            "event",
+            "event.get",
+            "event['body']",
+            "event['queryStringParameters']",
+            "event['pathParameters']",
+            "event['headers']",
         ] {
             sources.push(TaintSource {
                 name: name.to_string(),
@@ -1434,6 +1696,101 @@ impl LanguageTaintConfig {
             });
         }
 
+        // User Input - Play Framework (playframework.com)
+        for name in &[
+            // Request body and forms
+            "request.body",
+            "request().body()",
+            "request.getQueryString",
+            "request.queryString",
+            "request.headers",
+            "request.getHeaders",
+            "request.cookies",
+            "request.getCookies",
+            "request.path",
+            "request.uri",
+            // Form handling
+            "Form.bindFromRequest",
+            "form.bindFromRequest",
+            "DynamicForm.bindFromRequest",
+            // JSON body
+            "request.body().asJson",
+            "request.body().asText",
+            "request.body().asFormUrlEncoded",
+            "request.body().asMultipartFormData",
+            // Route parameters (via @PathBindable)
+            "ctx.args",
+            "Http.Context.args",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - Vert.x Framework (vertx.io)
+        for name in &[
+            // HTTP request parameters
+            "routingContext.request",
+            "routingContext.getBodyAsString",
+            "routingContext.getBodyAsJson",
+            "routingContext.body",
+            "rc.request",
+            "rc.getBodyAsString",
+            "rc.getBodyAsJson",
+            "rc.body",
+            // Request parameters
+            "HttpServerRequest.getParam",
+            "HttpServerRequest.params",
+            "HttpServerRequest.getHeader",
+            "HttpServerRequest.headers",
+            "HttpServerRequest.getCookie",
+            "HttpServerRequest.formAttributes",
+            "request.getParam",
+            "request.params",
+            "request.getHeader",
+            "request.formAttributes",
+            // Web client responses (external data)
+            "HttpResponse.bodyAsString",
+            "HttpResponse.bodyAsJson",
+            "HttpResponse.bodyAsBuffer",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - Apache Camel (camel.apache.org)
+        for name in &[
+            // Exchange and Message body
+            "exchange.getIn().getBody",
+            "exchange.getMessage().getBody",
+            "exchange.getIn().getHeader",
+            "exchange.getMessage().getHeader",
+            "Exchange.getIn",
+            "Exchange.getMessage",
+            "Message.getBody",
+            "Message.getHeader",
+            "Message.getHeaders",
+            // Camel HTTP component
+            "exchange.getIn().getBody(String.class)",
+            // Route definitions with user input
+            "from(\"direct:",
+            "from(\"http:",
+            "from(\"jetty:",
+            "from(\"servlet:",
+            "from(\"rest:",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
         // File Read - only match read operations, not constructors
         // FileInputStream and FileReader constructors are SINKS (for path traversal),
         // while their read operations are SOURCES (for file read vulnerabilities)
@@ -1610,6 +1967,34 @@ impl LanguageTaintConfig {
             "SqlSession.insert",
             "SqlSession.update",
             "SqlSession.delete",
+            // MyBatis annotations (string interpolation in @Select, @Insert, etc.)
+            "@Select",
+            "@Insert",
+            "@Update",
+            "@Delete",
+            "@SelectProvider",
+            "@InsertProvider",
+            "@UpdateProvider",
+            "@DeleteProvider",
+            // MyBatis XML mapper dynamic SQL
+            "selectKey",
+            // Play Framework Ebean ORM
+            "Ebean.find",
+            "Ebean.createQuery",
+            "Ebean.createSqlQuery",
+            "Ebean.createNamedQuery",
+            "finder.query",
+            "Finder.query",
+            // Vert.x SQL clients
+            "SqlClient.query",
+            "SqlClient.preparedQuery",
+            "SqlConnection.query",
+            "SqlConnection.preparedQuery",
+            "Pool.query",
+            "Pool.preparedQuery",
+            "PgPool.query",
+            "MySQLPool.query",
+            "JDBCPool.query",
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
@@ -2003,6 +2388,42 @@ impl LanguageTaintConfig {
             "fiber.Ctx.Query",
             "fiber.Ctx.Params",
             "fiber.Ctx.FormValue",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - Chi Router (go-chi/chi)
+        for name in &[
+            // URL parameters
+            "chi.URLParam",
+            "URLParam",
+            // Context values (often used for route params)
+            "r.Context().Value",
+            "ctx.Value",
+            // Chi middleware context
+            "middleware.GetReqID",
+            // Standard chi patterns
+            "chi.RouteContext",
+            "routeContext.URLParams",
+            "rctx.URLParams.Get",
+        ] {
+            sources.push(TaintSource {
+                name: name.to_string(),
+                kind: TaintSourceKind::UserInput,
+                node_id: 0,
+            });
+        }
+
+        // User Input - Gorilla Mux (gorilla/mux)
+        for name in &[
+            "mux.Vars",
+            "Vars",
+            "mux.CurrentRoute",
+            "r.URL.Query",
         ] {
             sources.push(TaintSource {
                 name: name.to_string(),
