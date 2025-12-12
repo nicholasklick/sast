@@ -549,3 +549,312 @@ summaries:
     input: "Argument[0]"
     output: "Argument[this]"
     kind: taint
+
+# =============================================================================
+# SQLAlchemy ORM Framework
+# =============================================================================
+
+additional_sinks_sqlalchemy:
+  # SQLAlchemy text() - raw SQL (primary injection risk)
+  - name: "text"
+    kind: SqlQuery
+    package: "sqlalchemy"
+    description: "SQLAlchemy raw SQL text"
+    argument: 0
+
+  - name: "sqlalchemy.text"
+    kind: SqlQuery
+    description: "SQLAlchemy raw SQL text"
+    argument: 0
+
+  # SQLAlchemy Session/Engine execute
+  - name: "Session.execute"
+    kind: SqlQuery
+    package: "sqlalchemy.orm"
+    description: "SQLAlchemy session execute"
+    argument: 0
+
+  - name: "session.execute"
+    kind: SqlQuery
+    description: "SQLAlchemy session execute"
+    argument: 0
+
+  - name: "engine.execute"
+    kind: SqlQuery
+    description: "SQLAlchemy engine execute"
+    argument: 0
+
+  - name: "Engine.execute"
+    kind: SqlQuery
+    package: "sqlalchemy"
+    description: "SQLAlchemy engine execute"
+    argument: 0
+
+  # SQLAlchemy Core
+  - name: "Connection.execute"
+    kind: SqlQuery
+    package: "sqlalchemy"
+    description: "SQLAlchemy connection execute"
+    argument: 0
+
+  - name: "conn.execute"
+    kind: SqlQuery
+    description: "SQLAlchemy connection execute"
+    argument: 0
+
+  # SQLAlchemy ORM query filter (unsafe with string format)
+  - name: "filter"
+    kind: SqlQuery
+    package: "sqlalchemy.orm.Query"
+    description: "SQLAlchemy query filter (unsafe with string concat)"
+    argument: 0
+
+  - name: "order_by"
+    kind: SqlQuery
+    package: "sqlalchemy.orm.Query"
+    description: "SQLAlchemy order by"
+    argument: 0
+
+  - name: "group_by"
+    kind: SqlQuery
+    package: "sqlalchemy.orm.Query"
+    description: "SQLAlchemy group by"
+    argument: 0
+
+# =============================================================================
+# FastAPI Framework
+# =============================================================================
+
+additional_sources_fastapi:
+  # FastAPI dependency injection sources
+  - name: "Body"
+    kind: UserInput
+    package: "fastapi"
+    description: "FastAPI request body"
+
+  - name: "Query"
+    kind: UserInput
+    package: "fastapi"
+    description: "FastAPI query parameter"
+
+  - name: "Path"
+    kind: UserInput
+    package: "fastapi"
+    description: "FastAPI path parameter"
+
+  - name: "Header"
+    kind: UserInput
+    package: "fastapi"
+    description: "FastAPI header"
+
+  - name: "Cookie"
+    kind: UserInput
+    package: "fastapi"
+    description: "FastAPI cookie"
+
+  - name: "Form"
+    kind: UserInput
+    package: "fastapi"
+    description: "FastAPI form data"
+
+  - name: "File"
+    kind: UserInput
+    package: "fastapi"
+    description: "FastAPI uploaded file"
+
+  - name: "UploadFile"
+    kind: UserInput
+    package: "fastapi"
+    description: "FastAPI upload file"
+
+  # FastAPI Request object
+  - name: "Request.json"
+    kind: UserInput
+    description: "FastAPI request JSON"
+
+  - name: "Request.body"
+    kind: UserInput
+    description: "FastAPI request body"
+
+  - name: "Request.form"
+    kind: UserInput
+    description: "FastAPI request form"
+
+  - name: "Request.query_params"
+    kind: UserInput
+    description: "FastAPI query params"
+
+  - name: "Request.path_params"
+    kind: UserInput
+    description: "FastAPI path params"
+
+  - name: "Request.headers"
+    kind: UserInput
+    description: "FastAPI headers"
+
+  - name: "Request.cookies"
+    kind: UserInput
+    description: "FastAPI cookies"
+
+# =============================================================================
+# Pydantic Models (FastAPI input validation)
+# =============================================================================
+
+additional_sources_pydantic:
+  # Pydantic BaseModel attributes (contain user input after validation)
+  - name: "BaseModel"
+    kind: UserInput
+    package: "pydantic"
+    description: "Pydantic model (contains user input)"
+
+  # Pydantic model access
+  - name: "model.dict"
+    kind: UserInput
+    description: "Pydantic model to dict"
+
+  - name: "model.json"
+    kind: UserInput
+    description: "Pydantic model to JSON"
+
+# =============================================================================
+# aiohttp Framework
+# =============================================================================
+
+additional_sources_aiohttp:
+  # aiohttp request sources
+  - name: "request.json"
+    kind: UserInput
+    description: "aiohttp request JSON"
+
+  - name: "request.post"
+    kind: UserInput
+    description: "aiohttp POST data"
+
+  - name: "request.query"
+    kind: UserInput
+    description: "aiohttp query params"
+
+  - name: "request.match_info"
+    kind: UserInput
+    description: "aiohttp URL match info"
+
+  - name: "request.headers"
+    kind: UserInput
+    description: "aiohttp headers"
+
+  - name: "request.cookies"
+    kind: UserInput
+    description: "aiohttp cookies"
+
+  - name: "request.content"
+    kind: UserInput
+    description: "aiohttp request content"
+
+  - name: "request.text"
+    kind: UserInput
+    description: "aiohttp request text"
+
+# =============================================================================
+# Celery Task Arguments
+# =============================================================================
+
+additional_sources_celery:
+  # Celery task arguments can contain user data
+  - name: "self.request.args"
+    kind: UserInput
+    description: "Celery task arguments"
+
+  - name: "self.request.kwargs"
+    kind: UserInput
+    description: "Celery task keyword arguments"
+
+# =============================================================================
+# boto3 AWS SDK
+# =============================================================================
+
+additional_sources_boto3:
+  # S3 object content (may be user-controlled)
+  - name: "get_object"
+    kind: Network
+    package: "boto3.client('s3')"
+    description: "S3 get object response"
+
+  - name: "download_file"
+    kind: Network
+    package: "boto3.client('s3')"
+    description: "S3 download file"
+
+  # DynamoDB scan/query results
+  - name: "scan"
+    kind: Database
+    package: "boto3.client('dynamodb')"
+    description: "DynamoDB scan results"
+
+  - name: "query"
+    kind: Database
+    package: "boto3.client('dynamodb')"
+    description: "DynamoDB query results"
+
+# =============================================================================
+# Jinja2 Template Injection
+# =============================================================================
+
+additional_sinks_jinja2:
+  # Jinja2 template from string (template injection risk)
+  - name: "Template"
+    kind: CodeEval
+    package: "jinja2"
+    description: "Jinja2 template from string"
+    argument: 0
+
+  - name: "Environment.from_string"
+    kind: CodeEval
+    package: "jinja2"
+    description: "Jinja2 template from string"
+    argument: 0
+
+  - name: "from_string"
+    kind: CodeEval
+    package: "jinja2.Environment"
+    description: "Jinja2 template from string"
+    argument: 0
+
+# =============================================================================
+# Additional Sanitizers
+# =============================================================================
+
+additional_sanitizers:
+  # Path sanitization
+  - name: "os.path.basename"
+    sanitizes: [Path]
+    description: "Extract basename (prevents traversal)"
+
+  - name: "os.path.realpath"
+    sanitizes: [Path]
+    description: "Resolve to real path"
+
+  - name: "os.path.abspath"
+    sanitizes: [Path]
+    description: "Get absolute path"
+
+  - name: "pathlib.Path.resolve"
+    sanitizes: [Path]
+    description: "Resolve path"
+
+  - name: "pathlib.Path.name"
+    sanitizes: [Path]
+    description: "Get path name component"
+
+  # SQL sanitization (Django)
+  - name: "django.db.connection.cursor"
+    sanitizes: [Sql]
+    description: "Django database cursor with parameterization"
+
+  # HTML sanitization
+  - name: "django.utils.html.escape"
+    sanitizes: [Html]
+    description: "Django HTML escape"
+
+  - name: "django.utils.html.conditional_escape"
+    sanitizes: [Html]
+    description: "Django conditional HTML escape"

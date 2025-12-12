@@ -565,3 +565,284 @@ summaries:
     input: "Argument[this]"
     output: "ReturnValue"
     kind: taint
+
+# =============================================================================
+# Spring Data JPA Framework
+# =============================================================================
+
+# Spring Data JPA - Repository query results are potentially tainted
+# as they may contain user-controlled data from the database
+additional_sources:
+  # Spring Data Repository methods that return user-influenced data
+  - name: "findById"
+    kind: Database
+    package: "org.springframework.data.repository.CrudRepository"
+    description: "Find entity by ID - result may be user-influenced"
+
+  - name: "findAll"
+    kind: Database
+    package: "org.springframework.data.repository.CrudRepository"
+    description: "Find all entities"
+
+  - name: "findOne"
+    kind: Database
+    package: "org.springframework.data.repository.CrudRepository"
+    description: "Find single entity"
+
+  - name: "findBy"
+    kind: Database
+    package: "org.springframework.data.jpa.repository.JpaRepository"
+    description: "Dynamic finder methods"
+
+  - name: "getById"
+    kind: Database
+    package: "org.springframework.data.jpa.repository.JpaRepository"
+    description: "Get entity by ID reference"
+
+  - name: "getOne"
+    kind: Database
+    package: "org.springframework.data.jpa.repository.JpaRepository"
+    description: "Get entity by ID (deprecated)"
+
+  - name: "getReferenceById"
+    kind: Database
+    package: "org.springframework.data.jpa.repository.JpaRepository"
+    description: "Get entity reference by ID"
+
+  # Spring Web - Additional @RequestBody handling
+  - name: "getBody"
+    kind: UserInput
+    package: "org.springframework.http.HttpEntity"
+    description: "HTTP entity body"
+
+additional_sinks:
+  # Spring Data JPA - @Query annotation with native queries
+  - name: "nativeQuery"
+    kind: SqlQuery
+    package: "org.springframework.data.jpa.repository.Query"
+    description: "Native SQL query annotation"
+    argument: 0
+
+  # Spring JPA Specification (dynamic queries)
+  - name: "toPredicate"
+    kind: SqlQuery
+    package: "org.springframework.data.jpa.domain.Specification"
+    description: "JPA Specification predicate (if using string concat)"
+
+  # QueryDSL (commonly used with Spring Data)
+  - name: "stringPath"
+    kind: SqlQuery
+    package: "com.querydsl.core.types.dsl.Expressions"
+    description: "QueryDSL string path expression"
+    argument: 0
+
+  - name: "stringTemplate"
+    kind: SqlQuery
+    package: "com.querydsl.core.types.dsl.Expressions"
+    description: "QueryDSL string template (unsafe)"
+    argument: 0
+
+# =============================================================================
+# MyBatis Framework
+# =============================================================================
+
+additional_sinks_mybatis:
+  # MyBatis - ${} syntax (string substitution, vulnerable to SQLi)
+  - name: "select"
+    kind: SqlQuery
+    package: "org.apache.ibatis.session.SqlSession"
+    description: "MyBatis select query"
+    argument: 0
+
+  - name: "selectOne"
+    kind: SqlQuery
+    package: "org.apache.ibatis.session.SqlSession"
+    description: "MyBatis select single result"
+    argument: 0
+
+  - name: "selectList"
+    kind: SqlQuery
+    package: "org.apache.ibatis.session.SqlSession"
+    description: "MyBatis select list"
+    argument: 0
+
+  - name: "selectMap"
+    kind: SqlQuery
+    package: "org.apache.ibatis.session.SqlSession"
+    description: "MyBatis select map"
+    argument: 0
+
+  - name: "insert"
+    kind: SqlQuery
+    package: "org.apache.ibatis.session.SqlSession"
+    description: "MyBatis insert"
+    argument: 0
+
+  - name: "update"
+    kind: SqlQuery
+    package: "org.apache.ibatis.session.SqlSession"
+    description: "MyBatis update"
+    argument: 0
+
+  - name: "delete"
+    kind: SqlQuery
+    package: "org.apache.ibatis.session.SqlSession"
+    description: "MyBatis delete"
+    argument: 0
+
+# =============================================================================
+# jOOQ Framework
+# =============================================================================
+
+additional_sinks_jooq:
+  # jOOQ raw SQL
+  - name: "query"
+    kind: SqlQuery
+    package: "org.jooq.DSLContext"
+    description: "jOOQ raw query"
+    argument: 0
+
+  - name: "resultQuery"
+    kind: SqlQuery
+    package: "org.jooq.DSLContext"
+    description: "jOOQ raw result query"
+    argument: 0
+
+  - name: "fetch"
+    kind: SqlQuery
+    package: "org.jooq.DSLContext"
+    description: "jOOQ fetch with SQL"
+    argument: 0
+
+  - name: "execute"
+    kind: SqlQuery
+    package: "org.jooq.DSLContext"
+    description: "jOOQ execute SQL"
+    argument: 0
+
+  # jOOQ plain SQL
+  - name: "sql"
+    kind: SqlQuery
+    package: "org.jooq.impl.DSL"
+    description: "jOOQ plain SQL"
+    argument: 0
+
+  - name: "condition"
+    kind: SqlQuery
+    package: "org.jooq.impl.DSL"
+    description: "jOOQ SQL condition"
+    argument: 0
+
+  - name: "field"
+    kind: SqlQuery
+    package: "org.jooq.impl.DSL"
+    description: "jOOQ SQL field"
+    argument: 0
+
+# =============================================================================
+# Apache Camel Framework
+# =============================================================================
+
+additional_sources_camel:
+  # Camel Exchange body (can contain user input)
+  - name: "getIn"
+    kind: UserInput
+    package: "org.apache.camel.Exchange"
+    description: "Camel incoming message"
+
+  - name: "getBody"
+    kind: UserInput
+    package: "org.apache.camel.Message"
+    description: "Camel message body"
+
+  - name: "getHeader"
+    kind: UserInput
+    package: "org.apache.camel.Message"
+    description: "Camel message header"
+
+  - name: "getHeaders"
+    kind: UserInput
+    package: "org.apache.camel.Message"
+    description: "Camel message headers"
+
+# =============================================================================
+# Play Framework
+# =============================================================================
+
+additional_sources_play:
+  # Play Framework request handling
+  - name: "body"
+    kind: UserInput
+    package: "play.mvc.Http.Request"
+    description: "Play request body"
+
+  - name: "queryString"
+    kind: UserInput
+    package: "play.mvc.Http.Request"
+    description: "Play query string"
+
+  - name: "getQueryString"
+    kind: UserInput
+    package: "play.mvc.Http.Request"
+    description: "Play get query string parameter"
+
+  - name: "path"
+    kind: UserInput
+    package: "play.mvc.Http.Request"
+    description: "Play request path"
+
+  - name: "headers"
+    kind: UserInput
+    package: "play.mvc.Http.Request"
+    description: "Play request headers"
+
+  - name: "cookies"
+    kind: UserInput
+    package: "play.mvc.Http.Request"
+    description: "Play request cookies"
+
+  - name: "session"
+    kind: UserInput
+    package: "play.mvc.Http.Request"
+    description: "Play session data"
+
+# =============================================================================
+# Vert.x Framework
+# =============================================================================
+
+additional_sources_vertx:
+  # Vert.x request handling
+  - name: "getParam"
+    kind: UserInput
+    package: "io.vertx.ext.web.RoutingContext"
+    description: "Vert.x route parameter"
+
+  - name: "getBodyAsString"
+    kind: UserInput
+    package: "io.vertx.ext.web.RoutingContext"
+    description: "Vert.x body as string"
+
+  - name: "getBodyAsJson"
+    kind: UserInput
+    package: "io.vertx.ext.web.RoutingContext"
+    description: "Vert.x body as JSON"
+
+  - name: "request"
+    kind: UserInput
+    package: "io.vertx.ext.web.RoutingContext"
+    description: "Vert.x HTTP request"
+
+  - name: "getHeader"
+    kind: UserInput
+    package: "io.vertx.core.http.HttpServerRequest"
+    description: "Vert.x request header"
+
+  - name: "params"
+    kind: UserInput
+    package: "io.vertx.core.http.HttpServerRequest"
+    description: "Vert.x request params"
+
+  - name: "formAttributes"
+    kind: UserInput
+    package: "io.vertx.core.http.HttpServerRequest"
+    description: "Vert.x form attributes"

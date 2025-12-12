@@ -559,3 +559,199 @@ summaries:
     input: "Argument[this]"
     output: "Argument[0]"
     kind: taint
+
+# =============================================================================
+# GORM ORM Framework
+# =============================================================================
+
+additional_sinks_gorm:
+  # GORM raw SQL queries (SQL injection risk)
+  - name: "Raw"
+    kind: SqlQuery
+    package: "gorm.io/gorm"
+    description: "GORM raw SQL query"
+    argument: 0
+
+  - name: "Exec"
+    kind: SqlQuery
+    package: "gorm.io/gorm"
+    description: "GORM execute raw SQL"
+    argument: 0
+
+  - name: "Where"
+    kind: SqlQuery
+    package: "gorm.io/gorm"
+    description: "GORM WHERE clause (unsafe if string concat)"
+    argument: 0
+
+  - name: "Or"
+    kind: SqlQuery
+    package: "gorm.io/gorm"
+    description: "GORM OR clause (unsafe if string concat)"
+    argument: 0
+
+  - name: "Not"
+    kind: SqlQuery
+    package: "gorm.io/gorm"
+    description: "GORM NOT clause (unsafe if string concat)"
+    argument: 0
+
+  - name: "Order"
+    kind: SqlQuery
+    package: "gorm.io/gorm"
+    description: "GORM ORDER BY clause"
+    argument: 0
+
+  - name: "Group"
+    kind: SqlQuery
+    package: "gorm.io/gorm"
+    description: "GORM GROUP BY clause"
+    argument: 0
+
+  - name: "Having"
+    kind: SqlQuery
+    package: "gorm.io/gorm"
+    description: "GORM HAVING clause"
+    argument: 0
+
+  - name: "Joins"
+    kind: SqlQuery
+    package: "gorm.io/gorm"
+    description: "GORM JOIN clause"
+    argument: 0
+
+  - name: "Select"
+    kind: SqlQuery
+    package: "gorm.io/gorm"
+    description: "GORM SELECT clause (unsafe if string concat)"
+    argument: 0
+
+  - name: "Table"
+    kind: SqlQuery
+    package: "gorm.io/gorm"
+    description: "GORM table name (injection risk)"
+    argument: 0
+
+# =============================================================================
+# sqlx Library (Enhanced database/sql)
+# =============================================================================
+
+additional_sinks_sqlx:
+  # sqlx query methods
+  - name: "Get"
+    kind: SqlQuery
+    package: "github.com/jmoiron/sqlx"
+    description: "sqlx get single result"
+    argument: 1
+
+  - name: "Select"
+    kind: SqlQuery
+    package: "github.com/jmoiron/sqlx"
+    description: "sqlx select multiple results"
+    argument: 1
+
+  - name: "MustExec"
+    kind: SqlQuery
+    package: "github.com/jmoiron/sqlx"
+    description: "sqlx must execute"
+    argument: 0
+
+  - name: "NamedExec"
+    kind: SqlQuery
+    package: "github.com/jmoiron/sqlx"
+    description: "sqlx named exec"
+    argument: 0
+
+  - name: "NamedQuery"
+    kind: SqlQuery
+    package: "github.com/jmoiron/sqlx"
+    description: "sqlx named query"
+    argument: 0
+
+  - name: "Rebind"
+    kind: SqlQuery
+    package: "github.com/jmoiron/sqlx"
+    description: "sqlx rebind query"
+    argument: 0
+
+  - name: "In"
+    kind: SqlQuery
+    package: "github.com/jmoiron/sqlx"
+    description: "sqlx IN clause expansion"
+    argument: 0
+
+# =============================================================================
+# ent ORM Framework
+# =============================================================================
+
+additional_sinks_ent:
+  # ent raw queries
+  - name: "ExecContext"
+    kind: SqlQuery
+    package: "entgo.io/ent/dialect/sql"
+    description: "ent execute context"
+    argument: 1
+
+  - name: "QueryContext"
+    kind: SqlQuery
+    package: "entgo.io/ent/dialect/sql"
+    description: "ent query context"
+    argument: 1
+
+# =============================================================================
+# Chi Router Framework
+# =============================================================================
+
+additional_sources_chi:
+  # Chi router URL parameters
+  - name: "URLParam"
+    kind: UserInput
+    package: "github.com/go-chi/chi/v5"
+    description: "Chi URL parameter"
+
+  - name: "URLParamFromCtx"
+    kind: UserInput
+    package: "github.com/go-chi/chi/v5"
+    description: "Chi URL parameter from context"
+
+# =============================================================================
+# Gorilla Mux Router
+# =============================================================================
+
+additional_sources_gorilla:
+  # Gorilla mux URL parameters
+  - name: "Vars"
+    kind: UserInput
+    package: "github.com/gorilla/mux"
+    description: "Gorilla mux URL variables"
+
+# =============================================================================
+# Additional Path Sanitizers
+# =============================================================================
+
+additional_sanitizers:
+  # filepath package sanitizers
+  - name: "filepath.Base"
+    sanitizes: [Path]
+    package: "path/filepath"
+    description: "Extract base name (prevents traversal)"
+
+  - name: "filepath.Clean"
+    sanitizes: [Path]
+    package: "path/filepath"
+    description: "Clean path"
+
+  - name: "filepath.Abs"
+    sanitizes: [Path]
+    package: "path/filepath"
+    description: "Get absolute path"
+
+  - name: "path.Base"
+    sanitizes: [Path]
+    package: "path"
+    description: "Extract base name"
+
+  - name: "path.Clean"
+    sanitizes: [Path]
+    package: "path"
+    description: "Clean path"

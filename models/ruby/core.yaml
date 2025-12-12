@@ -525,3 +525,289 @@ summaries:
     input: "Argument[0]"
     output: "ReturnValue"
     kind: taint
+
+# =============================================================================
+# Rails Extended - Code Injection Sinks
+# =============================================================================
+
+additional_sinks_code_injection:
+  # send/public_send - dangerous if method name is user-controlled
+  - name: "send"
+    kind: CodeEval
+    description: "Dynamic method invocation (code injection if method name is tainted)"
+    argument: 0
+
+  - name: "public_send"
+    kind: CodeEval
+    description: "Public dynamic method invocation"
+    argument: 0
+
+  - name: "__send__"
+    kind: CodeEval
+    description: "Direct dynamic method invocation"
+    argument: 0
+
+  # constantize - converts string to constant (dangerous)
+  - name: "constantize"
+    kind: CodeEval
+    description: "Convert string to constant (code injection risk)"
+
+  - name: "safe_constantize"
+    kind: CodeEval
+    description: "Safe constantize (still risky with user input)"
+
+  # classify/camelize followed by constantize
+  - name: "classify"
+    kind: CodeEval
+    description: "Convert to class name string"
+
+# =============================================================================
+# Rails Template Injection
+# =============================================================================
+
+additional_sinks_template:
+  # ERB template injection
+  - name: "ERB.new"
+    kind: CodeEval
+    description: "ERB template creation (template injection risk)"
+    argument: 0
+
+  - name: "Erubi::Engine.new"
+    kind: CodeEval
+    description: "Erubi template creation"
+    argument: 0
+
+  - name: "Haml::Engine.new"
+    kind: CodeEval
+    description: "Haml template creation"
+    argument: 0
+
+  - name: "Slim::Template.new"
+    kind: CodeEval
+    description: "Slim template creation"
+    argument: 0
+
+  # render with inline template
+  - name: "render inline:"
+    kind: CodeEval
+    description: "Render inline template (injection risk)"
+
+# =============================================================================
+# ActiveRecord Extended - SQL Injection
+# =============================================================================
+
+additional_sinks_activerecord:
+  # ActiveRecord dynamic finders (can be vulnerable)
+  - name: "where"
+    kind: SqlQuery
+    description: "ActiveRecord where clause (unsafe with string interpolation)"
+    argument: 0
+
+  - name: "order"
+    kind: SqlQuery
+    description: "ActiveRecord order clause"
+    argument: 0
+
+  - name: "group"
+    kind: SqlQuery
+    description: "ActiveRecord group clause"
+    argument: 0
+
+  - name: "having"
+    kind: SqlQuery
+    description: "ActiveRecord having clause"
+    argument: 0
+
+  - name: "joins"
+    kind: SqlQuery
+    description: "ActiveRecord joins clause"
+    argument: 0
+
+  - name: "select"
+    kind: SqlQuery
+    description: "ActiveRecord select clause"
+    argument: 0
+
+  - name: "from"
+    kind: SqlQuery
+    description: "ActiveRecord from clause"
+    argument: 0
+
+  - name: "pluck"
+    kind: SqlQuery
+    description: "ActiveRecord pluck (unsafe if column name is user input)"
+    argument: 0
+
+  - name: "calculate"
+    kind: SqlQuery
+    description: "ActiveRecord calculate"
+    argument: 0
+
+  - name: "count"
+    kind: SqlQuery
+    description: "ActiveRecord count (unsafe with string argument)"
+    argument: 0
+
+  - name: "sum"
+    kind: SqlQuery
+    description: "ActiveRecord sum"
+    argument: 0
+
+  - name: "average"
+    kind: SqlQuery
+    description: "ActiveRecord average"
+    argument: 0
+
+  - name: "minimum"
+    kind: SqlQuery
+    description: "ActiveRecord minimum"
+    argument: 0
+
+  - name: "maximum"
+    kind: SqlQuery
+    description: "ActiveRecord maximum"
+    argument: 0
+
+  # Dangerous raw SQL methods
+  - name: "connection.execute"
+    kind: SqlQuery
+    description: "Execute raw SQL on connection"
+    argument: 0
+
+  - name: "execute_raw"
+    kind: SqlQuery
+    description: "Execute raw SQL"
+    argument: 0
+
+  - name: "update_all"
+    kind: SqlQuery
+    description: "Update all with SQL (injection risk)"
+    argument: 0
+
+  - name: "delete_all"
+    kind: SqlQuery
+    description: "Delete all with SQL (injection risk)"
+    argument: 0
+
+# =============================================================================
+# Rack Environment Sources
+# =============================================================================
+
+additional_sources_rack:
+  # Rack environment (often missed)
+  - name: "env['rack.input']"
+    kind: UserInput
+    description: "Rack input stream"
+
+  - name: "env['QUERY_STRING']"
+    kind: UserInput
+    description: "Rack query string"
+
+  - name: "env['PATH_INFO']"
+    kind: UserInput
+    description: "Rack path info"
+
+  - name: "env['REQUEST_URI']"
+    kind: UserInput
+    description: "Rack request URI"
+
+  - name: "env['HTTP_HOST']"
+    kind: UserInput
+    description: "Rack HTTP host"
+
+  - name: "env['HTTP_REFERER']"
+    kind: UserInput
+    description: "Rack HTTP referer"
+
+  - name: "env['HTTP_USER_AGENT']"
+    kind: UserInput
+    description: "Rack HTTP user agent"
+
+  - name: "env['HTTP_COOKIE']"
+    kind: UserInput
+    description: "Rack HTTP cookie"
+
+  - name: "env['CONTENT_TYPE']"
+    kind: UserInput
+    description: "Rack content type"
+
+  - name: "env['REMOTE_ADDR']"
+    kind: UserInput
+    description: "Rack remote address"
+
+# =============================================================================
+# ActionController Parameters
+# =============================================================================
+
+additional_sources_params:
+  # Unsafe parameter access
+  - name: "to_unsafe_h"
+    kind: UserInput
+    package: "ActionController::Parameters"
+    description: "Convert params to unsafe hash"
+
+  - name: "to_unsafe_hash"
+    kind: UserInput
+    package: "ActionController::Parameters"
+    description: "Convert params to unsafe hash"
+
+  - name: "permit!"
+    kind: UserInput
+    package: "ActionController::Parameters"
+    description: "Permit all parameters (dangerous)"
+
+# =============================================================================
+# Sidekiq Job Arguments
+# =============================================================================
+
+additional_sources_sidekiq:
+  # Sidekiq job arguments can contain user data
+  - name: "perform"
+    kind: UserInput
+    description: "Sidekiq job perform arguments"
+
+  - name: "perform_async"
+    kind: UserInput
+    description: "Sidekiq async job arguments"
+
+# =============================================================================
+# Devise Authentication
+# =============================================================================
+
+additional_sources_devise:
+  # Devise authentication
+  - name: "current_user"
+    kind: Database
+    description: "Current authenticated user (database record)"
+
+  - name: "user_signed_in?"
+    kind: Database
+    description: "User authentication check"
+
+# =============================================================================
+# Additional Sanitizers
+# =============================================================================
+
+additional_sanitizers:
+  # Rack sanitization
+  - name: "Rack::Utils.escape_html"
+    sanitizes: [Html]
+    description: "Rack HTML escape"
+
+  - name: "Rack::Utils.escape"
+    sanitizes: [Path]
+    description: "Rack URL escape"
+
+  # ActiveSupport sanitization
+  - name: "ActiveSupport::SafeBuffer"
+    sanitizes: [Html]
+    description: "Rails safe buffer"
+
+  # File path sanitization
+  - name: "File.basename"
+    sanitizes: [Path]
+    description: "Extract file basename"
+
+  - name: "Pathname.new"
+    sanitizes: [Path]
+    description: "Create pathname object"
