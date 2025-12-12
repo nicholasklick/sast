@@ -5,6 +5,7 @@
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 use gittera_analyzer::{CallGraphBuilder, CfgBuilder, InterproceduralTaintAnalysis, SymbolTableBuilder};
+use gittera_cache::{AnalysisCache, AnalysisCacheConfig, FileFingerprint};
 use gittera_parser::{Language, LanguageConfig, Parser};
 use gittera_query::{Query, QueryExecutor, QueryMetadata};
 use gittera_query::Finding;
@@ -27,6 +28,7 @@ pub struct FileAnalysisResult {
 /// Parallel analyzer for multi-file analysis
 pub struct ParallelAnalyzer {
     show_progress: bool,
+    analysis_cache: Option<Arc<Mutex<AnalysisCache>>>,
 }
 
 /// Convert Language enum to the string format used in query metadata
@@ -55,7 +57,28 @@ fn language_to_string(lang: Language) -> &'static str {
 
 impl ParallelAnalyzer {
     pub fn new(show_progress: bool) -> Self {
-        Self { show_progress }
+        Self {
+            show_progress,
+            analysis_cache: None,
+        }
+    }
+
+    /// Create a new parallel analyzer with analysis caching enabled
+    pub fn with_analysis_cache(show_progress: bool) -> Result<Self> {
+        let config = AnalysisCacheConfig::default();
+        let cache = AnalysisCache::new(config)?;
+        Ok(Self {
+            show_progress,
+            analysis_cache: Some(Arc::new(Mutex::new(cache))),
+        })
+    }
+
+    /// Enable analysis caching on an existing analyzer
+    pub fn enable_analysis_cache(&mut self) -> Result<()> {
+        let config = AnalysisCacheConfig::default();
+        let cache = AnalysisCache::new(config)?;
+        self.analysis_cache = Some(Arc::new(Mutex::new(cache)));
+        Ok(())
     }
 
     /// Analyze multiple files in parallel (legacy - no language filtering)
@@ -252,6 +275,9 @@ impl ParallelAnalyzer {
     ) -> FileAnalysisResult {
         debug!("Analyzing: {}", source_file.path.display());
 
+        // Compute file fingerprint for cache lookup
+        let fingerprint = self.compute_file_fingerprint(&source_file.path);
+
         // Parse the file
         let config = LanguageConfig::new(source_file.language);
         let parser = Parser::new(config, &source_file.path);
@@ -276,8 +302,8 @@ impl ParallelAnalyzer {
         let call_graph_builder = CallGraphBuilder::new();
         let call_graph = call_graph_builder.build(&ast);
 
-        let cfg_builder = CfgBuilder::new();
-        let cfg = cfg_builder.build(&ast);
+        // Try to load CFG from cache, or build it
+        let cfg = self.get_or_build_cfg(&source_file.path, &fingerprint, &ast);
 
         // Run interprocedural taint analysis with language-specific configuration
         let mut interprocedural_analysis = InterproceduralTaintAnalysis::new()
@@ -406,6 +432,48 @@ impl ParallelAnalyzer {
             failed_files,
             total_findings,
         }
+    }
+
+    /// Compute file fingerprint for cache invalidation
+    fn compute_file_fingerprint(&self, path: &PathBuf) -> Option<FileFingerprint> {
+        FileFingerprint::from_file(path).ok()
+    }
+
+    /// Get CFG from cache or build it
+    fn get_or_build_cfg(
+        &self,
+        path: &PathBuf,
+        fingerprint: &Option<FileFingerprint>,
+        ast: &gittera_parser::ast::AstNode,
+    ) -> gittera_analyzer::cfg::ControlFlowGraph {
+        // Try to load from cache first
+        if let (Some(cache), Some(fp)) = (&self.analysis_cache, fingerprint) {
+            if let Ok(cache_guard) = cache.lock() {
+                // Check if cache is valid
+                if cache_guard.has_valid_cfg(path, fp) {
+                    // Try to load
+                    if let Ok(cached_cfg) = cache_guard.load_cfg::<gittera_analyzer::cfg::ControlFlowGraph>(path) {
+                        debug!("CFG cache hit for {}", path.display());
+                        return cached_cfg;
+                    }
+                }
+            }
+        }
+
+        // Build CFG
+        let cfg_builder = CfgBuilder::new();
+        let cfg = cfg_builder.build(ast);
+
+        // Store in cache if available
+        if let (Some(cache), Some(fp)) = (&self.analysis_cache, fingerprint) {
+            if let Ok(mut cache_guard) = cache.lock() {
+                if let Err(e) = cache_guard.store_cfg(path, fp, &cfg) {
+                    debug!("Failed to store CFG in cache: {}", e);
+                }
+            }
+        }
+
+        cfg
     }
 }
 

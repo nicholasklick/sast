@@ -59,9 +59,11 @@ pub mod fingerprint;
 pub mod suppression;
 pub mod baseline;
 pub mod lifecycle;
+pub mod analysis_cache;
 
 pub use cache::{Cache, CacheConfig, CacheError, FileMetadata, ScanResults};
 pub use fingerprint::{FileFingerprint, FindingFingerprint};
+pub use analysis_cache::{AnalysisCache, AnalysisCacheConfig, AnalysisCacheError, AnalysisCacheStats};
 pub use suppression::{
     Suppression, SuppressionConfig, SuppressionError, SuppressionManager, SuppressionReason,
     SuppressionScope,

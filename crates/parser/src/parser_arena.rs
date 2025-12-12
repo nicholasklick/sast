@@ -198,7 +198,8 @@ impl ParserArena {
             "block" | "statement_block" => AstNodeKind::Block,
 
             // Expressions
-            "binary_expression" => {
+            // Ruby uses "binary" for binary expressions
+            "binary_expression" | "binary_op" | "binary" => {
                 let operator = self.extract_operator(arena, node, source);
                 AstNodeKind::BinaryExpression { operator }
             }
@@ -231,7 +232,8 @@ impl ParserArena {
                 let (object, property) = self.extract_member_parts(arena, node, source);
                 AstNodeKind::MemberExpression { object, property }
             }
-            "assignment_expression" => {
+            // Ruby uses "assignment" and "variable_assignment"
+            "assignment_expression" | "assignment" | "variable_assignment" => {
                 let operator = self.extract_operator(arena, node, source);
                 AstNodeKind::AssignmentExpression { operator }
             }
@@ -274,6 +276,91 @@ impl ParserArena {
                 }
             }
             "export_statement" | "export_declaration" => AstNodeKind::Export,
+
+            // New expressions (object creation) - critical for security
+            "new_expression" | "object_creation_expression" => {
+                let callee = self.extract_callee(arena, node, source);
+                let arguments_count = self.count_arguments(node);
+                AstNodeKind::NewExpression {
+                    callee,
+                    arguments_count,
+                }
+            }
+
+            // Array expressions
+            "array" | "array_expression" | "list" => AstNodeKind::ArrayExpression,
+
+            // Object expressions
+            "object" | "object_expression" | "hash" | "dictionary" => AstNodeKind::ObjectExpression,
+
+            // Conditional/ternary expressions
+            // Ruby uses "conditional" for ternary operator
+            "conditional_expression" | "ternary_expression" | "conditional" => AstNodeKind::ConditionalExpression,
+
+            // Switch statements
+            "switch_statement" | "switch_expression" => AstNodeKind::SwitchStatement,
+            "switch_case" | "case_clause" => AstNodeKind::SwitchCase,
+
+            // Lambda/arrow functions
+            "arrow_function" | "lambda" | "lambda_expression" | "anonymous_function" => {
+                let parameters = self.extract_parameters(arena, node, source);
+                AstNodeKind::ArrowFunction { parameters }
+            }
+
+            // this/super expressions
+            "this" | "this_expression" => AstNodeKind::ThisExpression,
+            "super" | "super_expression" => AstNodeKind::SuperExpression,
+
+            // Await/yield expressions - important for async taint tracking
+            "await_expression" => AstNodeKind::AwaitExpression,
+            "yield_expression" => AstNodeKind::YieldExpression,
+
+            // Spread/rest elements - important for taint propagation
+            "spread_element" | "spread_argument" | "spread_expression" => AstNodeKind::SpreadElement,
+            "rest_element" | "rest_parameter" | "rest_pattern" => AstNodeKind::RestElement,
+
+            // Property access subscript
+            "subscript_expression" | "element_reference" | "index_expression" => {
+                AstNodeKind::SubscriptExpression
+            }
+
+            // Parenthesized expressions
+            // Ruby uses "parenthesized_statements" for parenthesized expressions
+            "parenthesized_expression" | "parenthesized_statements" => AstNodeKind::ParenthesizedExpression,
+
+            // Template strings - important for XSS/injection detection
+            "template_string" | "template_literal" => AstNodeKind::TemplateString,
+
+            // Break/continue with labels
+            "break_statement" => AstNodeKind::BreakStatement,
+            "continue_statement" => AstNodeKind::ContinueStatement,
+
+            // Do-while loops
+            "do_statement" | "do_while_statement" => AstNodeKind::DoWhileStatement,
+
+            // Enum declarations
+            "enum_declaration" | "enum_item" => {
+                let name = self.extract_name(arena, node, source);
+                AstNodeKind::EnumDeclaration { name }
+            }
+
+            // Type alias
+            "type_alias_declaration" | "type_declaration" => {
+                let name = self.extract_name(arena, node, source);
+                AstNodeKind::TypeAlias { name }
+            }
+
+            // Augmented assignment (+=, -=, etc.)
+            "augmented_assignment_expression" | "compound_assignment_expr" => {
+                let operator = self.extract_operator(arena, node, source);
+                AstNodeKind::AugmentedAssignment { operator }
+            }
+
+            // Update expressions (++, --)
+            "update_expression" => {
+                let operator = self.extract_operator(arena, node, source);
+                AstNodeKind::UpdateExpression { operator }
+            }
 
             // Comments
             _ if kind.contains("comment") => AstNodeKind::Comment {

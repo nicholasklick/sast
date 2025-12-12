@@ -78,7 +78,7 @@ use gittera_parser::language::Language;
 use std::collections::{HashMap, HashSet};
 
 /// Summary of taint behavior for a function
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FunctionTaintSummary {
     /// Function name
     pub name: String,

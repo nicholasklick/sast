@@ -45,6 +45,7 @@ pub enum CfgEdgeKind {
 }
 
 /// Control Flow Graph representation
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ControlFlowGraph {
     pub graph: DiGraph<CfgNode, CfgEdge>,
     pub entry: CfgGraphIndex,

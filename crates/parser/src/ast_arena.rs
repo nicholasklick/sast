@@ -150,10 +150,16 @@ pub enum AstNodeKind<'arena> {
     IfStatement,
     WhileStatement,
     ForStatement,
+    DoWhileStatement,
     TryStatement,
     CatchClause,
+    FinallyClause,
     ThrowStatement,
     Block,
+    BreakStatement,
+    ContinueStatement,
+    SwitchStatement,
+    SwitchCase,
 
     // Expressions
     BinaryExpression {
@@ -173,12 +179,45 @@ pub enum AstNodeKind<'arena> {
     AssignmentExpression {
         operator: &'arena str,
     },
+    AugmentedAssignment {
+        operator: &'arena str,
+    },
+    UpdateExpression {
+        operator: &'arena str,
+    },
+    NewExpression {
+        callee: &'arena str,
+        arguments_count: usize,
+    },
+    ArrowFunction {
+        parameters: Vec<&'arena str>,
+    },
+    ConditionalExpression,
+    AwaitExpression,
+    YieldExpression,
+    TemplateString,
+    SubscriptExpression,
+    ParenthesizedExpression,
+    SpreadElement,
+    RestElement,
+    ArrayExpression,
+    ObjectExpression,
+    ThisExpression,
+    SuperExpression,
 
     // Literals
     Literal {
         value: LiteralValue<'arena>,
     },
     Identifier {
+        name: &'arena str,
+    },
+
+    // Type declarations
+    TypeAlias {
+        name: &'arena str,
+    },
+    EnumDeclaration {
         name: &'arena str,
     },
 
