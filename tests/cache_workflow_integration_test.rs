@@ -22,6 +22,8 @@ fn create_finding(
         code_snippet: format!("code at {}:{}", file_path, line),
         category: "security".to_string(),
         rule_id: rule_id.to_string(),
+        cwes: vec![],
+        owasp: None,
     }
 }
 

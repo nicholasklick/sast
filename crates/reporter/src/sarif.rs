@@ -271,8 +271,12 @@ impl SarifReporter {
     fn build_rule_relationships(finding: &gittera_query::Finding) -> Vec<Value> {
         let mut relationships = vec![];
 
-        // Map to OWASP category (inferred from rule_id or category)
-        if let Some(owasp_id) = Self::infer_owasp_category(&finding.category) {
+        // Map to OWASP category (from finding or inferred)
+        let owasp_id = finding.owasp.as_ref()
+            .and_then(|o| o.split(" - ").next())
+            .or_else(|| Self::infer_owasp_category(&finding.category));
+
+        if let Some(owasp_id) = owasp_id {
             relationships.push(json!({
                 "target": {
                     "id": owasp_id,
@@ -286,7 +290,69 @@ impl SarifReporter {
             }));
         }
 
+        // Add CWE relationships (from finding or inferred)
+        let cwes = if !finding.cwes.is_empty() {
+            finding.cwes.clone()
+        } else {
+            Self::infer_cwes(&finding.rule_id, &finding.category)
+        };
+
+        for cwe_id in cwes {
+            relationships.push(json!({
+                "target": {
+                    "id": format!("CWE-{}", cwe_id),
+                    "index": 0,
+                    "toolComponent": {
+                        "name": "CWE",
+                        "guid": "00000000-0000-0000-0000-000000000002"
+                    }
+                },
+                "kinds": ["superset"]
+            }));
+        }
+
         relationships
+    }
+
+    /// Infer CWE IDs from rule_id and category
+    fn infer_cwes(rule_id: &str, category: &str) -> Vec<u32> {
+        let text = format!("{} {}", rule_id, category).to_lowercase();
+
+        if text.contains("sql") {
+            vec![89]
+        } else if text.contains("command") || text.contains("exec") {
+            vec![78, 77]
+        } else if text.contains("xss") || text.contains("cross-site") {
+            vec![79]
+        } else if text.contains("path") || text.contains("traversal") {
+            vec![22]
+        } else if text.contains("ldap") {
+            vec![90]
+        } else if text.contains("xpath") {
+            vec![643]
+        } else if text.contains("deserialization") {
+            vec![502]
+        } else if text.contains("xxe") || text.contains("xml") {
+            vec![611]
+        } else if text.contains("ssrf") {
+            vec![918]
+        } else if text.contains("redirect") {
+            vec![601]
+        } else if text.contains("code") || text.contains("eval") {
+            vec![94, 95]
+        } else if text.contains("crypto") || text.contains("hash") {
+            vec![327, 328]
+        } else if text.contains("random") {
+            vec![330]
+        } else if text.contains("session") || text.contains("trust") {
+            vec![384]
+        } else if text.contains("cookie") {
+            vec![614]
+        } else if text.contains("log") {
+            vec![117]
+        } else {
+            vec![]
+        }
     }
 
     /// Infer OWASP category from finding category
@@ -317,8 +383,24 @@ impl SarifReporter {
         tags.push(format!("severity/{}", finding.severity.to_lowercase()));
 
         // Add OWASP tag if applicable
-        if let Some(owasp) = Self::infer_owasp_category(&finding.category) {
+        let owasp = finding.owasp.as_ref()
+            .and_then(|o| o.split(" - ").next())
+            .map(|s| s.to_string())
+            .or_else(|| Self::infer_owasp_category(&finding.category).map(|s| s.to_string()));
+
+        if let Some(owasp) = owasp {
             tags.push(format!("owasp/{}", owasp));
+        }
+
+        // Add CWE tags
+        let cwes = if !finding.cwes.is_empty() {
+            finding.cwes.clone()
+        } else {
+            Self::infer_cwes(&finding.rule_id, &finding.category)
+        };
+
+        for cwe_id in cwes {
+            tags.push(format!("cwe/CWE-{}", cwe_id));
         }
 
         tags

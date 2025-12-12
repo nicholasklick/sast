@@ -19,6 +19,46 @@ use gittera_parser::{Language, LanguageConfig};
 use gittera_query::{QueryExecutor, QueryParser, ExtendedStandardLibrary, QuerySuite};
 use gittera_reporter::{Report, ReportFormat, Reporter};
 
+/// Derive CWE IDs and OWASP category from rule ID
+fn derive_cwe_owasp(rule_id: &str) -> (Vec<u32>, Option<String>) {
+    let rule_lower = rule_id.to_lowercase();
+
+    // Map rule patterns to CWE IDs and OWASP categories
+    if rule_lower.contains("sql") {
+        (vec![89], Some("A03:2021 - Injection".to_string()))
+    } else if rule_lower.contains("command") || rule_lower.contains("commandexecution") {
+        (vec![78, 77], Some("A03:2021 - Injection".to_string()))
+    } else if rule_lower.contains("xss") || rule_lower.contains("htmloutput") {
+        (vec![79], Some("A03:2021 - Injection".to_string()))
+    } else if rule_lower.contains("path") || rule_lower.contains("pathtraversal") {
+        (vec![22], Some("A01:2021 - Broken Access Control".to_string()))
+    } else if rule_lower.contains("ldap") {
+        (vec![90], Some("A03:2021 - Injection".to_string()))
+    } else if rule_lower.contains("xpath") {
+        (vec![643], Some("A03:2021 - Injection".to_string()))
+    } else if rule_lower.contains("deserialization") {
+        (vec![502], Some("A08:2021 - Software and Data Integrity Failures".to_string()))
+    } else if rule_lower.contains("xxe") || rule_lower.contains("xml") {
+        (vec![611], Some("A05:2021 - Security Misconfiguration".to_string()))
+    } else if rule_lower.contains("ssrf") {
+        (vec![918], Some("A10:2021 - Server-Side Request Forgery".to_string()))
+    } else if rule_lower.contains("redirect") {
+        (vec![601], Some("A01:2021 - Broken Access Control".to_string()))
+    } else if rule_lower.contains("code") || rule_lower.contains("codeeval") {
+        (vec![94, 95], Some("A03:2021 - Injection".to_string()))
+    } else if rule_lower.contains("crypto") || rule_lower.contains("hash") || rule_lower.contains("random") {
+        (vec![327, 328, 330], Some("A02:2021 - Cryptographic Failures".to_string()))
+    } else if rule_lower.contains("trust") || rule_lower.contains("session") {
+        (vec![384], Some("A07:2021 - Identification and Authentication Failures".to_string()))
+    } else if rule_lower.contains("cookie") {
+        (vec![614], Some("A05:2021 - Security Misconfiguration".to_string()))
+    } else if rule_lower.contains("log") {
+        (vec![117], Some("A09:2021 - Security Logging and Monitoring Failures".to_string()))
+    } else {
+        (vec![], None)
+    }
+}
+
 #[derive(ClapParser)]
 #[command(name = "gittera")]
 #[command(author = "Gittera Team")]
@@ -374,15 +414,19 @@ fn scan_single_file(path: &PathBuf, format_str: &str, output: Option<&Path>, sui
 
     // Add interprocedural taint analysis findings
     for vuln in &taint_results.vulnerabilities {
+        let rule_id = format!("taint/{:?}", vuln.sink.kind).to_lowercase();
+        let (cwes, owasp) = derive_cwe_owasp(&rule_id);
         all_findings.push(gittera_query::Finding {
             file_path: vuln.file_path.clone(),
             line: vuln.line,
             column: vuln.column,
             message: vuln.message.clone(),
             severity: vuln.severity.as_str().to_string(),
-            rule_id: format!("taint/{:?}", vuln.sink.kind).to_lowercase(),
+            rule_id,
             category: "taint-analysis".to_string(),
             code_snippet: String::new(),
+            cwes,
+            owasp,
         });
     }
 

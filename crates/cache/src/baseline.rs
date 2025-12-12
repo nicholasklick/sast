@@ -396,6 +396,8 @@ mod tests {
             line,
             column: 10,
             code_snippet: format!("code at line {}", line),
+            cwes: vec![],
+            owasp: None,
         }
     }
 

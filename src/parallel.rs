@@ -212,6 +212,7 @@ impl ParallelAnalyzer {
                 gittera_analyzer::taint::TaintSinkKind::Redirect => "redirect",
             };
 
+            let rule_id = format!("taint/{}", category);
             let finding = Finding {
                 file_path: source_file.path.to_string_lossy().to_string(),
                 line: vuln.line,
@@ -220,7 +221,9 @@ impl ParallelAnalyzer {
                 severity: severity.to_string(),
                 code_snippet: vuln.sink.name.clone(),
                 category: category.to_string(),
-                rule_id: format!("taint/{}", category),
+                rule_id,
+                cwes: vec![],  // Will be derived by reporter
+                owasp: None,   // Will be derived by reporter
             };
             all_findings.push(finding);
         }
@@ -330,6 +333,7 @@ impl ParallelAnalyzer {
                 gittera_analyzer::taint::TaintSinkKind::Redirect => "redirect",
             };
 
+            let rule_id = format!("taint/{}", category);
             let finding = Finding {
                 file_path: source_file.path.to_string_lossy().to_string(),
                 line: vuln.line,
@@ -338,7 +342,9 @@ impl ParallelAnalyzer {
                 severity: severity.to_string(),
                 code_snippet: vuln.sink.name.clone(),
                 category: category.to_string(),
-                rule_id: format!("taint/{}", category),
+                rule_id,
+                cwes: vec![],  // Will be derived by reporter
+                owasp: None,   // Will be derived by reporter
             };
             all_findings.push(finding);
         }

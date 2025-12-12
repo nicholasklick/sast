@@ -24,6 +24,12 @@ pub struct Finding {
     pub code_snippet: String,
     pub category: String,  // e.g., "injection", "crypto", "secrets"
     pub rule_id: String,   // e.g., "sql-injection", "weak-crypto"
+    /// CWE IDs associated with this finding (e.g., [89] for SQL injection)
+    #[serde(default)]
+    pub cwes: Vec<u32>,
+    /// OWASP Top 10 2021 category (e.g., "A03:2021 - Injection")
+    #[serde(default)]
+    pub owasp: Option<String>,
 }
 
 /// Evaluation context for a query
@@ -150,6 +156,8 @@ impl QueryExecutor {
                     code_snippet: node.text.lines().next().unwrap_or("").to_string(),
                     category: "security".to_string(),
                     rule_id: "unknown".to_string(),
+                    cwes: vec![],
+                    owasp: None,
                 });
             }
         }
