@@ -388,6 +388,40 @@ sinks:
     description: "Write string to writer"
     argument: 1
 
+  # Open Redirect
+  - name: "http.Redirect"
+    kind: Redirect
+    package: "net/http"
+    description: "HTTP redirect"
+    argument: 2
+
+  - name: "Redirect"
+    kind: Redirect
+    package: "net/http"
+    description: "HTTP redirect"
+    argument: 2
+
+  # Trust Boundary - gorilla/sessions
+  - name: "session.Values"
+    kind: TrustBoundary
+    package: "github.com/gorilla/sessions"
+    description: "Session value storage"
+
+  - name: "session.Save"
+    kind: TrustBoundary
+    package: "github.com/gorilla/sessions"
+    description: "Save session with potentially tainted data"
+
+  - name: "Sessions.Save"
+    kind: TrustBoundary
+    description: "Save session"
+
+  - name: "Set"
+    kind: TrustBoundary
+    package: "session"
+    description: "Set session value"
+    argument: 1
+
 sanitizers:
   # HTML Escaping
   - name: "html.EscapeString"

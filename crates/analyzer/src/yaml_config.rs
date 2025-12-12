@@ -93,6 +93,7 @@ pub enum SinkKind {
     XPathQuery,
     XmlParse,
     TrustBoundary,
+    Redirect,
     ReDoS,
 }
 

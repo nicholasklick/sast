@@ -99,6 +99,7 @@ fn convert_sink_kind(kind: &YamlSinkKind) -> TaintSinkKind {
         YamlSinkKind::XPathQuery => TaintSinkKind::XPathQuery,
         YamlSinkKind::XmlParse => TaintSinkKind::XmlParse,
         YamlSinkKind::TrustBoundary => TaintSinkKind::TrustBoundary,
+        YamlSinkKind::Redirect => TaintSinkKind::Redirect,
         YamlSinkKind::ReDoS => TaintSinkKind::ReDoS,
     }
 }

@@ -332,6 +332,54 @@ sinks:
     kind: HtmlOutput
     description: "Mark string as safe HTML"
 
+  # XPath Injection - Nokogiri
+  - name: "xpath"
+    kind: XPathQuery
+    package: "Nokogiri"
+    description: "Nokogiri XPath query"
+    argument: 0
+
+  - name: "at_xpath"
+    kind: XPathQuery
+    package: "Nokogiri"
+    description: "Nokogiri XPath query (single node)"
+    argument: 0
+
+  - name: "css"
+    kind: XPathQuery
+    package: "Nokogiri"
+    description: "Nokogiri CSS selector (converted to XPath)"
+    argument: 0
+
+  - name: "at_css"
+    kind: XPathQuery
+    package: "Nokogiri"
+    description: "Nokogiri CSS selector (single node)"
+    argument: 0
+
+  - name: "search"
+    kind: XPathQuery
+    package: "Nokogiri"
+    description: "Nokogiri search (XPath or CSS)"
+    argument: 0
+
+  - name: "at"
+    kind: XPathQuery
+    package: "Nokogiri"
+    description: "Nokogiri at (XPath or CSS, single node)"
+    argument: 0
+
+  # Open Redirect
+  - name: "redirect_to"
+    kind: Redirect
+    description: "Rails redirect"
+    argument: 0
+
+  - name: "redirect"
+    kind: Redirect
+    description: "Sinatra redirect"
+    argument: 0
+
 sanitizers:
   # HTML sanitization
   - name: "sanitize"
