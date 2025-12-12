@@ -66,9 +66,11 @@ pub use sanitizer_handling::{
 };
 
 use crate::call_graph::CallGraph;
+use crate::cfg::CfgBuilder;
 use crate::collection_ops::{CollectionOperation, detect_collection_op_from_call, make_taint_key};
 use crate::flow_summary::FlowSummaryRegistry;
 use crate::language_handler::{LanguageTaintHandler, SafeSinkPattern, get_handler_for_language};
+use crate::ssa::{SsaBuilder, SsaForm, SsaTaintState, SsaVariable};
 use crate::symbolic::{SymbolicValue, SymbolicState};
 use crate::taint::{TaintAnalysisResult, TaintSink, TaintSource, TaintSourceKind, TaintValue, TaintVulnerability, Severity, TaintSinkKind, FlowState};
 use gittera_parser::ast::{AstNode, AstNodeKind, LiteralValue};
@@ -117,6 +119,10 @@ pub struct InterproceduralTaintAnalysis {
     language_handler: Box<dyn LanguageTaintHandler>,
     /// The language being analyzed (for collection operation detection)
     language: Language,
+    /// Enable SSA-based analysis for precise taint tracking
+    enable_ssa: bool,
+    /// Cache of SSA forms per function
+    ssa_cache: HashMap<String, SsaForm>,
 }
 
 impl InterproceduralTaintAnalysis {
@@ -136,7 +142,71 @@ impl InterproceduralTaintAnalysis {
             method_cache: HashMap::new(),
             language_handler: get_handler_for_language(language),
             language,
+            enable_ssa: false,
+            ssa_cache: HashMap::new(),
         }
+    }
+
+    /// Enable SSA-based analysis for more precise taint tracking
+    ///
+    /// SSA (Static Single Assignment) form enables:
+    /// - **Strong updates**: When a variable is reassigned to a clean value, it's no longer tainted
+    /// - **Precise control flow**: Phi nodes at merge points track taint from each branch
+    /// - **Version tracking**: Different versions of a variable can have different taint status
+    ///
+    /// Example without SSA (over-tainting):
+    /// ```text
+    /// x = source();  // x tainted
+    /// x = "safe";    // x STILL tainted (weak update)
+    /// sink(x);       // FALSE POSITIVE
+    /// ```
+    ///
+    /// Example with SSA (precise):
+    /// ```text
+    /// x_0 = source();  // x_0 tainted
+    /// x_1 = "safe";    // x_1 NOT tainted (strong update)
+    /// sink(x_1);       // Correctly NOT flagged
+    /// ```
+    pub fn with_ssa(mut self) -> Self {
+        self.enable_ssa = true;
+        self
+    }
+
+    /// Check if SSA-based analysis is enabled
+    pub fn is_ssa_enabled(&self) -> bool {
+        self.enable_ssa
+    }
+
+    /// Build SSA form for a function
+    pub fn build_ssa_for_function(&mut self, func_name: &str, func_ast: &AstNode) -> Option<&SsaForm> {
+        if !self.enable_ssa {
+            return None;
+        }
+
+        if !self.ssa_cache.contains_key(func_name) {
+            // Build CFG for the function
+            let cfg = CfgBuilder::new().build(func_ast);
+            // Build SSA form from CFG
+            let ssa = SsaBuilder::new(&cfg).build(func_ast);
+            self.ssa_cache.insert(func_name.to_string(), ssa);
+        }
+
+        self.ssa_cache.get(func_name)
+    }
+
+    /// Get cached SSA form for a function (if available)
+    pub fn get_ssa(&self, func_name: &str) -> Option<&SsaForm> {
+        self.ssa_cache.get(func_name)
+    }
+
+    /// Convert legacy tainted_vars to SSA taint state
+    pub fn to_ssa_taint_state(&self, tainted_vars: &HashSet<String>) -> SsaTaintState {
+        SsaTaintState::from_legacy(tainted_vars)
+    }
+
+    /// Convert SSA taint state back to legacy format
+    pub fn from_ssa_taint_state(&self, ssa_state: &SsaTaintState) -> HashSet<String> {
+        ssa_state.to_legacy()
     }
 
     /// Build a cache of method definitions from the AST for inter-procedural analysis

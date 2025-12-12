@@ -338,6 +338,7 @@
 //! ```
 
 pub mod cfg;
+pub mod ssa;              // Static Single Assignment form for precise dataflow
 pub mod dataflow;
 pub mod dataflow_node;    // CodeQL-inspired data flow node abstraction
 pub mod content;          // Content model for field-sensitive analysis
@@ -377,3 +378,4 @@ pub use points_to::{PointsToAnalysis, PointsToAnalysisBuilder, AbstractLocation,
 pub use symbolic::{SymbolicExecutor, SymbolicExecutorBuilder, SymbolicValue, SymbolicState, ExecutionPath, SymbolicExecutionResult, Constraint, BinaryOperator, UnaryOperator};
 pub use type_system::{TypeContext, TypeInfo, TypeCategory, TypeContextStats};
 pub use collection_ops::{CollectionOperation, detect_collection_op_from_call, detect_collection_op_from_subscript, make_taint_key};
+pub use ssa::{SsaVariable, SsaForm, SsaBuilder, SsaTaintState, SsaTaintAnalyzer, PhiNode, SsaDefinition, SsaUse, SsaDefKind};
