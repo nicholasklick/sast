@@ -210,6 +210,7 @@ impl ParallelAnalyzer {
                 gittera_analyzer::taint::TaintSinkKind::XmlParse => "xxe",
                 gittera_analyzer::taint::TaintSinkKind::TrustBoundary => "trustboundary",
                 gittera_analyzer::taint::TaintSinkKind::Redirect => "redirect",
+                gittera_analyzer::taint::TaintSinkKind::ReDoS => "redos",
             };
 
             let rule_id = format!("taint/{}", category);
@@ -332,6 +333,7 @@ impl ParallelAnalyzer {
                 gittera_analyzer::taint::TaintSinkKind::XmlParse => "xxe",
                 gittera_analyzer::taint::TaintSinkKind::TrustBoundary => "trustboundary",
                 gittera_analyzer::taint::TaintSinkKind::Redirect => "redirect",
+                gittera_analyzer::taint::TaintSinkKind::ReDoS => "redos",
             };
 
             let rule_id = format!("taint/{}", category);

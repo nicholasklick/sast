@@ -1121,6 +1121,7 @@ impl InterproceduralTaintAnalysis {
                                                 TaintSinkKind::XmlParse => "XML external entity (XXE)",
                                                 TaintSinkKind::TrustBoundary => "Trust boundary violation",
                                                 TaintSinkKind::Redirect => "Open redirect",
+                                                TaintSinkKind::ReDoS => "Regular expression denial of service (ReDoS)",
                                             },
                                             sink.name
                                         );
@@ -1148,6 +1149,71 @@ impl InterproceduralTaintAnalysis {
                 // AssignmentExpression and VariableDeclaration handlers above.
                 // The is_node_tainted() method checks if a CallExpression returns
                 // taint based on function summaries.
+            }
+
+            // New expression (constructor call) - e.g., new RegExp(userInput)
+            // This is separate from CallExpression in the AST and needs similar sink checking
+            AstNodeKind::NewExpression { callee, .. } => {
+                // Check if this is a sink with tainted data (e.g., new RegExp(taintedPattern))
+                let is_sink = self.is_sink_function(callee);
+                if is_sink {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] NewExpression checking sink '{}' at branch_depth={}", callee, branch_depth);
+
+                    // Check if any arguments are tainted
+                    let has_tainted = self.has_tainted_arguments(node, tainted_vars, sym_state);
+                    if has_tainted {
+                        // Create vulnerability
+                        let sink = self.find_sink_by_name(callee).cloned();
+
+                        if let Some(sink) = sink {
+                            // Get the FlowState for this sink
+                            let sink_flow_state = FlowState::from_sink_kind(&sink.kind);
+
+                            // Check if tainted arguments are sanitized for this specific sink
+                            let all_sanitized = self.are_tainted_args_sanitized_for_state(
+                                node, tainted_vars, sym_state, sanitized_for_vars, &sink_flow_state
+                            );
+
+                            if !all_sanitized {
+                                let message = format!(
+                                    "{} vulnerability - untrusted data in {}",
+                                    match sink.kind {
+                                        TaintSinkKind::SqlQuery => "SQL injection",
+                                        TaintSinkKind::CommandExecution => "Command injection",
+                                        TaintSinkKind::FileWrite => "Path traversal",
+                                        TaintSinkKind::CodeEval => "Code injection",
+                                        TaintSinkKind::HtmlOutput => "Cross-site scripting (XSS)",
+                                        TaintSinkKind::LogOutput => "Log injection",
+                                        TaintSinkKind::NetworkSend => "Server-side request forgery",
+                                        TaintSinkKind::XPathQuery => "XPath injection",
+                                        TaintSinkKind::LdapQuery => "LDAP injection",
+                                        TaintSinkKind::PathTraversal => "Path traversal",
+                                        TaintSinkKind::Deserialization => "Insecure deserialization",
+                                        TaintSinkKind::XmlParse => "XML external entity (XXE)",
+                                        TaintSinkKind::TrustBoundary => "Trust boundary violation",
+                                        TaintSinkKind::Redirect => "Open redirect",
+                                        TaintSinkKind::ReDoS => "Regular expression denial of service (ReDoS)",
+                                    },
+                                    sink.name
+                                );
+                                vulnerabilities.push(TaintVulnerability {
+                                    sink: sink.clone(),
+                                    tainted_value: TaintValue::new(
+                                        callee.clone(),
+                                        TaintSourceKind::UserInput,
+                                    ),
+                                    severity: Severity::High,
+                                    file_path: node.location.file_path.clone(),
+                                    line: node.location.span.start_line,
+                                    column: node.location.span.start_column,
+                                    message,
+                                    path: None,
+                                });
+                            }
+                        }
+                    }
+                }
             }
 
             // Handle Python augmented assignment: x += tainted_value

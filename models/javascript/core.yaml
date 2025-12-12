@@ -150,6 +150,12 @@ sinks:
     description: "Dynamic function constructor"
     argument: 0
 
+  # ReDoS - Regular Expression Denial of Service
+  - name: "RegExp"
+    kind: ReDoS
+    description: "RegExp constructor with untrusted input - ReDoS risk"
+    argument: 0
+
   - name: "setTimeout"
     kind: CodeEval
     description: "Set timeout (string form)"

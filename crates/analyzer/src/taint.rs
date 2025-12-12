@@ -50,6 +50,7 @@ pub enum TaintSinkKind {
     XmlParse,
     TrustBoundary,
     Redirect,
+    ReDoS,
 }
 
 /// The flow state tracks what kind of sink the taint is flowing toward.
@@ -93,6 +94,7 @@ impl FlowState {
             TaintSinkKind::XmlParse => FlowState::Xml,
             TaintSinkKind::TrustBoundary => FlowState::Generic, // Trust boundary violations don't have specific sanitizers
             TaintSinkKind::Redirect => FlowState::Generic, // Open redirect - no specific sanitizer
+            TaintSinkKind::ReDoS => FlowState::Regex, // ReDoS - regex injection
         }
     }
 
@@ -106,7 +108,7 @@ impl FlowState {
             FlowState::Path => matches!(sink, TaintSinkKind::FileWrite | TaintSinkKind::PathTraversal),
             FlowState::Ldap => matches!(sink, TaintSinkKind::LdapQuery),
             FlowState::Xml => matches!(sink, TaintSinkKind::XPathQuery | TaintSinkKind::XmlParse),
-            FlowState::Regex => false, // No Regex sink kind yet
+            FlowState::Regex => matches!(sink, TaintSinkKind::ReDoS),
         }
     }
 

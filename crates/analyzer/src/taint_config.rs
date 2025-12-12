@@ -99,6 +99,7 @@ fn convert_sink_kind(kind: &YamlSinkKind) -> TaintSinkKind {
         YamlSinkKind::XPathQuery => TaintSinkKind::XPathQuery,
         YamlSinkKind::XmlParse => TaintSinkKind::XmlParse,
         YamlSinkKind::TrustBoundary => TaintSinkKind::TrustBoundary,
+        YamlSinkKind::ReDoS => TaintSinkKind::ReDoS,
     }
 }
 
@@ -1097,7 +1098,7 @@ impl LanguageTaintConfig {
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),
-                kind: TaintSinkKind::CodeEval,  // Using CodeEval as closest match
+                kind: TaintSinkKind::ReDoS,
                 node_id: 0,
             });
         }
