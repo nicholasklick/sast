@@ -327,6 +327,56 @@ sinks:
     description: "Response write"
     argument: 0
 
+  # Deserialization - node-serialize (CVE-2017-5941)
+  - name: "unserialize"
+    kind: Deserialization
+    package: "node-serialize"
+    description: "node-serialize unserialize() - arbitrary code execution"
+    argument: 0
+
+  - name: "serialize.unserialize"
+    kind: Deserialization
+    description: "node-serialize unserialize() via import"
+    argument: 0
+
+  # Deserialization - js-yaml unsafe load
+  - name: "yaml.load"
+    kind: Deserialization
+    package: "js-yaml"
+    description: "js-yaml load() with unsafe schema"
+    argument: 0
+
+  - name: "yaml.safeLoad"
+    kind: Deserialization
+    package: "js-yaml"
+    description: "js-yaml safeLoad() - deprecated, use load()"
+    argument: 0
+
+  # Deserialization - serialize-javascript
+  - name: "deserialize"
+    kind: Deserialization
+    description: "Generic deserialize function"
+    argument: 0
+
+  # Deserialization - vm module code execution
+  - name: "vm.runInNewContext"
+    kind: CodeEval
+    package: "vm"
+    description: "VM run in new context - code execution"
+    argument: 0
+
+  - name: "vm.runInThisContext"
+    kind: CodeEval
+    package: "vm"
+    description: "VM run in this context - code execution"
+    argument: 0
+
+  - name: "vm.runInContext"
+    kind: CodeEval
+    package: "vm"
+    description: "VM run in context - code execution"
+    argument: 0
+
 sanitizers:
   # HTML sanitization
   - name: "escape"
