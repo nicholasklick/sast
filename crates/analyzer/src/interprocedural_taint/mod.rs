@@ -757,7 +757,7 @@ impl InterproceduralTaintAnalysis {
                             }
                         });
 
-                        // Extract key - look for string literal in children
+                        // Extract key - look for string literal or Ruby symbol in children
                         let key_node = lhs.children.iter().skip(1).find(|child| {
                             !matches!(child.text.as_str(), "[" | "]")
                         });
@@ -766,8 +766,18 @@ impl InterproceduralTaintAnalysis {
                                 AstNodeKind::Literal { value: LiteralValue::String(s) } => {
                                     Some(s.trim_matches(|c| c == '\'' || c == '"').to_string())
                                 }
+                                // Handle Ruby symbols like :user_input, :message, :id
+                                AstNodeKind::Other { node_type } if node_type == "simple_symbol" || node_type == "hash_key_symbol" => {
+                                    let text = child.text.trim_start_matches(':');
+                                    Some(text.to_string())
+                                }
                                 _ if child.text.starts_with('\'') || child.text.starts_with('"') => {
                                     let text = child.text.trim_matches(|c| c == '\'' || c == '"');
+                                    Some(text.to_string())
+                                }
+                                // Also handle Ruby symbols in text form
+                                _ if child.text.starts_with(':') && child.text.len() > 1 => {
+                                    let text = child.text.trim_start_matches(':');
                                     Some(text.to_string())
                                 }
                                 _ => None
@@ -2220,14 +2230,25 @@ impl InterproceduralTaintAnalysis {
                     }
                 });
 
-                // Extract key - look for string literal in children
+                // Extract key - look for string literal or Ruby symbol in children
                 let key = node.children.iter().find_map(|child| {
                     match &child.kind {
                         AstNodeKind::Literal { value: LiteralValue::String(s) } => {
                             Some(s.trim_matches(|c| c == '\'' || c == '"').to_string())
                         }
+                        // Handle Ruby symbols like :user_input, :message, :id
+                        AstNodeKind::Other { node_type } if node_type == "simple_symbol" || node_type == "hash_key_symbol" => {
+                            // Ruby symbol text is like ":user_input", strip the leading colon
+                            let text = child.text.trim_start_matches(':');
+                            Some(text.to_string())
+                        }
                         _ if child.text.starts_with('\'') || child.text.starts_with('"') => {
                             let text = child.text.trim_matches(|c| c == '\'' || c == '"');
+                            Some(text.to_string())
+                        }
+                        // Also handle Ruby symbols in text form
+                        _ if child.text.starts_with(':') && child.text.len() > 1 => {
+                            let text = child.text.trim_start_matches(':');
                             Some(text.to_string())
                         }
                         _ => None

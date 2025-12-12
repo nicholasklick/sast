@@ -460,7 +460,7 @@ impl ExtendedStandardLibrary {
     // ==================== AUTHENTICATION & AUTHORIZATION ====================
 
     fn register_authentication_queries(&mut self) {
-        // Hardcoded Credentials
+        // Hardcoded Credentials - Variable Declarations (JS/TS const/let/var)
         self.register(
             "js/hardcoded-credentials",
             Self::hardcoded_credentials_query(),
@@ -471,6 +471,22 @@ impl ExtendedStandardLibrary {
                 .precision(QueryPrecision::Medium)
                 .cwes(vec![798, 259])
                 .owasp("A07:2021 - Identification and Authentication Failures")
+                .sans_top_25()
+                .build()
+        );
+
+        // Hardcoded Credentials - Assignment Expressions (Python, Bash, etc.)
+        self.register(
+            "py/hardcoded-credentials",
+            Self::hardcoded_credentials_assignment_query(),
+            QueryMetadata::builder("py/hardcoded-credentials", "Hardcoded Credentials")
+                .description("Detects hardcoded passwords and API keys in assignments")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::Critical)
+                .precision(QueryPrecision::Medium)
+                .cwes(vec![798, 259])
+                .owasp("A07:2021 - Identification and Authentication Failures")
+                .languages(vec!["python".to_string(), "ruby".to_string(), "bash".to_string(), "go".to_string(), "java".to_string(), "c".to_string(), "cpp".to_string(), "csharp".to_string(), "rust".to_string(), "php".to_string(), "kotlin".to_string(), "scala".to_string(), "swift".to_string(), "perl".to_string(), "lua".to_string(), "dart".to_string()])
                 .sans_top_25()
                 .build()
         );
@@ -1884,32 +1900,87 @@ impl ExtendedStandardLibrary {
 
     // Authentication queries
     // NOTE: This query is intentionally strict to reduce false positives.
-    // It matches variable declarations where:
+    // It matches variable declarations/assignments where:
     // 1. The variable has a sensitive name (password, secret, apiKey, etc.)
     // 2. AND the value is a hardcoded string literal that looks like a real credential
     //    (not a variable reference, function call, or placeholder text)
+    // 3. Uses specific entity types to avoid matching on parent/root nodes
     fn hardcoded_credentials_query() -> Query {
         Query::new(
-            FromClause::new(EntityType::AnyNode, "node".to_string()),
+            // Use VariableDeclaration to match const/let/var declarations
+            // This prevents matching on parent nodes like Program
+            FromClause::new(EntityType::VariableDeclaration, "node".to_string()),
             Some(WhereClause::new(vec![
-                Predicate::Comparison {
-                    left: Expression::PropertyAccess {
-                        object: Box::new(Expression::Variable("node".to_string())),
-                        property: "text".to_string(),
-                    },
-                    operator: ComparisonOp::Matches,
-                    // Match patterns like: password = "actual_value" or apiKey: "sk-xxxxx"
-                    // Requires:
-                    // - Sensitive variable name (password, secret, apiKey, token, etc.)
-                    // - Assignment operator (= or :)
-                    // - A quoted string literal with credential-like value (6+ alphanumeric chars)
-                    // Excludes:
-                    // - Function calls: password = getPassword()
-                    // - Variable references: password = req.body.password
-                    // - Empty/placeholder: password = ""
-                    right: Expression::String(
-                        r#"(?i)(password|passwd|pwd|secret|api[_-]?key|private[_-]?key|access[_-]?key|auth[_-]?token)\s*[=:]\s*["'][a-zA-Z0-9!@#$%^&*_\-+=./]{6,}["']"#.to_string()
-                    ),
+                Predicate::And {
+                    left: Box::new(Predicate::Comparison {
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("node".to_string())),
+                            property: "text".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        // Match patterns like: password = "actual_value" or apiKey: "sk-xxxxx"
+                        // Requires:
+                        // - Sensitive variable name (password, secret, apiKey, token, credential, etc.)
+                        // - Assignment operator (= or :)
+                        // - A quoted string literal with credential-like value (8+ alphanumeric chars for better precision)
+                        right: Expression::String(
+                            r#"(?i)(password|passwd|pwd|secret|api[_-]?key|private[_-]?key|access[_-]?key|auth[_-]?token|credential)\s*[=:]\s*["'][a-zA-Z0-9!@#$%^&*()_\-+=./]{8,}["']"#.to_string()
+                        ),
+                    }),
+                    right: Box::new(Predicate::Not {
+                        // Exclude common placeholder/example values
+                        predicate: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("node".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            right: Expression::String(
+                                r#"(?i)["'](placeholder|changeme|your[_-]?(password|secret|key|token)|example|xxxxxxxx|TODO|FIXME|<[^>]+>|\$\{[^}]+\}|process\.env|getenv|environ)["']"#.to_string()
+                            ),
+                        }),
+                    }),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "node".to_string(),
+                message: "Hardcoded credential - use environment variables or secrets manager".to_string(),
+            }]),
+        )
+    }
+
+    // Assignment-based hardcoded credentials (Python, Bash, Go, etc.)
+    fn hardcoded_credentials_assignment_query() -> Query {
+        Query::new(
+            // Use Assignment to match assignment expressions
+            FromClause::new(EntityType::Assignment, "node".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::And {
+                    left: Box::new(Predicate::Comparison {
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("node".to_string())),
+                            property: "text".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        // Match patterns like: password = "actual_value"
+                        // Requires assignment with string literal value (8+ chars)
+                        right: Expression::String(
+                            r#"(?i)(password|passwd|pwd|secret|api[_-]?key|private[_-]?key|access[_-]?key|auth[_-]?token|credential)\s*=\s*["'][a-zA-Z0-9!@#$%^&*()_\-+=./]{8,}["']"#.to_string()
+                        ),
+                    }),
+                    right: Box::new(Predicate::Not {
+                        // Exclude common placeholder/example values
+                        predicate: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("node".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            right: Expression::String(
+                                r#"(?i)["'](placeholder|changeme|your[_-]?(password|secret|key|token)|example|xxxxxxxx|TODO|FIXME|<[^>]+>|\$\{[^}]+\}|os\.environ|getenv|environ|\*+)["']"#.to_string()
+                            ),
+                        }),
+                    }),
                 },
             ])),
             SelectClause::new(vec![SelectItem::Both {

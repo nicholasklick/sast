@@ -1,8 +1,6 @@
 // Cross-Site Scripting (XSS) vulnerabilities in Scala
 package com.example.security
 
-import scala.xml._
-
 class XssVulnerabilities {
 
   // Test 1: Reflected XSS in response
@@ -41,10 +39,10 @@ class XssVulnerabilities {
     s"""<a href="$url">Click here</a>"""
   }
 
-  // Test 6: XML literal with user input
-  def createXmlElement(userContent: String): Elem = {
-    // VULNERABLE: User input in XML literal
-    <div class="content">{userContent}</div>
+  // Test 6: XML content with user input
+  def createXmlElement(userContent: String): String = {
+    // VULNERABLE: User input in XML-like content
+    s"""<div class="content">$userContent</div>"""
   }
 
   // Test 7: Event handler injection
