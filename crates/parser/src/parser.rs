@@ -263,7 +263,8 @@ impl Parser {
             "null" | "nil" => AstNodeKind::Literal {
                 value: LiteralValue::Null,
             },
-            "assignment_expression" | "assignment" | "variable_assignment" => self.parse_assignment_expression(node, source),
+            // Go uses "assignment_statement" for assignments like bar = param
+            "assignment_expression" | "assignment" | "variable_assignment" | "assignment_statement" => self.parse_assignment_expression(node, source),
             // Ternary/conditional expressions
             // Ruby uses "conditional" for ternary operator
             "ternary_expression" | "conditional_expression" | "conditional" => {

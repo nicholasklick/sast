@@ -233,7 +233,8 @@ impl ParserArena {
                 AstNodeKind::MemberExpression { object, property }
             }
             // Ruby uses "assignment" and "variable_assignment"
-            "assignment_expression" | "assignment" | "variable_assignment" => {
+            // Go uses "assignment_statement" for assignments like bar = param
+            "assignment_expression" | "assignment" | "variable_assignment" | "assignment_statement" => {
                 let operator = self.extract_operator(arena, node, source);
                 AstNodeKind::AssignmentExpression { operator }
             }

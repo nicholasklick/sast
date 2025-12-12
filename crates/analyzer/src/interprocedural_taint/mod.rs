@@ -50,6 +50,7 @@ pub use ast_helpers::{
     get_method_name,
     is_getter_method,
     find_first_call_expression,
+    find_all_call_expressions,
 };
 pub use collection_tracking::{CollectionTrackingState, MAX_TRACKED_LIST_SIZE, is_collection_initialization};
 pub use node_handlers::NodeHandlerContext;
@@ -634,12 +635,12 @@ impl InterproceduralTaintAnalysis {
                 }
 
                 // Check if initializer is a sanitizer call - track context-specific sanitization
-                // Look for CallExpression in children (or nested within expression_list for Go)
+                // Look for ALL CallExpressions in children (including nested calls like fmt.Sprintf(..., sanitizer(param)))
                 let mut sanitizer_with_tainted_input = false;
                 for child in &node.children {
-                    // Use find_first_call_expression to handle Go's nested AST structure
-                    // where CallExpression is inside expression_list nodes
-                    if let Some((callee, call_node)) = find_first_call_expression(child) {
+                    // Use find_all_call_expressions to find ALL nested calls, not just the first
+                    // This catches sanitizers inside string concatenation, fmt.Sprintf, etc.
+                    for (callee, call_node) in find_all_call_expressions(child) {
                         if let Some(sanitizer_states) = self.get_sanitizer_flow_states(callee) {
                             // Check if the sanitizer has tainted arguments
                             // If so, the output is still "tainted" but sanitized for specific states
@@ -667,7 +668,7 @@ impl InterproceduralTaintAnalysis {
                                     }
                                 }
                                 #[cfg(debug_assertions)]
-                                eprintln!("[DEBUG]     -> VariableDeclaration '{}' sanitized for states: {:?}", name, var_sanitized);
+                                eprintln!("[DEBUG]     -> VariableDeclaration '{}' sanitized for states: {:?} (from {})", name, var_sanitized, callee);
 
                                 // IMPORTANT: Keep the variable in tainted_vars so we can check
                                 // sanitization at sinks. The variable is still "tainted" but
@@ -676,7 +677,7 @@ impl InterproceduralTaintAnalysis {
                                 tainted_vars.insert(name.clone());
                             }
                         }
-                        break; // Only check the first CallExpression (the initializer)
+                        // Don't break - check ALL call expressions for sanitizers
                     }
                 }
 
@@ -893,7 +894,14 @@ impl InterproceduralTaintAnalysis {
                     }
 
                     // Extract LHS variable name
-                    if let AstNodeKind::Identifier { name } = &lhs.kind {
+                    // Use extract_identifier to handle Go's expression_list wrapper
+                    let lhs_name = if let AstNodeKind::Identifier { name } = &lhs.kind {
+                        Some(name.clone())
+                    } else {
+                        extract_identifier(lhs)
+                    };
+
+                    if let Some(name) = lhs_name {
                         #[cfg(debug_assertions)]
                         eprintln!("[DEBUG]   Assignment to '{}': rhs_tainted={}, branch_depth={}", name, rhs_tainted, branch_depth);
 
@@ -951,9 +959,9 @@ impl InterproceduralTaintAnalysis {
                                 //   x = tainted;
                                 //   x = "safe";  // <-- this kills the taint
                                 //   sink(x);     // <-- should NOT report
-                                tainted_vars.remove(name);
+                                tainted_vars.remove(&name);
                                 // Also clear sanitization tracking for the variable
-                                sanitized_for_vars.remove(name);
+                                sanitized_for_vars.remove(&name);
                                 #[cfg(debug_assertions)]
                                 eprintln!("[DEBUG]     -> Removed taint from '{}' (strong update)", name);
                             }

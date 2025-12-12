@@ -284,6 +284,26 @@ pub fn find_first_call_expression(node: &AstNode) -> Option<(&str, &AstNode)> {
     }
 }
 
+/// Find ALL CallExpression nodes in an AST subtree.
+/// This is useful for detecting sanitizers that may be nested inside
+/// other expressions like fmt.Sprintf(..., sanitizer(param)).
+/// Returns a vector of tuples (callee, CallExpression node reference).
+pub fn find_all_call_expressions(node: &AstNode) -> Vec<(&str, &AstNode)> {
+    let mut results = Vec::new();
+    find_all_call_expressions_recursive(node, &mut results);
+    results
+}
+
+fn find_all_call_expressions_recursive<'a>(node: &'a AstNode, results: &mut Vec<(&'a str, &'a AstNode)>) {
+    if let AstNodeKind::CallExpression { callee, .. } = &node.kind {
+        results.push((callee.as_str(), node));
+    }
+    // Always recurse into children to find nested calls
+    for child in &node.children {
+        find_all_call_expressions_recursive(child, results);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

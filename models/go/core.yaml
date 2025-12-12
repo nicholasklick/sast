@@ -482,10 +482,9 @@ sinks:
     description: "Gin String response"
     argument: 1
 
-  - name: "c.HTML"
-    kind: HtmlOutput
-    description: "Gin HTML template response"
-    argument: 2
+  # NOTE: c.HTML uses Go's html/template which auto-escapes all interpolated values.
+  # This is NOT an XSS sink because the template engine prevents XSS.
+  # Removed: c.HTML as HtmlOutput sink
 
   - name: "c.Writer.Write"
     kind: HtmlOutput
@@ -498,11 +497,8 @@ sinks:
     argument: 0
 
   # Echo Framework XSS Sinks
-  - name: "c.HTML"
-    kind: HtmlOutput
-    package: "echo"
-    description: "Echo HTML response"
-    argument: 1
+  # NOTE: Echo's c.HTML also uses Go's html/template which auto-escapes.
+  # Removed: c.HTML as HtmlOutput sink
 
   - name: "c.String"
     kind: HtmlOutput
