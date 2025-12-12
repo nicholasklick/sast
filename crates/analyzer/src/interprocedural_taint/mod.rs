@@ -876,6 +876,17 @@ impl InterproceduralTaintAnalysis {
                                 eprintln!("[DEBUG]     -> Removed taint from '{}' (strong update)", name);
                             }
                         }
+
+                        // Track symbolic value for constant propagation (important for Ruby/Python assignments)
+                        // Only track if we're not inside a branch (definite assignment)
+                        if branch_depth == 0 {
+                            let rhs_value = self.evaluate_symbolic(rhs, sym_state);
+                            if !matches!(rhs_value, SymbolicValue::Unknown) {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[DEBUG]     -> Setting sym_state '{}' = {:?}", name, rhs_value);
+                                sym_state.set(name.clone(), rhs_value);
+                            }
+                        }
                         // NOTE: When branch_depth > 0, we're inside a conditional
                         // (if/else/switch/loop), so we can't do strong updates
                         // because the assignment might not always execute.

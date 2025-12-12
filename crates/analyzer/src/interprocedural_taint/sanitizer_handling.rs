@@ -281,6 +281,8 @@ impl InterproceduralTaintAnalysis {
         // LDAP sanitizers
         if name_lower.contains("escapeldap") || name_lower.contains("encodeforldn")
             || name_lower.contains("encodefordistinguishedname")
+            || name_lower.contains("escape_filter") || name_lower.contains("escapefilter")
+            || name_lower.contains("ldap_escape") || name_lower.contains("ldapescape")
         {
             let mut states = HashSet::new();
             states.insert(FlowState::Ldap);

@@ -2363,16 +2363,17 @@ impl LanguageTaintConfig {
         // ===== TAINT SINKS (16+) =====
 
         // Command Execution
+        // NOTE: In Rust, Command::new().arg() is generally safe because arguments
+        // are passed directly to the process without shell interpretation.
+        // The dangerous patterns are:
+        // 1. Command::new(tainted) - arbitrary command execution
+        // 2. Shell commands like Command::new("sh").args(["-c", cmd]) need shell context
         for name in &[
             "std::process::Command",
-            "Command::new",
-            "Command.spawn",
-            "Command.output",
+            "Command::new",          // Only dangerous if command name is tainted
             "process::Command",
-            "args",           // Command::new("sh").args(["-c", tainted_cmd])
-            "Command.args",
-            "arg",            // Command::new("sh").arg(tainted_cmd)
-            "Command.arg",
+            // NOT including arg/args - these are safe for non-shell commands
+            // Shell detection would require checking if Command::new("sh"|"bash"|"cmd")
         ] {
             sinks.push(TaintSink {
                 name: name.to_string(),

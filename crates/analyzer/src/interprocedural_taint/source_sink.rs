@@ -182,6 +182,14 @@ impl InterproceduralTaintAnalysis {
 
         let is_common_method = common_methods.contains(&method_name_lower.as_str());
 
+        // Safe variants that should NOT be considered sinks even if they match a sink pattern
+        // e.g., yaml.safe_load should NOT match yaml.load as a deserialization sink
+        let safe_method_prefixes = ["safe_", "safe"];
+        let is_safe_variant = safe_method_prefixes.iter().any(|prefix| method_name_lower.starts_with(prefix));
+        if is_safe_variant {
+            return false;
+        }
+
         // Fall back to legacy sinks
         self.sinks.iter().any(|s| {
             let sink_lower = s.name.to_lowercase();
@@ -223,6 +231,12 @@ impl InterproceduralTaintAnalysis {
     pub(super) fn find_sink_by_name(&self, name: &str) -> Option<&TaintSink> {
         let name_lower = name.to_lowercase();
         let method_name = name.split('.').last().unwrap_or(name).to_lowercase();
+
+        // Safe variants should NOT be treated as sinks
+        let safe_method_prefixes = ["safe_", "safe"];
+        if safe_method_prefixes.iter().any(|prefix| method_name.starts_with(prefix)) {
+            return None;
+        }
 
         // First try exact match
         if let Some(sink) = self.sinks.iter().find(|s| s.name.to_lowercase() == name_lower) {

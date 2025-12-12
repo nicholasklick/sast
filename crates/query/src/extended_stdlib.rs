@@ -607,11 +607,12 @@ impl ExtendedStandardLibrary {
             QueryMetadata::builder("java/weak-hash-variable", "Weak Hash Algorithm (Variable)")
                 .description("Detects MessageDigest.getInstance() with algorithm from external configuration")
                 .category(QueryCategory::Cryptography)
-                .severity(QuerySeverity::Medium)
-                .precision(QueryPrecision::Medium)
+                .severity(QuerySeverity::Low)  // Low severity - can't verify if algorithm is actually weak
+                .precision(QueryPrecision::Low)  // Low precision - many false positives when config uses strong algorithms
                 .cwes(vec![327, 328])
                 .owasp("A02:2021 - Cryptographic Failures")
                 .languages(vec!["java".to_string()])
+                .suites(vec![QuerySuite::SecurityExtended])  // Not in Default suite - too many FPs
                 .build()
         );
 

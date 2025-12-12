@@ -211,7 +211,8 @@ impl Parser {
             "with_statement" => self.parse_with_statement(node, source),
 
             // Expressions
-            "binary_expression" | "binary_op" => self.parse_binary_expression(node, source),
+            // Ruby uses "binary" for binary expressions
+            "binary_expression" | "binary_op" | "binary" => self.parse_binary_expression(node, source),
             "unary_expression" => self.parse_unary_expression(node, source),
             // Function/method calls - handle language-specific node types
             // JavaScript/TypeScript/Go/Rust/C/C++/Scala/Swift/Kotlin: call_expression
@@ -263,7 +264,9 @@ impl Parser {
                 value: LiteralValue::Null,
             },
             "assignment_expression" | "assignment" => self.parse_assignment_expression(node, source),
-            "ternary_expression" | "conditional_expression" => {
+            // Ternary/conditional expressions
+            // Ruby uses "conditional" for ternary operator
+            "ternary_expression" | "conditional_expression" | "conditional" => {
                 self.parse_conditional_expression(node, source)
             }
             "update_expression" => self.parse_update_expression(node, source),
@@ -273,7 +276,8 @@ impl Parser {
             "super" | "super_expression" => AstNodeKind::SuperExpression,
             "spread_element" | "spread_expression" => AstNodeKind::SpreadElement,
             "rest_pattern" | "rest_element" => self.parse_rest_element(node, source),
-            "parenthesized_expression" => AstNodeKind::ParenthesizedExpression,
+            // Ruby uses "parenthesized_statements" for parenthesized expressions
+            "parenthesized_expression" | "parenthesized_statements" => AstNodeKind::ParenthesizedExpression,
             "tagged_template_expression" => self.parse_tagged_template_expression(node, source),
             "function_expression" | "function" => self.parse_function_expression(node, source),
             "arrow_function" => self.parse_arrow_function(node, source),
