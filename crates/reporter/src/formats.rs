@@ -99,6 +99,14 @@ impl Reporter {
                 writeln!(writer, "\n   Source Code:")?;
                 Self::write_source_context(writer, finding)?;
 
+                // Data flow path (if available)
+                if let Some(ref flow_path) = finding.flow_path {
+                    if !flow_path.locations.is_empty() {
+                        writeln!(writer)?;
+                        Self::write_flow_path(writer, flow_path)?;
+                    }
+                }
+
                 writeln!(writer, "\n   {}", "-".repeat(66))?;
             }
         }
@@ -164,5 +172,34 @@ impl Reporter {
             "Low" => severity.green(),
             _ => severity.normal(),
         }
+    }
+
+    /// Write data flow path in human-readable format
+    fn write_flow_path<W: Write>(writer: &mut W, flow_path: &gittera_query::DataFlowPath) -> Result<(), ReportError> {
+        writeln!(writer, "   Data Flow Path ({} steps):", flow_path.steps())?;
+        writeln!(writer)?;
+
+        for (i, loc) in flow_path.locations.iter().enumerate() {
+            let prefix = match loc.location_type.as_str() {
+                "source" => format!("{}  SOURCE", "▶".green()),
+                "sink" => format!("{}  SINK  ", "▼".red()),
+                _ => format!("{}  STEP  ", "│".cyan()),
+            };
+
+            let location_str = format!("{}:{}:{}", loc.file_path, loc.line, loc.column);
+            writeln!(writer, "   {} {} [{}]", prefix, loc.description.bold(), location_str.dimmed())?;
+
+            // Show code snippet if available
+            if !loc.code_snippet.is_empty() {
+                writeln!(writer, "          {}", loc.code_snippet.italic())?;
+            }
+
+            // Draw connector line (except for last item)
+            if i < flow_path.locations.len() - 1 {
+                writeln!(writer, "   {}", "│".cyan())?;
+            }
+        }
+
+        Ok(())
     }
 }

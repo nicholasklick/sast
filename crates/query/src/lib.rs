@@ -297,7 +297,7 @@ pub mod owasp_rules;
 pub mod languages;
 
 pub use ast::{Query, QueryAst, Predicate};
-pub use executor::{QueryExecutor, QueryResult, Finding};
+pub use executor::{QueryExecutor, QueryResult, Finding, DataFlowPath, FlowLocation};
 pub use lexer::{Token, Lexer};
 pub use parser::{QueryParser, ParseError};
 pub use stdlib::StandardLibrary;

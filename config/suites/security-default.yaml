@@ -1,0 +1,94 @@
+# Security Default Suite
+# Core security checks with high confidence
+# Use this suite for CI/CD pipelines where low false positives are critical
+
+name: security-default
+version: "1.0.0"
+description: |
+  Core security vulnerability detection with high precision.
+  Focuses on critical injection vulnerabilities (SQLi, XSS, Command Injection)
+  with minimal false positives. Recommended for CI/CD pipelines.
+
+# Suite metadata
+metadata:
+  author: Gittera Team
+  created: "2024-01-01"
+  updated: "2024-12-11"
+  tags:
+    - security
+    - core
+    - ci-cd
+    - high-precision
+
+# Include rules by category
+categories:
+  # A03:2021 - Injection
+  - injection
+
+# Include specific rules
+rules:
+  # SQL Injection
+  - sql-injection
+  - sql-injection/parameterized
+  - sql-injection/concatenation
+
+  # Command Injection
+  - command-injection
+  - command-injection/os-exec
+  - command-injection/shell-exec
+
+  # Cross-Site Scripting (XSS)
+  - xss
+  - xss/reflected
+  - xss/stored
+  - xss/dom
+
+  # Path Traversal
+  - path-traversal
+  - path-traversal/file-read
+  - path-traversal/file-write
+
+  # Code Injection
+  - code-injection
+  - code-injection/eval
+
+  # Insecure Deserialization
+  - insecure-deserialization
+
+  # XXE
+  - xxe
+
+# Exclude patterns (override includes)
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*_test.*"
+  - "**/*.test.*"
+  - "**/spec/**"
+
+# Minimum confidence threshold (0.0 - 1.0)
+min_confidence: 0.8
+
+# Severity levels to report
+severity_levels:
+  - Critical
+  - High
+
+# Language-specific settings
+languages:
+  java:
+    enabled: true
+  python:
+    enabled: true
+  javascript:
+    enabled: true
+  typescript:
+    enabled: true
+  go:
+    enabled: true
+  ruby:
+    enabled: true
+  php:
+    enabled: true
+  rust:
+    enabled: true

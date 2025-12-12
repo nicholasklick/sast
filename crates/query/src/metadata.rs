@@ -121,6 +121,8 @@ pub enum QuerySuite {
     Default,
     /// Security-extended - includes lower precision security queries
     SecurityExtended,
+    /// Security-comprehensive - all security checks including experimental
+    SecurityComprehensive,
     /// Security-and-quality - includes code quality queries
     SecurityAndQuality,
 }
@@ -128,8 +130,9 @@ pub enum QuerySuite {
 impl QuerySuite {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Default => "default",
+            Self::Default => "security-default",
             Self::SecurityExtended => "security-extended",
+            Self::SecurityComprehensive => "security-comprehensive",
             Self::SecurityAndQuality => "security-and-quality",
         }
     }
@@ -137,8 +140,9 @@ impl QuerySuite {
     /// Get the suites that include this suite
     pub fn includes(&self) -> Vec<QuerySuite> {
         match self {
-            Self::Default => vec![Self::Default, Self::SecurityExtended, Self::SecurityAndQuality],
-            Self::SecurityExtended => vec![Self::SecurityExtended, Self::SecurityAndQuality],
+            Self::Default => vec![Self::Default, Self::SecurityExtended, Self::SecurityComprehensive, Self::SecurityAndQuality],
+            Self::SecurityExtended => vec![Self::SecurityExtended, Self::SecurityComprehensive, Self::SecurityAndQuality],
+            Self::SecurityComprehensive => vec![Self::SecurityComprehensive, Self::SecurityAndQuality],
             Self::SecurityAndQuality => vec![Self::SecurityAndQuality],
         }
     }

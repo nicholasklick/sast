@@ -753,6 +753,7 @@ impl InterproceduralTaintAnalysis {
                                         line: node.location.span.start_line,
                                         column: node.location.span.start_column,
                                         message: message.to_string(),
+                                        path: None,
                                     });
                                 }
                             }
@@ -806,6 +807,7 @@ impl InterproceduralTaintAnalysis {
                                 line: node.location.span.start_line,
                                 column: node.location.span.start_column,
                                 message: "Trust boundary violation - untrusted value stored in session".to_string(),
+                                path: None,
                             });
                         }
                     }
@@ -1053,6 +1055,7 @@ impl InterproceduralTaintAnalysis {
                                             line: node.location.span.start_line,
                                             column: node.location.span.start_column,
                                             message,
+                                            path: None,
                                         });
                                     }
                                 }
@@ -1258,6 +1261,7 @@ impl InterproceduralTaintAnalysis {
                                 line: node.location.span.start_line,
                                 column: node.location.span.start_column,
                                 message,
+                                path: None,
                             });
                         } else if is_path_sink {
                             #[cfg(debug_assertions)]
@@ -1283,6 +1287,7 @@ impl InterproceduralTaintAnalysis {
                                 line: node.location.span.start_line,
                                 column: node.location.span.start_column,
                                 message,
+                                path: None,
                             });
                         }
                     }
@@ -1339,6 +1344,7 @@ impl InterproceduralTaintAnalysis {
                                 "Cross-site scripting (XSS) vulnerability - untrusted data returned from web handler '{}'",
                                 func_name
                             ),
+                            path: None,
                         });
                     }
                 }
@@ -1896,6 +1902,7 @@ impl InterproceduralTaintAnalysis {
                             line: interp.location.span.start_line,
                             column: interp.location.span.start_column,
                             message: format!("XSS: tainted variable '{}' interpolated in HTML heredoc", var_name),
+                            path: None,
                         });
                     }
                 }

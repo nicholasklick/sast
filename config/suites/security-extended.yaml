@@ -1,0 +1,87 @@
+# Security Extended Suite
+# Extended security checks with medium-high confidence
+# Includes additional vulnerability types beyond the default suite
+
+name: security-extended
+version: "1.0.0"
+description: |
+  Extended security vulnerability detection.
+  Includes all default checks plus SSRF, LDAP injection, XPath injection,
+  open redirects, and cryptographic issues. Some additional false positives
+  may occur compared to the default suite.
+
+# Suite metadata
+metadata:
+  author: Gittera Team
+  created: "2024-01-01"
+  updated: "2024-12-11"
+  tags:
+    - security
+    - extended
+    - owasp
+
+# Inherit from another suite
+extends: security-default
+
+# Additional categories
+categories:
+  # A01:2021 - Broken Access Control
+  - access-control
+
+  # A02:2021 - Cryptographic Failures
+  - cryptography
+
+  # A04:2021 - Insecure Design
+  - insecure-design
+
+  # A05:2021 - Security Misconfiguration
+  - misconfiguration
+
+  # A10:2021 - SSRF
+  - ssrf
+
+# Additional rules (added to inherited rules)
+rules:
+  # SSRF
+  - ssrf
+  - ssrf/http-client
+  - ssrf/url-fetch
+
+  # LDAP Injection
+  - ldap-injection
+
+  # XPath Injection
+  - xpath-injection
+
+  # Open Redirect
+  - open-redirect
+  - redirect/unsafe
+
+  # Cryptographic Issues
+  - weak-crypto
+  - weak-crypto/md5
+  - weak-crypto/sha1
+  - weak-crypto/des
+  - hardcoded-secrets
+  - hardcoded-secrets/api-key
+  - hardcoded-secrets/password
+
+  # Trust Boundary
+  - trust-boundary
+  - trust-boundary/session
+
+  # Log Injection
+  - log-injection
+
+  # Header Injection
+  - header-injection
+  - crlf-injection
+
+# Lower confidence threshold for extended checks
+min_confidence: 0.6
+
+# Include medium severity
+severity_levels:
+  - Critical
+  - High
+  - Medium

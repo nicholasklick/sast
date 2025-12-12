@@ -224,6 +224,7 @@ impl ParallelAnalyzer {
                 rule_id,
                 cwes: vec![],  // Will be derived by reporter
                 owasp: None,   // Will be derived by reporter
+                flow_path: None,
             };
             all_findings.push(finding);
         }
@@ -345,6 +346,7 @@ impl ParallelAnalyzer {
                 rule_id,
                 cwes: vec![],  // Will be derived by reporter
                 owasp: None,   // Will be derived by reporter
+                flow_path: None,
             };
             all_findings.push(finding);
         }

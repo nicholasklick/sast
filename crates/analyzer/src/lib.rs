@@ -364,7 +364,7 @@ pub use dataflow_node::{DataFlowNode, ArgumentPosition, ReturnKind, LocalFlowSte
 pub use content::{Content, ContentSet};
 pub use access_path::{AccessPath, AccessPathFront, MAX_ACCESS_PATH_LENGTH};
 pub use flow_summary::{FlowSummaryRegistry, SummarizedCallable, FlowPropagation, SummaryComponent, FlowKind, ArgumentSpec, Provenance};
-pub use taint::{TaintAnalysis, TaintSource, TaintSink, TaintValue, TaintAnalysisResult, Severity, TaintSinkKind, TaintSourceKind, FlowState, Sanitizer, TaintVulnerability, allows_implicit_read};
+pub use taint::{TaintAnalysis, TaintSource, TaintSink, TaintValue, TaintAnalysisResult, Severity, TaintSinkKind, TaintSourceKind, FlowState, Sanitizer, TaintVulnerability, TaintPath, TaintNode, TaintNodeType, allows_implicit_read};
 pub use taint_config::{LanguageTaintConfig, init_yaml_configs};
 pub use yaml_config::{TaintConfigYaml, TaintConfigRegistry, SourceConfig, SinkConfig, SanitizerConfig, SummaryConfig, SourceKind, SinkKind, SanitizeKind, SummaryKind, YamlConfigError};
 pub use language_handler::{LanguageTaintHandler, ConditionalIndices, SafeSinkPattern, get_handler_for_language, PythonTaintHandler, JavaTaintHandler, GenericTaintHandler, evaluate_node_symbolic};

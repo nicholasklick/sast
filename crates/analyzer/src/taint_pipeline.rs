@@ -261,6 +261,7 @@ impl TaintAnalysisPipeline {
                     line: 0,
                     column: 0,
                     message,
+                    path: None,
                 });
             }
         }

@@ -24,6 +24,7 @@ fn create_finding(
         rule_id: rule_id.to_string(),
         cwes: vec![],
         owasp: None,
+        flow_path: None,
     }
 }
 

@@ -405,6 +405,7 @@ mod tests {
             code_snippet: format!("code at line {}", line),
             cwes: vec![],
             owasp: None,
+            flow_path: None,
         }
     }
 

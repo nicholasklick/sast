@@ -30,6 +30,56 @@ pub struct Finding {
     /// OWASP Top 10 2021 category (e.g., "A03:2021 - Injection")
     #[serde(default)]
     pub owasp: Option<String>,
+    /// Data flow path from source to sink (when available from taint analysis)
+    #[serde(default)]
+    pub flow_path: Option<DataFlowPath>,
+}
+
+/// A data flow path showing how tainted data flows from source to sink
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataFlowPath {
+    /// Ordered list of locations in the path from source to sink
+    pub locations: Vec<FlowLocation>,
+}
+
+/// A single location in a data flow path
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlowLocation {
+    /// File path
+    pub file_path: String,
+    /// Line number
+    pub line: usize,
+    /// Column number
+    pub column: usize,
+    /// Type of node (source, intermediate, sink)
+    pub location_type: String,
+    /// Code snippet at this location
+    pub code_snippet: String,
+    /// Description of what happens at this location
+    pub description: String,
+}
+
+impl DataFlowPath {
+    /// Create a new empty path
+    pub fn new() -> Self {
+        Self { locations: Vec::new() }
+    }
+
+    /// Add a location to the path
+    pub fn push(&mut self, location: FlowLocation) {
+        self.locations.push(location);
+    }
+
+    /// Get the number of steps in the path
+    pub fn steps(&self) -> usize {
+        if self.locations.is_empty() { 0 } else { self.locations.len() - 1 }
+    }
+}
+
+impl Default for DataFlowPath {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Evaluation context for a query
@@ -158,6 +208,7 @@ impl QueryExecutor {
                     rule_id: "unknown".to_string(),
                     cwes: vec![],
                     owasp: None,
+                    flow_path: None,
                 });
             }
         }

@@ -175,7 +175,7 @@ impl SarifReporter {
     /// Build SARIF results from findings
     fn build_results(findings: &[gittera_query::Finding]) -> Vec<Value> {
         findings.iter().map(|finding| {
-            json!({
+            let mut result = json!({
                 "ruleId": finding.rule_id,
                 "ruleIndex": 0, // Will be properly indexed by SARIF consumers
                 "level": Self::severity_to_level(&finding.severity),
@@ -207,6 +207,55 @@ impl SarifReporter {
                     "category": finding.category
                 },
                 "rank": Self::severity_to_rank(&finding.severity)
+            });
+
+            // Add codeFlows if path information is available
+            if let Some(ref flow_path) = finding.flow_path {
+                if !flow_path.locations.is_empty() {
+                    result["codeFlows"] = json!([{
+                        "threadFlows": [{
+                            "locations": Self::build_thread_flow_locations(&flow_path.locations)
+                        }]
+                    }]);
+                }
+            }
+
+            result
+        }).collect()
+    }
+
+    /// Build SARIF threadFlowLocation array from flow locations
+    fn build_thread_flow_locations(locations: &[gittera_query::FlowLocation]) -> Vec<Value> {
+        locations.iter().enumerate().map(|(index, loc)| {
+            let importance = match loc.location_type.as_str() {
+                "source" => "essential",
+                "sink" => "essential",
+                _ => "important",
+            };
+
+            json!({
+                "location": {
+                    "physicalLocation": {
+                        "artifactLocation": {
+                            "uri": loc.file_path,
+                            "uriBaseId": "%SRCROOT%"
+                        },
+                        "region": {
+                            "startLine": loc.line,
+                            "startColumn": loc.column,
+                            "snippet": {
+                                "text": loc.code_snippet
+                            }
+                        }
+                    },
+                    "message": {
+                        "text": loc.description
+                    }
+                },
+                "step": index + 1,
+                "importance": importance,
+                "nestingLevel": 0,
+                "kinds": [loc.location_type]
             })
         }).collect()
     }

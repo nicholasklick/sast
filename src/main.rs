@@ -18,6 +18,7 @@ use gittera_analyzer::{CallGraphBuilder, CfgBuilder, InterproceduralTaintAnalysi
 use gittera_parser::{Language, LanguageConfig};
 use gittera_query::{QueryExecutor, QueryParser, ExtendedStandardLibrary, QuerySuite};
 use gittera_reporter::{Report, ReportFormat, Reporter};
+use colored::Colorize;
 
 /// Derive CWE IDs and OWASP category from rule ID
 fn derive_cwe_owasp(rule_id: &str) -> (Vec<u32>, Option<String>) {
@@ -112,8 +113,8 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
 
-        /// Query suite (default, extended, quality)
-        #[arg(short = 's', long, default_value = "default")]
+        /// Query suite (security-default, security-extended, security-comprehensive)
+        #[arg(short = 's', long, default_value = "security-default")]
         suite: String,
 
         /// Enable incremental analysis (only scan changed files)
@@ -149,6 +150,25 @@ enum Commands {
         /// Path to GQL query file
         #[arg(value_name = "QUERY")]
         query: PathBuf,
+    },
+
+    /// Manage query suites
+    Suites {
+        #[command(subcommand)]
+        action: SuiteCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum SuiteCommands {
+    /// List all available query suites
+    List,
+
+    /// Show details of a specific suite
+    Show {
+        /// Name of the suite to show
+        #[arg(value_name = "SUITE")]
+        name: String,
     },
 }
 
@@ -230,6 +250,19 @@ fn main() -> Result<()> {
             info!("Validating query: {}", query.display());
             validate_query(&query)?;
             0
+        }
+
+        Commands::Suites { action } => {
+            match action {
+                SuiteCommands::List => {
+                    list_suites();
+                    0
+                }
+                SuiteCommands::Show { name } => {
+                    show_suite(&name)?;
+                    0
+                }
+            }
         }
     };
 
@@ -427,6 +460,7 @@ fn scan_single_file(path: &PathBuf, format_str: &str, output: Option<&Path>, sui
             code_snippet: String::new(),
             cwes,
             owasp,
+            flow_path: None,
         });
     }
 
@@ -800,11 +834,12 @@ fn parse_format(format_str: &str) -> ReportFormat {
 
 fn parse_suite(suite_str: &str) -> QuerySuite {
     match suite_str.to_lowercase().as_str() {
-        "default" => QuerySuite::Default,
+        "default" | "security-default" => QuerySuite::Default,
         "extended" | "security-extended" => QuerySuite::SecurityExtended,
+        "comprehensive" | "security-comprehensive" => QuerySuite::SecurityComprehensive,
         "quality" | "security-and-quality" => QuerySuite::SecurityAndQuality,
         _ => {
-            eprintln!("Unknown suite '{}', using 'default'", suite_str);
+            eprintln!("Unknown suite '{}', using 'security-default'. Run 'gittera suites list' to see available suites.", suite_str);
             QuerySuite::Default
         }
     }
@@ -812,8 +847,9 @@ fn parse_suite(suite_str: &str) -> QuerySuite {
 
 fn suite_name(suite: QuerySuite) -> &'static str {
     match suite {
-        QuerySuite::Default => "default",
+        QuerySuite::Default => "security-default",
         QuerySuite::SecurityExtended => "security-extended",
+        QuerySuite::SecurityComprehensive => "security-comprehensive",
         QuerySuite::SecurityAndQuality => "security-and-quality",
     }
 }
@@ -840,4 +876,154 @@ fn determine_severity(rule_id: &str) -> String {
         "hardcoded-secrets" | "weak-crypto" => "Medium".to_string(),
         _ => "Medium".to_string(),
     }
+}
+
+/// List all available query suites
+fn list_suites() {
+    println!("{}", "\nAvailable Query Suites".bold());
+    println!("{}", "=".repeat(70));
+    println!();
+
+    // Built-in suites
+    println!("{}", "Built-in Suites:".bold().cyan());
+    println!();
+
+    println!("  {} - Core security checks with high confidence", "security-default".green());
+    println!("    Uses: High-precision rules for CI/CD (SQL injection, XSS, Command injection)");
+    println!("    Confidence: 80%+, Severity: Critical, High");
+    println!();
+
+    println!("  {} - Extended security checks", "security-extended".yellow());
+    println!("    Uses: All default rules + SSRF, LDAP, XPath, crypto issues");
+    println!("    Confidence: 60%+, Severity: Critical, High, Medium");
+    println!();
+
+    println!("  {} - All security checks", "security-comprehensive".red());
+    println!("    Uses: All available rules including experimental");
+    println!("    Confidence: 30%+, Severity: All levels");
+    println!();
+
+    // Check for custom suites in config/suites/
+    let suites_dir = PathBuf::from("config/suites");
+    if suites_dir.exists() {
+        println!("{}", "Custom Suites (config/suites/):".bold().cyan());
+        println!();
+
+        if let Ok(entries) = std::fs::read_dir(&suites_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map_or(false, |e| e == "yaml" || e == "yml") {
+                    if let Some(name) = path.file_stem() {
+                        println!("  {} ({})", name.to_string_lossy().green(), path.display());
+                    }
+                }
+            }
+            println!();
+        }
+    }
+
+    println!("Usage: {} --suite <SUITE_NAME> <PATH>", "gittera scan".bold());
+    println!();
+}
+
+/// Show details of a specific suite
+fn show_suite(name: &str) -> Result<()> {
+    // Try to load from config/suites/ first
+    let yaml_path = PathBuf::from(format!("config/suites/{}.yaml", name));
+    let yml_path = PathBuf::from(format!("config/suites/{}.yml", name));
+
+    let suite_path = if yaml_path.exists() {
+        Some(yaml_path)
+    } else if yml_path.exists() {
+        Some(yml_path)
+    } else {
+        None
+    };
+
+    if let Some(path) = suite_path {
+        // Read and display YAML file
+        let content = std::fs::read_to_string(&path)?;
+        println!("{}", format!("\nSuite: {}", name).bold());
+        println!("{}", format!("File: {}", path.display()).dimmed());
+        println!("{}", "=".repeat(70));
+        println!();
+        println!("{}", content);
+        return Ok(());
+    }
+
+    // Show built-in suite info
+    match name {
+        "security-default" | "default" => {
+            println!("{}", "\nSuite: security-default".bold());
+            println!("{}", "=".repeat(70));
+            println!();
+            println!("{}: Core security vulnerability detection with high precision", "Description".cyan());
+            println!();
+            println!("{}", "Rules included:".bold());
+            println!("  - sql-injection");
+            println!("  - command-injection");
+            println!("  - xss (cross-site scripting)");
+            println!("  - path-traversal");
+            println!("  - code-injection");
+            println!("  - insecure-deserialization");
+            println!("  - xxe (XML external entity)");
+            println!();
+            println!("{}: 80%+", "Min Confidence".cyan());
+            println!("{}: Critical, High", "Severity Levels".cyan());
+            println!("{}: All supported", "Languages".cyan());
+        }
+
+        "security-extended" | "extended" => {
+            println!("{}", "\nSuite: security-extended".bold());
+            println!("{}", "=".repeat(70));
+            println!();
+            println!("{}: Extended security checks (inherits from security-default)", "Description".cyan());
+            println!();
+            println!("{}", "Additional rules:".bold());
+            println!("  - ssrf (server-side request forgery)");
+            println!("  - ldap-injection");
+            println!("  - xpath-injection");
+            println!("  - open-redirect");
+            println!("  - weak-crypto");
+            println!("  - hardcoded-secrets");
+            println!("  - trust-boundary");
+            println!("  - log-injection");
+            println!("  - header-injection");
+            println!();
+            println!("{}: 60%+", "Min Confidence".cyan());
+            println!("{}: Critical, High, Medium", "Severity Levels".cyan());
+        }
+
+        "security-comprehensive" | "comprehensive" | "all" => {
+            println!("{}", "\nSuite: security-comprehensive".bold());
+            println!("{}", "=".repeat(70));
+            println!();
+            println!("{}: Comprehensive security analysis (inherits from security-extended)", "Description".cyan());
+            println!();
+            println!("{}", "Additional rules:".bold());
+            println!("  - information-disclosure");
+            println!("  - race-condition");
+            println!("  - resource-exhaustion");
+            println!("  - unsafe-file-upload");
+            println!("  - insecure-protocol");
+            println!("  - regex-dos");
+            println!("  - prototype-pollution");
+            println!("  - experimental/*");
+            println!();
+            println!("{}: 30%+", "Min Confidence".cyan());
+            println!("{}: All levels", "Severity Levels".cyan());
+            println!("{}: Not recommended for CI/CD due to potential false positives", "Note".yellow());
+        }
+
+        _ => {
+            eprintln!("{}: Suite '{}' not found", "Error".red(), name);
+            eprintln!();
+            eprintln!("Available suites: security-default, security-extended, security-comprehensive");
+            eprintln!("Run 'gittera suites list' to see all available suites");
+            std::process::exit(1);
+        }
+    }
+
+    println!();
+    Ok(())
 }

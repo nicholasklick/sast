@@ -640,6 +640,7 @@ impl TaintAnalysis {
                                 line: 0,
                                 column: 0,
                                 message,
+                                path: None, // CFG-based analysis doesn't track paths yet
                             });
                         }
                     }
@@ -1013,6 +1014,173 @@ pub struct TaintAnalysisResult {
     pub vulnerabilities: Vec<TaintVulnerability>,
 }
 
+/// A node in the taint propagation path
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaintNode {
+    /// File path where this node is located
+    pub file_path: String,
+    /// Line number
+    pub line: usize,
+    /// Column number
+    pub column: usize,
+    /// The type of this node in the path
+    pub node_type: TaintNodeType,
+    /// Code snippet at this location
+    pub code_snippet: String,
+    /// Variable name involved (if applicable)
+    pub variable: Option<String>,
+    /// Description of what happens at this node
+    pub description: String,
+}
+
+impl TaintNode {
+    /// Create a source node
+    pub fn source(file_path: String, line: usize, column: usize, snippet: String, variable: String) -> Self {
+        Self {
+            file_path,
+            line,
+            column,
+            node_type: TaintNodeType::Source,
+            code_snippet: snippet,
+            variable: Some(variable),
+            description: "User-controlled data enters here".to_string(),
+        }
+    }
+
+    /// Create an intermediate node (propagation)
+    pub fn intermediate(file_path: String, line: usize, column: usize, snippet: String, variable: String, description: String) -> Self {
+        Self {
+            file_path,
+            line,
+            column,
+            node_type: TaintNodeType::Intermediate,
+            code_snippet: snippet,
+            variable: Some(variable),
+            description,
+        }
+    }
+
+    /// Create a sink node
+    pub fn sink(file_path: String, line: usize, column: usize, snippet: String, description: String) -> Self {
+        Self {
+            file_path,
+            line,
+            column,
+            node_type: TaintNodeType::Sink,
+            code_snippet: snippet,
+            variable: None,
+            description,
+        }
+    }
+}
+
+/// Type of node in the taint path
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TaintNodeType {
+    /// Source - where tainted data enters
+    Source,
+    /// Intermediate - propagation point
+    Intermediate,
+    /// Sink - where tainted data is consumed dangerously
+    Sink,
+}
+
+impl TaintNodeType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TaintNodeType::Source => "source",
+            TaintNodeType::Intermediate => "intermediate",
+            TaintNodeType::Sink => "sink",
+        }
+    }
+}
+
+/// A complete path showing how taint flows from source to sink
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaintPath {
+    /// Ordered list of nodes from source to sink
+    pub nodes: Vec<TaintNode>,
+}
+
+impl TaintPath {
+    /// Create a new empty path
+    pub fn new() -> Self {
+        Self { nodes: Vec::new() }
+    }
+
+    /// Add a node to the path
+    pub fn push(&mut self, node: TaintNode) {
+        self.nodes.push(node);
+    }
+
+    /// Create path with source and sink (minimal path)
+    pub fn from_source_to_sink(source: TaintNode, sink: TaintNode) -> Self {
+        Self { nodes: vec![source, sink] }
+    }
+
+    /// Get the source node (first in path)
+    pub fn source(&self) -> Option<&TaintNode> {
+        self.nodes.first()
+    }
+
+    /// Get the sink node (last in path)
+    pub fn sink(&self) -> Option<&TaintNode> {
+        self.nodes.last()
+    }
+
+    /// Get intermediate nodes (all except first and last)
+    pub fn intermediates(&self) -> &[TaintNode] {
+        if self.nodes.len() <= 2 {
+            &[]
+        } else {
+            &self.nodes[1..self.nodes.len() - 1]
+        }
+    }
+
+    /// Get the number of steps (nodes - 1)
+    pub fn steps(&self) -> usize {
+        if self.nodes.is_empty() { 0 } else { self.nodes.len() - 1 }
+    }
+
+    /// Format path as human-readable text
+    pub fn to_text(&self) -> String {
+        if self.nodes.is_empty() {
+            return String::from("(no path information)");
+        }
+
+        let mut lines = Vec::new();
+        for (i, node) in self.nodes.iter().enumerate() {
+            let prefix = match node.node_type {
+                TaintNodeType::Source => "▶ SOURCE",
+                TaintNodeType::Intermediate => "│ STEP  ",
+                TaintNodeType::Sink => "▼ SINK  ",
+            };
+            let var_info = node.variable.as_ref()
+                .map(|v| format!(" ({})", v))
+                .unwrap_or_default();
+            lines.push(format!(
+                "{} [{} @ {}:{}:{}]{}",
+                prefix,
+                node.description,
+                node.file_path,
+                node.line,
+                node.column,
+                var_info
+            ));
+            if i < self.nodes.len() - 1 {
+                lines.push("│".to_string());
+            }
+        }
+        lines.join("\n")
+    }
+}
+
+impl Default for TaintPath {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaintVulnerability {
     pub sink: TaintSink,
@@ -1026,6 +1194,9 @@ pub struct TaintVulnerability {
     pub column: usize,
     /// Human-readable vulnerability message
     pub message: String,
+    /// Data flow path from source to sink (optional, populated when available)
+    #[serde(default)]
+    pub path: Option<TaintPath>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
