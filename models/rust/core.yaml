@@ -181,23 +181,15 @@ sinks:
     description: "Raw SQL query"
     argument: 0
 
-  - name: "execute"
-    kind: SqlQuery
-    description: "SQL execution"
-    argument: 0
+  # Note: Removed generic "execute" sink - too many FPs
 
-  # XSS (HTML output)
+  # XSS (HTML output) - body() is the main HTML sink in actix-web
   - name: "body"
     kind: HtmlOutput
     description: "HTTP response body"
     argument: 0
 
-  - name: "HttpResponse::Ok"
-    kind: HtmlOutput
-    description: "HTTP OK response"
-    argument: 0
-
-  # Trust Boundary
+  # Trust Boundary - specific session methods only, not generic insert
   - name: "session.insert"
     kind: TrustBoundary
     description: "Session data insertion"
@@ -206,11 +198,6 @@ sinks:
   - name: "Session::insert"
     kind: TrustBoundary
     description: "Session data insertion"
-    argument: 1
-
-  - name: "insert"
-    kind: TrustBoundary
-    description: "Session insert"
     argument: 1
 
   # Secure Cookie - Note: SecureCookie kind not yet supported, use API-based queries
@@ -237,6 +224,18 @@ sanitizers:
   - name: "escape_html"
     sanitizes: [Html]
     description: "HTML escape"
+
+  - name: "escape_for_html"
+    sanitizes: [Html]
+    description: "HTML escape (crate helper)"
+
+  - name: "utils::escape_for_html"
+    sanitizes: [Html]
+    description: "HTML escape utility"
+
+  - name: "helpers::utils::escape_for_html"
+    sanitizes: [Html]
+    description: "HTML escape helper utility"
 
   # Shell escaping
   - name: "shell_escape"

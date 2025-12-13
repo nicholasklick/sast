@@ -2237,6 +2237,45 @@ impl InterproceduralTaintAnalysis {
                 }
             }
 
+            // Handle if statements (Rust/Go if-expressions) with symbolic evaluation
+            // Uses same dead code detection as track_taint_in_ast_with_depth
+            AstNodeKind::IfStatement => {
+                // Condition is at index 1, then branch at index 2 (or 3 for Python), else at 3+
+                if let Some(condition_node) = node.children.get(1) {
+                    let condition = self.evaluate_symbolic(condition_node, sym_state);
+                    match condition.as_definite_bool() {
+                        Some(true) => {
+                            // Condition is definitely TRUE - only check then branch (index 2)
+                            if let Some(then_branch) = node.children.get(2) {
+                                return self.is_node_tainted_with_sym(then_branch, tainted_vars, sym_state);
+                            }
+                            false
+                        }
+                        Some(false) => {
+                            // Condition is definitely FALSE - only check else branch (index 3+)
+                            for i in 3..node.children.len() {
+                                if let Some(else_branch) = node.children.get(i) {
+                                    // Skip the "else" keyword
+                                    if !matches!(&else_branch.kind, AstNodeKind::Other { node_type } if node_type == "else") {
+                                        if self.is_node_tainted_with_sym(else_branch, tainted_vars, sym_state) {
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                            false
+                        }
+                        None => {
+                            // Unknown condition - conservatively check both branches
+                            node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
+                        }
+                    }
+                } else {
+                    // Fallback to checking all children
+                    node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
+                }
+            }
+
             // Handle member expressions like req.body.code, request.query.id
             AstNodeKind::MemberExpression { object, property, is_computed, .. } => {
                 // Handle computed member expressions: data['keyB'] - similar to Python subscript
