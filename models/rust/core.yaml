@@ -188,12 +188,12 @@ sinks:
 
   # XSS (HTML output)
   - name: "body"
-    kind: Xss
+    kind: HtmlOutput
     description: "HTTP response body"
     argument: 0
 
   - name: "HttpResponse::Ok"
-    kind: Xss
+    kind: HtmlOutput
     description: "HTTP OK response"
     argument: 0
 
@@ -213,16 +213,11 @@ sinks:
     description: "Session insert"
     argument: 1
 
-  # Secure Cookie
-  - name: "Cookie::build"
-    kind: SecureCookie
-    description: "Cookie construction"
-    argument: 1
-
-  - name: "cookie"
-    kind: SecureCookie
-    description: "Set cookie"
-    argument: 0
+  # Secure Cookie - Note: SecureCookie kind not yet supported, use API-based queries
+  # - name: "Cookie::build"
+  #   kind: SecureCookie
+  #   description: "Cookie construction"
+  #   argument: 1
 
 sanitizers:
   # Type conversion sanitizes numeric injections
