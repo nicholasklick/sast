@@ -1,0 +1,539 @@
+# PHP Core Taint Configuration
+# Base sources, sinks, and sanitizers for PHP applications
+
+sources:
+  # PSR-7 Request Sources (Slim/PSR Framework)
+  - name: "getParsedBody"
+    kind: UserInput
+    description: "POST body data"
+
+  - name: "getQueryParams"
+    kind: UserInput
+    description: "GET query parameters"
+
+  - name: "getCookieParams"
+    kind: UserInput
+    description: "Request cookies"
+
+  - name: "getHeaderLine"
+    kind: UserInput
+    description: "Request header value"
+
+  - name: "getHeaders"
+    kind: UserInput
+    description: "All request headers"
+
+  - name: "getHeader"
+    kind: UserInput
+    description: "Request header array"
+
+  - name: "getUri"
+    kind: UserInput
+    description: "Request URI object"
+
+  - name: "getPath"
+    kind: UserInput
+    description: "URL path"
+
+  - name: "getQuery"
+    kind: UserInput
+    description: "Query string"
+
+  - name: "getBody"
+    kind: UserInput
+    description: "Request body stream"
+
+  # Superglobals
+  - name: "$_GET"
+    kind: UserInput
+    description: "GET parameters superglobal"
+
+  - name: "$_POST"
+    kind: UserInput
+    description: "POST parameters superglobal"
+
+  - name: "$_REQUEST"
+    kind: UserInput
+    description: "Combined GET/POST superglobal"
+
+  - name: "$_COOKIE"
+    kind: UserInput
+    description: "Cookies superglobal"
+
+  - name: "$_SERVER"
+    kind: UserInput
+    description: "Server and execution environment"
+
+  - name: "$_FILES"
+    kind: UserInput
+    description: "Uploaded files"
+
+  - name: "$_ENV"
+    kind: Environment
+    description: "Environment variables"
+
+  # File I/O (as potential sources of tainted data)
+  - name: "file_get_contents"
+    kind: File
+    description: "Read entire file"
+
+  - name: "fread"
+    kind: File
+    description: "Read from file"
+
+  - name: "fgets"
+    kind: File
+    description: "Read line from file"
+
+  - name: "file"
+    kind: File
+    description: "Read file into array"
+
+  - name: "readfile"
+    kind: File
+    description: "Read and output file"
+
+  # Standard Input
+  - name: "php://input"
+    kind: UserInput
+    description: "Raw POST data"
+
+  - name: "php://stdin"
+    kind: UserInput
+    description: "Standard input"
+
+sinks:
+  # SQL Injection
+  - name: "executeRaw"
+    kind: SqlQuery
+    description: "Execute raw SQL query"
+    argument: 0
+
+  - name: "query"
+    kind: SqlQuery
+    description: "Execute SQL query"
+    argument: 0
+
+  - name: "exec"
+    kind: SqlQuery
+    description: "Execute SQL statement"
+    argument: 0
+
+  - name: "mysqli_query"
+    kind: SqlQuery
+    description: "MySQLi query"
+    argument: 1
+
+  - name: "mysql_query"
+    kind: SqlQuery
+    description: "MySQL query (deprecated)"
+    argument: 0
+
+  - name: "pg_query"
+    kind: SqlQuery
+    description: "PostgreSQL query"
+    argument: 1
+
+  - name: "sqlite_query"
+    kind: SqlQuery
+    description: "SQLite query"
+    argument: 1
+
+  # Command Execution
+  - name: "shell_exec"
+    kind: CommandExecution
+    description: "Execute shell command"
+    argument: 0
+
+  - name: "exec"
+    kind: CommandExecution
+    description: "Execute external program"
+    argument: 0
+
+  - name: "system"
+    kind: CommandExecution
+    description: "Execute system command"
+    argument: 0
+
+  - name: "passthru"
+    kind: CommandExecution
+    description: "Execute command and pass through output"
+    argument: 0
+
+  - name: "popen"
+    kind: CommandExecution
+    description: "Open process file pointer"
+    argument: 0
+
+  - name: "proc_open"
+    kind: CommandExecution
+    description: "Execute command via open process"
+    argument: 0
+
+  - name: "pcntl_exec"
+    kind: CommandExecution
+    description: "Execute program in current process"
+    argument: 0
+
+  # Code Injection
+  - name: "eval"
+    kind: CodeEval
+    description: "Evaluate PHP code"
+    argument: 0
+
+  - name: "assert"
+    kind: CodeEval
+    description: "Assert with code execution"
+    argument: 0
+
+  - name: "create_function"
+    kind: CodeEval
+    description: "Create anonymous function from string"
+    argument: 1
+
+  - name: "preg_replace"
+    kind: CodeEval
+    description: "Regex replace with /e modifier"
+    argument: 1
+
+  # Path Traversal
+  - name: "file_get_contents"
+    kind: PathTraversal
+    description: "Read file (path traversal risk)"
+    argument: 0
+
+  - name: "file_put_contents"
+    kind: PathTraversal
+    description: "Write file (path traversal risk)"
+    argument: 0
+
+  - name: "fopen"
+    kind: PathTraversal
+    description: "Open file (path traversal risk)"
+    argument: 0
+
+  - name: "include"
+    kind: PathTraversal
+    description: "Include file (LFI/RFI risk)"
+    argument: 0
+
+  - name: "include_once"
+    kind: PathTraversal
+    description: "Include file once (LFI/RFI risk)"
+    argument: 0
+
+  - name: "require"
+    kind: PathTraversal
+    description: "Require file (LFI/RFI risk)"
+    argument: 0
+
+  - name: "require_once"
+    kind: PathTraversal
+    description: "Require file once (LFI/RFI risk)"
+    argument: 0
+
+  - name: "readfile"
+    kind: PathTraversal
+    description: "Read and output file"
+    argument: 0
+
+  - name: "copy"
+    kind: PathTraversal
+    description: "Copy file"
+    argument: 0
+
+  - name: "rename"
+    kind: PathTraversal
+    description: "Rename/move file"
+    argument: 0
+
+  - name: "unlink"
+    kind: PathTraversal
+    description: "Delete file"
+    argument: 0
+
+  - name: "mkdir"
+    kind: PathTraversal
+    description: "Create directory"
+    argument: 0
+
+  - name: "rmdir"
+    kind: PathTraversal
+    description: "Remove directory"
+    argument: 0
+
+  # XSS - Direct output
+  - name: "echo"
+    kind: HtmlOutput
+    description: "Output (XSS risk)"
+    argument: 0
+
+  - name: "print"
+    kind: HtmlOutput
+    description: "Output (XSS risk)"
+    argument: 0
+
+  - name: "printf"
+    kind: HtmlOutput
+    description: "Formatted output (XSS risk)"
+    argument: 0
+
+  # LDAP Injection
+  - name: "ldap_search"
+    kind: LdapQuery
+    description: "LDAP search"
+    argument: 2
+
+  - name: "search"
+    kind: LdapQuery
+    description: "LDAP search (LdapMock)"
+    argument: 1
+
+  # XPath Injection
+  - name: "xpath"
+    kind: XPathQuery
+    description: "XPath query"
+    argument: 0
+
+  - name: "evaluate"
+    kind: XPathQuery
+    description: "DOMXPath evaluate"
+    argument: 0
+
+  # XXE - XML Parsing
+  - name: "loadXML"
+    kind: XmlParse
+    description: "Load XML string (XXE risk)"
+    argument: 0
+
+  - name: "simplexml_load_string"
+    kind: XmlParse
+    description: "Parse XML string (XXE risk)"
+    argument: 0
+
+  - name: "DOMDocument"
+    kind: XmlParse
+    description: "DOM Document (XXE risk)"
+    argument: 0
+
+  # Deserialization
+  - name: "unserialize"
+    kind: Deserialization
+    description: "Unserialize PHP data"
+    argument: 0
+
+  # Open Redirect
+  - name: "header"
+    kind: Redirect
+    description: "HTTP header (redirect risk)"
+    argument: 0
+
+  - name: "withHeader"
+    kind: Redirect
+    description: "PSR-7 withHeader (redirect risk)"
+    argument: 1
+
+  # Trust Boundary - Session
+  - name: "set"
+    kind: TrustBoundary
+    description: "Session set (trust boundary)"
+    argument: 1
+
+  - name: "session_set"
+    kind: TrustBoundary
+    description: "Session setter"
+    argument: 1
+
+sanitizers:
+  # HTML Sanitization
+  - name: "htmlspecialchars"
+    sanitizes: [Html]
+    description: "Convert special chars to HTML entities"
+
+  - name: "htmlentities"
+    sanitizes: [Html]
+    description: "Convert all chars to HTML entities"
+
+  - name: "strip_tags"
+    sanitizes: [Html]
+    description: "Strip HTML tags"
+
+  - name: "escapeForHtml"
+    sanitizes: [Html]
+    description: "Utils HTML escape"
+
+  # SQL Sanitization
+  - name: "mysqli_real_escape_string"
+    sanitizes: [Sql]
+    description: "MySQLi escape"
+
+  - name: "mysql_real_escape_string"
+    sanitizes: [Sql]
+    description: "MySQL escape (deprecated)"
+
+  - name: "pg_escape_string"
+    sanitizes: [Sql]
+    description: "PostgreSQL escape"
+
+  - name: "addslashes"
+    sanitizes: [Sql]
+    description: "Add backslashes"
+
+  # Shell Sanitization
+  - name: "escapeshellarg"
+    sanitizes: [Shell]
+    description: "Escape shell argument"
+
+  - name: "escapeshellcmd"
+    sanitizes: [Shell]
+    description: "Escape shell command"
+
+  # Path Sanitization
+  - name: "basename"
+    sanitizes: [Path]
+    description: "Extract filename from path"
+
+  - name: "realpath"
+    sanitizes: [Path]
+    description: "Resolve to canonical path"
+
+  # Type Conversion (sanitizes all)
+  - name: "intval"
+    sanitizes: [All]
+    description: "Convert to integer"
+
+  - name: "floatval"
+    sanitizes: [All]
+    description: "Convert to float"
+
+  - name: "(int)"
+    sanitizes: [All]
+    description: "Integer cast"
+
+  - name: "(float)"
+    sanitizes: [All]
+    description: "Float cast"
+
+  - name: "(bool)"
+    sanitizes: [All]
+    description: "Boolean cast"
+
+  # LDAP Sanitization
+  - name: "ldap_escape"
+    sanitizes: [All]
+    description: "Escape LDAP filter"
+
+summaries:
+  # String operations propagate taint
+  - name: "substr"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "trim"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "ltrim"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "rtrim"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "strtolower"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "strtoupper"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "str_replace"
+    input: "Argument[2]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "preg_replace"
+    input: "Argument[2]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "explode"
+    input: "Argument[1]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "implode"
+    input: "Argument[1]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "join"
+    input: "Argument[1]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "sprintf"
+    input: "Argument[1]"
+    output: "ReturnValue"
+    kind: taint
+
+  # Array operations
+  - name: "array_pop"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "array_shift"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "end"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "reset"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "current"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  # URL operations
+  - name: "urldecode"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "rawurldecode"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "base64_decode"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "urlDecode"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  # JSON operations
+  - name: "json_decode"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint

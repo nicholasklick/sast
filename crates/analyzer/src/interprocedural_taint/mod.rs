@@ -2330,6 +2330,24 @@ impl InterproceduralTaintAnalysis {
                 node.children.iter().any(|c| self.is_node_tainted_with_sym(c, tainted_vars, sym_state))
             }
 
+            // Handle PHP variable_name node type (e.g., $param, $request)
+            // PHP variables use Other { node_type: "variable_name" } instead of Identifier
+            AstNodeKind::Other { node_type } if node_type == "variable_name" => {
+                let name = node.text.trim();
+                // Direct taint check
+                if tainted_vars.contains(name) {
+                    return true;
+                }
+                // Also check for map elements: "$mapVar[key]"
+                let map_prefix = format!("{}[", name);
+                if tainted_vars.iter().any(|v| v.starts_with(&map_prefix)) {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] Implicit read: PHP variable '{}' has tainted map values", name);
+                    return true;
+                }
+                false
+            }
+
             // Handle Python/JavaScript/Ruby subscript access: map['key'] or arr[index]
             // Python: "subscript", JavaScript: "subscript_expression", Ruby: "element_reference"
             AstNodeKind::Other { node_type } if node_type == "subscript" || node_type == "subscript_expression" || node_type == "element_reference" => {
@@ -2370,8 +2388,6 @@ impl InterproceduralTaintAnalysis {
 
                 if let (Some(base), Some(key)) = (base_var.as_ref(), key) {
                     // We have a specific key access like map['keyA']
-                    // ONLY check if this specific key is tainted, not the whole map
-                    // This enables strong updates: map['keyA'] = safe_value kills taint
                     let map_key = format!("{}[{}]", base, key);
 
                     // Check if the base is a source (e.g., req.query, request.args)
@@ -2382,12 +2398,24 @@ impl InterproceduralTaintAnalysis {
                         return true;
                     }
 
-                    #[cfg(debug_assertions)]
-                    eprintln!("[DEBUG] is_node_tainted: checking subscript '{}', result={}", map_key, tainted_vars.contains(&map_key));
+                    // First check if the specific key is tainted
+                    if tainted_vars.contains(&map_key) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] is_node_tainted: subscript '{}' is tainted via specific key", map_key);
+                        return true;
+                    }
 
-                    // Return the result of checking the specific key only
-                    // Do NOT fall through to check the base variable
-                    return tainted_vars.contains(&map_key);
+                    // Also check if the entire base is tainted (e.g., $get = getQueryParams())
+                    // When the whole array/map is tainted, any element access inherits that taint
+                    if tainted_vars.contains(base) {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[DEBUG] is_node_tainted: subscript '{}' is tainted - base '{}' is wholly tainted", map_key, base);
+                        return true;
+                    }
+
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] is_node_tainted: subscript '{}' is NOT tainted", map_key);
+                    return false;
                 }
 
                 // No specific key (dynamic index) - must conservatively check if base has any tainted values
@@ -2407,6 +2435,14 @@ impl InterproceduralTaintAnalysis {
             }
 
             AstNodeKind::CallExpression { callee, .. } => {
+                // CRITICAL: Check if the call itself is a taint source (e.g., getQueryParams, getParsedBody)
+                // This is the primary source detection mechanism for method calls that return user input
+                if self.is_source_function(callee) {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[DEBUG] is_node_tainted: callee '{}' IS a source function, returning true", callee);
+                    return true;
+                }
+
                 // Handle methods that propagate taint from receiver to return value
                 // e.g., names.nextElement(), iter.next(), entry.getValue(), str.toCharArray()
                 let receiver_propagating_methods = [

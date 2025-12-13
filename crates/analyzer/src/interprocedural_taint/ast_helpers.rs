@@ -101,10 +101,24 @@ pub fn extract_identifier(node: &AstNode) -> Option<String> {
         return Some(name.clone());
     }
 
+    // Handle PHP variable_name node type
+    // PHP variables are represented as: Other { node_type: "variable_name" } with text "$param"
+    if let AstNodeKind::Other { node_type } = &node.kind {
+        if node_type == "variable_name" {
+            return Some(node.text.trim().to_string());
+        }
+    }
+
     // Try children
     for child in &node.children {
         if let AstNodeKind::Identifier { name } = &child.kind {
             return Some(name.clone());
+        }
+        // Also check for PHP variable_name in children
+        if let AstNodeKind::Other { node_type } = &child.kind {
+            if node_type == "variable_name" {
+                return Some(child.text.trim().to_string());
+            }
         }
     }
 

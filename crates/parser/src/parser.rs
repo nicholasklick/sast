@@ -160,7 +160,8 @@ impl Parser {
             // Function declarations (language-specific handling)
             // Dart uses lambda_expression with function_signature for top-level functions
             // Go uses func_literal for anonymous functions
-            "function_declaration" | "function_definition" | "function_item" | "lambda_expression" | "func_literal" => {
+            // PHP uses anonymous_function for closures like: function($req, $res) { ... }
+            "function_declaration" | "function_definition" | "function_item" | "lambda_expression" | "func_literal" | "anonymous_function" => {
                 self.parse_function_declaration(node, source)
             }
 
