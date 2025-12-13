@@ -1,0 +1,202 @@
+# Rust Core Taint Configuration
+# Sources, sinks, and sanitizers for Rust applications
+
+sources:
+  # Actix-web HTTP Sources
+  - name: "req.path"
+    kind: UserInput
+    description: "Request URL path"
+
+  - name: "path"
+    kind: UserInput
+    description: "Request URL path"
+
+  - name: "req.cookie"
+    kind: UserInput
+    description: "Request cookie"
+
+  - name: "cookie"
+    kind: UserInput
+    description: "Cookie value"
+
+  - name: "form.get"
+    kind: UserInput
+    description: "Form data getter"
+
+  - name: "query.get"
+    kind: UserInput
+    description: "Query parameter getter"
+
+  - name: "req.headers"
+    kind: UserInput
+    description: "Request headers"
+
+  - name: "req.query_string"
+    kind: UserInput
+    description: "Query string"
+
+  - name: "url_decode"
+    kind: UserInput
+    description: "URL decoded value"
+
+sinks:
+  # Command Injection
+  - name: "Command::new"
+    kind: CommandExecution
+    description: "Rust std::process Command"
+    argument: 0
+
+  - name: "std::process::Command::new"
+    kind: CommandExecution
+    description: "Rust std::process Command (full path)"
+    argument: 0
+
+  - name: "args"
+    kind: CommandExecution
+    description: "Command arguments"
+    argument: 0
+
+  # Deserialization
+  - name: "serde_json::from_str"
+    kind: Deserialization
+    description: "JSON deserialization"
+    argument: 0
+
+  - name: "from_str"
+    kind: Deserialization
+    description: "Deserialization from string"
+    argument: 0
+
+  - name: "serde_json::from_slice"
+    kind: Deserialization
+    description: "JSON deserialization from bytes"
+    argument: 0
+
+  - name: "serde_yaml::from_str"
+    kind: Deserialization
+    description: "YAML deserialization"
+    argument: 0
+
+  - name: "serde_cbor::from_slice"
+    kind: Deserialization
+    description: "CBOR deserialization"
+    argument: 0
+
+  - name: "bincode::deserialize"
+    kind: Deserialization
+    description: "Bincode deserialization"
+    argument: 0
+
+  # LDAP Injection
+  - name: "search"
+    kind: LdapQuery
+    description: "LDAP search"
+    argument: 1
+
+  - name: "ldap.search"
+    kind: LdapQuery
+    description: "LDAP search"
+    argument: 1
+
+  - name: "search_vulnerable"
+    kind: LdapQuery
+    description: "LDAP search vulnerable"
+    argument: 1
+
+  - name: "ldap_mock::search_vulnerable"
+    kind: LdapQuery
+    description: "Mock LDAP search"
+    argument: 1
+
+  # Path Traversal
+  - name: "File::open"
+    kind: PathTraversal
+    description: "Open file"
+    argument: 0
+
+  - name: "std::fs::File::open"
+    kind: PathTraversal
+    description: "Open file"
+    argument: 0
+
+  - name: "std::fs::read"
+    kind: PathTraversal
+    description: "Read file"
+    argument: 0
+
+  - name: "std::fs::read_to_string"
+    kind: PathTraversal
+    description: "Read file to string"
+    argument: 0
+
+  # Open Redirect
+  - name: "HttpResponse::Found"
+    kind: Redirect
+    description: "HTTP redirect"
+    argument: 0
+
+  - name: "Redirect::to"
+    kind: Redirect
+    description: "Redirect response"
+    argument: 0
+
+  - name: "see_other"
+    kind: Redirect
+    description: "See other redirect"
+    argument: 0
+
+  - name: "temporary_redirect"
+    kind: Redirect
+    description: "Temporary redirect"
+    argument: 0
+
+  - name: "permanent_redirect"
+    kind: Redirect
+    description: "Permanent redirect"
+    argument: 0
+
+sanitizers:
+  # Type conversion sanitizes numeric injections
+  - name: "parse"
+    sanitizes: [All]
+    description: "Parse to type (validates format)"
+
+  - name: "to_string"
+    sanitizes: []
+    description: "Convert to string (does not sanitize)"
+
+  # HTML escaping
+  - name: "html_escape"
+    sanitizes: [Html]
+    description: "HTML escape"
+
+  - name: "escape_html"
+    sanitizes: [Html]
+    description: "HTML escape"
+
+  # Shell escaping
+  - name: "shell_escape"
+    sanitizes: [Shell]
+    description: "Shell escape"
+
+summaries:
+  # String operations propagate taint
+  - name: "clone"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "to_string"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "format"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "trim"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint

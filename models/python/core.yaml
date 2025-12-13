@@ -125,6 +125,22 @@ sources:
     kind: UserInput
     description: "Flask header getter"
 
+  - name: "request.headers.getlist"
+    kind: UserInput
+    description: "Flask headers getlist"
+
+  - name: "request.args.getlist"
+    kind: UserInput
+    description: "Flask args getlist"
+
+  - name: "request.form.getlist"
+    kind: UserInput
+    description: "Flask form getlist"
+
+  - name: "request.values.getlist"
+    kind: UserInput
+    description: "Flask values getlist"
+
   - name: "request.values"
     kind: UserInput
     description: "Flask combined args/form"
@@ -376,6 +392,37 @@ sinks:
     kind: NetworkSend
     description: "HTTP GET (SSRF risk)"
     argument: 0
+
+  # LDAP Injection
+  - name: "search"
+    kind: LdapQuery
+    description: "LDAP search query (ldap3)"
+    argument: 1
+
+  - name: "conn.search"
+    kind: LdapQuery
+    description: "LDAP connection search (ldap3)"
+    argument: 1
+
+  - name: "search_s"
+    kind: LdapQuery
+    description: "LDAP synchronous search (python-ldap)"
+    argument: 1
+
+  - name: "search_st"
+    kind: LdapQuery
+    description: "LDAP search with timeout (python-ldap)"
+    argument: 1
+
+  - name: "search_ext"
+    kind: LdapQuery
+    description: "LDAP extended search (python-ldap)"
+    argument: 1
+
+  - name: "search_ext_s"
+    kind: LdapQuery
+    description: "LDAP extended synchronous search (python-ldap)"
+    argument: 1
 
 sanitizers:
   # HTML sanitization
