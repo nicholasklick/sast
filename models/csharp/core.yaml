@@ -1,0 +1,523 @@
+# C# / .NET Core Taint Configuration
+# Base sources, sinks, and sanitizers for ASP.NET Core applications
+
+sources:
+  # ASP.NET Core - HttpContext.Request
+  - name: "Form"
+    kind: UserInput
+    package: "Microsoft.AspNetCore.Http.HttpRequest"
+    description: "HTTP form data"
+
+  - name: "Query"
+    kind: UserInput
+    package: "Microsoft.AspNetCore.Http.HttpRequest"
+    description: "HTTP query string parameters"
+
+  - name: "Cookies"
+    kind: UserInput
+    package: "Microsoft.AspNetCore.Http.HttpRequest"
+    description: "HTTP cookies"
+
+  - name: "Headers"
+    kind: UserInput
+    package: "Microsoft.AspNetCore.Http.HttpRequest"
+    description: "HTTP request headers"
+
+  - name: "Path"
+    kind: UserInput
+    package: "Microsoft.AspNetCore.Http.HttpRequest"
+    description: "HTTP request path"
+
+  - name: "QueryString"
+    kind: UserInput
+    package: "Microsoft.AspNetCore.Http.HttpRequest"
+    description: "HTTP raw query string"
+
+  - name: "Body"
+    kind: UserInput
+    package: "Microsoft.AspNetCore.Http.HttpRequest"
+    description: "HTTP request body stream"
+
+  - name: "ContentType"
+    kind: UserInput
+    package: "Microsoft.AspNetCore.Http.HttpRequest"
+    description: "HTTP content type header"
+
+  - name: "RouteValues"
+    kind: UserInput
+    package: "Microsoft.AspNetCore.Http.HttpRequest"
+    description: "Route parameter values"
+
+  # ASP.NET Core - IFormFile (file uploads)
+  - name: "FileName"
+    kind: UserInput
+    package: "Microsoft.AspNetCore.Http.IFormFile"
+    description: "Uploaded file name"
+
+  - name: "ContentType"
+    kind: UserInput
+    package: "Microsoft.AspNetCore.Http.IFormFile"
+    description: "Uploaded file content type"
+
+  - name: "OpenReadStream"
+    kind: UserInput
+    package: "Microsoft.AspNetCore.Http.IFormFile"
+    description: "Uploaded file stream"
+
+  # Legacy ASP.NET WebForms
+  - name: "Request"
+    kind: UserInput
+    package: "System.Web.HttpContext"
+    description: "HTTP request object"
+
+  - name: "QueryString"
+    kind: UserInput
+    package: "System.Web.HttpRequest"
+    description: "Query string collection"
+
+  - name: "Form"
+    kind: UserInput
+    package: "System.Web.HttpRequest"
+    description: "Form data collection"
+
+  - name: "Cookies"
+    kind: UserInput
+    package: "System.Web.HttpRequest"
+    description: "Cookie collection"
+
+  - name: "Headers"
+    kind: UserInput
+    package: "System.Web.HttpRequest"
+    description: "Header collection"
+
+  - name: "Params"
+    kind: UserInput
+    package: "System.Web.HttpRequest"
+    description: "Combined params collection"
+
+  # Environment
+  - name: "GetEnvironmentVariable"
+    kind: Environment
+    package: "System.Environment"
+    description: "Environment variable"
+
+  # File I/O
+  - name: "ReadLine"
+    kind: File
+    package: "System.IO.StreamReader"
+    description: "Read line from file/stream"
+
+  - name: "ReadToEnd"
+    kind: File
+    package: "System.IO.StreamReader"
+    description: "Read entire stream"
+
+  - name: "ReadAllText"
+    kind: File
+    package: "System.IO.File"
+    description: "Read all text from file"
+
+  - name: "ReadAllLines"
+    kind: File
+    package: "System.IO.File"
+    description: "Read all lines from file"
+
+  - name: "ReadAllBytes"
+    kind: File
+    package: "System.IO.File"
+    description: "Read all bytes from file"
+
+sinks:
+  # SQL Injection - System.Data.SqlClient
+  - name: "SqlCommand"
+    kind: SqlQuery
+    package: "System.Data.SqlClient"
+    description: "SQL command constructor with query"
+    argument: 0
+
+  - name: "ExecuteReader"
+    kind: SqlQuery
+    package: "System.Data.SqlClient.SqlCommand"
+    description: "Execute SQL query"
+
+  - name: "ExecuteNonQuery"
+    kind: SqlQuery
+    package: "System.Data.SqlClient.SqlCommand"
+    description: "Execute SQL command"
+
+  - name: "ExecuteScalar"
+    kind: SqlQuery
+    package: "System.Data.SqlClient.SqlCommand"
+    description: "Execute SQL scalar query"
+
+  # SQL Injection - Microsoft.Data.SqlClient
+  - name: "SqlCommand"
+    kind: SqlQuery
+    package: "Microsoft.Data.SqlClient"
+    description: "SQL command constructor"
+    argument: 0
+
+  # SQL Injection - Entity Framework
+  - name: "FromSqlRaw"
+    kind: SqlQuery
+    package: "Microsoft.EntityFrameworkCore.RelationalQueryableExtensions"
+    description: "Raw SQL query in EF Core"
+    argument: 0
+
+  - name: "ExecuteSqlRaw"
+    kind: SqlQuery
+    package: "Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions"
+    description: "Execute raw SQL in EF Core"
+    argument: 0
+
+  # Command Injection
+  - name: "Start"
+    kind: CommandExecution
+    package: "System.Diagnostics.Process"
+    description: "Start external process"
+
+  - name: "ProcessStartInfo"
+    kind: CommandExecution
+    package: "System.Diagnostics"
+    description: "Process start info constructor"
+    argument: 0
+
+  - name: "FileName"
+    kind: CommandExecution
+    package: "System.Diagnostics.ProcessStartInfo"
+    description: "Process filename property"
+
+  - name: "Arguments"
+    kind: CommandExecution
+    package: "System.Diagnostics.ProcessStartInfo"
+    description: "Process arguments property"
+
+  # Path Traversal
+  - name: "ReadAllText"
+    kind: PathTraversal
+    package: "System.IO.File"
+    description: "Read file contents"
+    argument: 0
+
+  - name: "ReadAllLines"
+    kind: PathTraversal
+    package: "System.IO.File"
+    description: "Read file lines"
+    argument: 0
+
+  - name: "ReadAllBytes"
+    kind: PathTraversal
+    package: "System.IO.File"
+    description: "Read file bytes"
+    argument: 0
+
+  - name: "WriteAllText"
+    kind: PathTraversal
+    package: "System.IO.File"
+    description: "Write file contents"
+    argument: 0
+
+  - name: "WriteAllBytes"
+    kind: PathTraversal
+    package: "System.IO.File"
+    description: "Write file bytes"
+    argument: 0
+
+  - name: "OpenRead"
+    kind: PathTraversal
+    package: "System.IO.File"
+    description: "Open file for reading"
+    argument: 0
+
+  - name: "OpenWrite"
+    kind: PathTraversal
+    package: "System.IO.File"
+    description: "Open file for writing"
+    argument: 0
+
+  - name: "FileStream"
+    kind: PathTraversal
+    package: "System.IO"
+    description: "File stream constructor"
+    argument: 0
+
+  - name: "StreamReader"
+    kind: PathTraversal
+    package: "System.IO"
+    description: "Stream reader with file path"
+    argument: 0
+
+  - name: "StreamWriter"
+    kind: PathTraversal
+    package: "System.IO"
+    description: "Stream writer with file path"
+    argument: 0
+
+  # XSS / HTML Output
+  - name: "WriteAsync"
+    kind: HtmlOutput
+    package: "Microsoft.AspNetCore.Http.HttpResponse"
+    description: "Write to HTTP response"
+    argument: 0
+
+  - name: "Write"
+    kind: HtmlOutput
+    package: "System.Web.HttpResponse"
+    description: "Write to HTTP response"
+    argument: 0
+
+  - name: "HtmlString"
+    kind: HtmlOutput
+    package: "Microsoft.AspNetCore.Html"
+    description: "Raw HTML string (no encoding)"
+    argument: 0
+
+  # LDAP Injection
+  - name: "Filter"
+    kind: LdapQuery
+    package: "System.DirectoryServices.DirectorySearcher"
+    description: "LDAP filter property"
+
+  - name: "FindAll"
+    kind: LdapQuery
+    package: "System.DirectoryServices.DirectorySearcher"
+    description: "LDAP search execution"
+
+  - name: "FindOne"
+    kind: LdapQuery
+    package: "System.DirectoryServices.DirectorySearcher"
+    description: "LDAP single result search"
+
+  # XPath Injection
+  - name: "SelectNodes"
+    kind: XPathQuery
+    package: "System.Xml.XmlDocument"
+    description: "XPath node selection"
+    argument: 0
+
+  - name: "SelectSingleNode"
+    kind: XPathQuery
+    package: "System.Xml.XmlDocument"
+    description: "XPath single node selection"
+    argument: 0
+
+  - name: "Evaluate"
+    kind: XPathQuery
+    package: "System.Xml.XPath.XPathNavigator"
+    description: "XPath evaluation"
+    argument: 0
+
+  # XXE / XML Parsing
+  - name: "Create"
+    kind: XmlParse
+    package: "System.Xml.XmlReader"
+    description: "Create XML reader"
+    argument: 0
+
+  - name: "LoadXml"
+    kind: XmlParse
+    package: "System.Xml.XmlDocument"
+    description: "Load XML from string"
+    argument: 0
+
+  - name: "Load"
+    kind: XmlParse
+    package: "System.Xml.XmlDocument"
+    description: "Load XML from stream/path"
+    argument: 0
+
+  # Deserialization
+  - name: "Deserialize"
+    kind: Deserialization
+    package: "System.Runtime.Serialization.Formatters.Binary.BinaryFormatter"
+    description: "Binary deserialization (dangerous)"
+
+  - name: "Deserialize"
+    kind: Deserialization
+    package: "System.Xml.Serialization.XmlSerializer"
+    description: "XML deserialization"
+
+  - name: "ReadObject"
+    kind: Deserialization
+    package: "System.Runtime.Serialization.DataContractSerializer"
+    description: "DataContract deserialization"
+
+  - name: "DeserializeObject"
+    kind: Deserialization
+    package: "Newtonsoft.Json.JsonConvert"
+    description: "JSON deserialization with type"
+
+  # Code Injection
+  - name: "EvaluateAsync"
+    kind: CodeEval
+    package: "Microsoft.CodeAnalysis.CSharp.Scripting.CSharpScript"
+    description: "C# script evaluation"
+    argument: 0
+
+  - name: "RunAsync"
+    kind: CodeEval
+    package: "Microsoft.CodeAnalysis.CSharp.Scripting.CSharpScript"
+    description: "C# script execution"
+    argument: 0
+
+  # Trust Boundary - Session
+  - name: "SetString"
+    kind: TrustBoundary
+    package: "Microsoft.AspNetCore.Http.ISession"
+    description: "Set session string value"
+    argument: 1
+
+  - name: "Set"
+    kind: TrustBoundary
+    package: "Microsoft.AspNetCore.Http.ISession"
+    description: "Set session bytes"
+    argument: 1
+
+  - name: "SetInt32"
+    kind: TrustBoundary
+    package: "Microsoft.AspNetCore.Http.SessionExtensions"
+    description: "Set session int value"
+    argument: 1
+
+  # Open Redirect
+  - name: "Redirect"
+    kind: Redirect
+    package: "Microsoft.AspNetCore.Http.HttpResponse"
+    description: "HTTP redirect"
+    argument: 0
+
+  - name: "RedirectPermanent"
+    kind: Redirect
+    package: "Microsoft.AspNetCore.Http.HttpResponse"
+    description: "Permanent HTTP redirect"
+    argument: 0
+
+  - name: "Redirect"
+    kind: Redirect
+    package: "System.Web.HttpResponse"
+    description: "HTTP redirect (legacy)"
+    argument: 0
+
+sanitizers:
+  # HTML Encoding
+  - name: "HtmlEncode"
+    sanitizes: [Html]
+    package: "System.Web.HttpUtility"
+    description: "HTML encode"
+
+  - name: "HtmlEncode"
+    sanitizes: [Html]
+    package: "System.Net.WebUtility"
+    description: "HTML encode"
+
+  - name: "Encode"
+    sanitizes: [Html]
+    package: "System.Text.Encodings.Web.HtmlEncoder"
+    description: "HTML encode"
+
+  # URL Encoding
+  - name: "UrlEncode"
+    sanitizes: [All]
+    package: "System.Web.HttpUtility"
+    description: "URL encode"
+
+  - name: "UrlEncode"
+    sanitizes: [All]
+    package: "System.Net.WebUtility"
+    description: "URL encode"
+
+  # Path Sanitization
+  - name: "GetFullPath"
+    sanitizes: [Path]
+    package: "System.IO.Path"
+    description: "Get canonical full path"
+
+  # General Validation
+  - name: "Parse"
+    sanitizes: [All]
+    package: "System.Int32"
+    description: "Parse to integer"
+
+  - name: "Parse"
+    sanitizes: [All]
+    package: "System.Int64"
+    description: "Parse to long"
+
+  - name: "TryParse"
+    sanitizes: [All]
+    package: "System.Int32"
+    description: "Try parse to integer"
+
+  - name: "TryParse"
+    sanitizes: [All]
+    package: "System.Int64"
+    description: "Try parse to long"
+
+summaries:
+  # String operations that propagate taint
+  - name: "Concat"
+    package: "System.String"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "Append"
+    package: "System.Text.StringBuilder"
+    input: "Argument[0]"
+    output: "Argument[this]"
+    kind: taint
+
+  - name: "ToString"
+    package: "System.Text.StringBuilder"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: value
+
+  - name: "Substring"
+    package: "System.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "ToLower"
+    package: "System.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "ToUpper"
+    package: "System.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "Trim"
+    package: "System.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "Replace"
+    package: "System.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "Split"
+    package: "System.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  # Collections
+  - name: "Get"
+    package: "System.Collections.Generic.List"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "Get"
+    package: "System.Collections.Generic.Dictionary"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint

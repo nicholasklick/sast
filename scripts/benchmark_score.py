@@ -252,6 +252,13 @@ BENCHMARKS = {
         file_extension=".php",
         category_mapping=PYTHON_CATEGORIES,
     ),
+    "csharp": BenchmarkConfig(
+        language="csharp",
+        source_path="../owasp/BenchmarkCSharp/testcode",
+        expected_results="../owasp/BenchmarkCSharp/expectedresults-0.1.csv",
+        file_extension=".cs",
+        category_mapping=PYTHON_CATEGORIES,
+    ),
 }
 
 
@@ -643,7 +650,7 @@ def save_baseline(results: dict, baseline_file: str):
 def main():
     parser = argparse.ArgumentParser(description="OWASP Benchmark Scoring")
     parser.add_argument("--language", "-l",
-                       choices=["java", "python", "javascript", "typescript", "golang", "rust", "ruby", "php", "all"],
+                       choices=["java", "python", "javascript", "typescript", "golang", "rust", "ruby", "php", "csharp", "all"],
                        default="all", help="Language benchmark to run")
     parser.add_argument("--results", "-r", help="Pre-existing results JSON file")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed output")
