@@ -132,6 +132,8 @@ RULE_TO_CATEGORY = {
     # Insecure Cookie
     "js/insecure-session-cookie": "securecookie",
     "java/insecure-cookie": "securecookie",
+    "taint/securecookie": "securecookie",
+    "taint/insecure-cookie": "securecookie",
 
     # Weak Random
     "js/insecure-random": "weakrand",
@@ -162,6 +164,8 @@ RULE_TO_CATEGORY = {
 
     # Open Redirect
     "js/open-redirect": "redirect",
+    "taint/redirect": "redirect",
+    "ruby/open-redirect": "redirect",
 
     # XXE
     "js/xxe": "xxe",
@@ -180,6 +184,7 @@ CWE_TO_CATEGORY = {
     328: "hash",
     330: "weakrand",
     501: "trustbound",
+    601: "redirect",
     614: "securecookie",
     643: "xpathi",
     611: "xxe",
@@ -455,8 +460,10 @@ def calculate_metrics(
                 fn += 1
                 fn_tests.append(test_name)
         else:
-            # For false positive tests, ANY flag is a false positive
-            if flagged_at_all:
+            # For non-vulnerable tests, only count as FP if there's a same-category finding
+            # This is the correct per-category scoring - a weakrand FP is a weakrand finding
+            # in a safe weakrand file, NOT an XSS finding in a safe weakrand file
+            if correctly_flagged:
                 fp += 1
                 fp_tests.append(test_name)
             else:

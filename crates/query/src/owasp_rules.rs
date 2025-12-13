@@ -2081,8 +2081,42 @@ impl OwaspRuleLibrary {
         }
 
         // Java insecure RNG (4 rules)
-        let java_rng_methods = vec!["Random.nextInt", "Random.nextDouble", "Random.nextLong", "Math.random"];
-        for (idx, method) in java_rng_methods.iter().enumerate() {
+        // Note: Must exclude SecureRandom which is safe
+        let java_rng_methods = vec![
+            ("Random.nextInt", true),   // exclude SecureRandom
+            ("Random.nextDouble", true),
+            ("Random.nextLong", true),
+            ("Math.random", false),     // no SecureRandom exclusion needed
+        ];
+        for (idx, (method, exclude_secure)) in java_rng_methods.iter().enumerate() {
+            let method_predicate = Predicate::Comparison {
+                left: Expression::PropertyAccess {
+                    object: Box::new(Expression::Variable("call".to_string())),
+                    property: "method".to_string(),
+                },
+                operator: ComparisonOp::Equal,
+                right: Expression::String(method.to_string()),
+            };
+
+            // Build the final predicate - add SecureRandom exclusion for Random.* methods
+            let final_predicate = if *exclude_secure {
+                Predicate::And {
+                    left: Box::new(method_predicate),
+                    right: Box::new(Predicate::Not {
+                        predicate: Box::new(Predicate::Comparison {
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Contains,
+                            right: Expression::String("SecureRandom".to_string()),
+                        }),
+                    }),
+                }
+            } else {
+                method_predicate
+            };
+
             rules.push((
                 RuleMetadata {
                     id: format!("A02-RNG-JAVA-{:03}", idx + 1),
@@ -2096,14 +2130,7 @@ impl OwaspRuleLibrary {
                 },
                 Query::new(
                     FromClause::new(EntityType::MethodCall, "call".to_string()),
-                    Some(WhereClause::new(vec![Predicate::Comparison {
-                        left: Expression::PropertyAccess {
-                            object: Box::new(Expression::Variable("call".to_string())),
-                            property: "method".to_string(),
-                        },
-                        operator: ComparisonOp::Equal,
-                        right: Expression::String(method.to_string()),
-                    }])),
+                    Some(WhereClause::new(vec![final_predicate])),
                     SelectClause::new(vec![SelectItem::Both {
                         variable: "call".to_string(),
                         message: format!("Insecure RNG: use SecureRandom instead of {}", method),

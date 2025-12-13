@@ -155,6 +155,75 @@ sinks:
     description: "Permanent redirect"
     argument: 0
 
+  - name: "insert_header"
+    kind: Redirect
+    description: "HTTP header injection (Location redirect)"
+    argument: 0
+
+  # SQL Injection
+  - name: "execute_raw"
+    kind: SqlQuery
+    description: "Raw SQL execution"
+    argument: 0
+
+  - name: "db::execute_raw"
+    kind: SqlQuery
+    description: "Database raw SQL execution"
+    argument: 0
+
+  - name: "helpers::db::execute_raw"
+    kind: SqlQuery
+    description: "Helper database raw SQL"
+    argument: 0
+
+  - name: "query_raw"
+    kind: SqlQuery
+    description: "Raw SQL query"
+    argument: 0
+
+  - name: "execute"
+    kind: SqlQuery
+    description: "SQL execution"
+    argument: 0
+
+  # XSS (HTML output)
+  - name: "body"
+    kind: Xss
+    description: "HTTP response body"
+    argument: 0
+
+  - name: "HttpResponse::Ok"
+    kind: Xss
+    description: "HTTP OK response"
+    argument: 0
+
+  # Trust Boundary
+  - name: "session.insert"
+    kind: TrustBoundary
+    description: "Session data insertion"
+    argument: 1
+
+  - name: "Session::insert"
+    kind: TrustBoundary
+    description: "Session data insertion"
+    argument: 1
+
+  - name: "insert"
+    kind: TrustBoundary
+    description: "Session insert"
+    argument: 1
+
+  # Secure Cookie
+  - name: "Cookie::build"
+    kind: SecureCookie
+    description: "Cookie construction"
+    argument: 1
+
+  - name: "cookie"
+    kind: SecureCookie
+    description: "Set cookie"
+    argument: 0
+
 sanitizers:
   # Type conversion sanitizes numeric injections
   - name: "parse"

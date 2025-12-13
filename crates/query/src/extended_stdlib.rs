@@ -1243,7 +1243,7 @@ impl ExtendedStandardLibrary {
                 .build()
         );
 
-        // Open Redirect
+        // Open Redirect (JS/TS only - other languages use YAML taint config)
         self.register(
             "js/open-redirect",
             Self::open_redirect_query(),
@@ -1255,6 +1255,7 @@ impl ExtendedStandardLibrary {
                 .cwes(vec![601])
                 .owasp("A01:2021 - Broken Access Control")
                 .uses_taint()
+                .languages(vec!["javascript".to_string(), "typescript".to_string()])
                 .build()
         );
 
