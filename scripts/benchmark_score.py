@@ -132,6 +132,9 @@ RULE_TO_CATEGORY = {
     # Insecure Cookie
     "js/insecure-session-cookie": "securecookie",
     "java/insecure-cookie": "securecookie",
+    "go/insecure-cookie": "securecookie",
+    "rust/insecure-cookie": "securecookie",
+    "ruby/insecure-cookie": "securecookie",
     "taint/securecookie": "securecookie",
     "taint/insecure-cookie": "securecookie",
 

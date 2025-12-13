@@ -424,6 +424,28 @@ sinks:
     description: "LDAP extended synchronous search (python-ldap)"
     argument: 1
 
+  # Open Redirect
+  - name: "flask.redirect"
+    kind: Redirect
+    package: "flask"
+    description: "Flask redirect"
+    argument: 0
+
+  - name: "redirect"
+    kind: Redirect
+    description: "Flask redirect (imported)"
+    argument: 0
+
+  - name: "HttpResponseRedirect"
+    kind: Redirect
+    description: "Django HTTP redirect response"
+    argument: 0
+
+  - name: "django.shortcuts.redirect"
+    kind: Redirect
+    description: "Django redirect shortcut"
+    argument: 0
+
 sanitizers:
   # HTML sanitization
   - name: "escape"

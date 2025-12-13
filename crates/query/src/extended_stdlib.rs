@@ -812,6 +812,54 @@ impl ExtendedStandardLibrary {
                 .build()
         );
 
+        // Go Insecure Cookie - Detects SetCookie with secure=false
+        self.register(
+            "go/insecure-cookie",
+            Self::go_insecure_cookie_query(),
+            QueryMetadata::builder("go/insecure-cookie", "Insecure Cookie")
+                .description("Detects cookies with secure flag set to false")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::High)
+                .cwes(vec![614])
+                .owasp("A05:2021 - Security Misconfiguration")
+                .suites(vec![QuerySuite::Default, QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["go".to_string()])
+                .build()
+        );
+
+        // Rust Insecure Cookie - Detects Cookie::build without .secure(true)
+        self.register(
+            "rust/insecure-cookie",
+            Self::rust_insecure_cookie_query(),
+            QueryMetadata::builder("rust/insecure-cookie", "Insecure Cookie")
+                .description("Detects cookies without secure flag")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::High)
+                .cwes(vec![614])
+                .owasp("A05:2021 - Security Misconfiguration")
+                .suites(vec![QuerySuite::Default, QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["rust".to_string()])
+                .build()
+        );
+
+        // Ruby Insecure Cookie - Detects set_cookie without secure: true
+        self.register(
+            "ruby/insecure-cookie",
+            Self::ruby_insecure_cookie_query(),
+            QueryMetadata::builder("ruby/insecure-cookie", "Insecure Cookie")
+                .description("Detects cookies without secure flag")
+                .category(QueryCategory::Authentication)
+                .severity(QuerySeverity::Medium)
+                .precision(QueryPrecision::High)
+                .cwes(vec![614])
+                .owasp("A05:2021 - Security Misconfiguration")
+                .suites(vec![QuerySuite::Default, QuerySuite::SecurityExtended, QuerySuite::SecurityAndQuality])
+                .languages(vec!["ruby".to_string()])
+                .build()
+        );
+
         // Missing Salt - JS/TS only
         self.register(
             "js/missing-salt",
@@ -2587,6 +2635,116 @@ impl ExtendedStandardLibrary {
             SelectClause::new(vec![SelectItem::Both {
                 variable: "call".to_string(),
                 message: "Cookie without secure flag - use setSecure(true)".to_string(),
+            }]),
+        )
+    }
+
+    /// Go insecure cookie detection (Gin framework)
+    /// Detects c.SetCookie(..., false, false) where secure=false
+    /// Pattern: SetCookie(name, value, maxAge, path, domain, secure, httpOnly)
+    fn go_insecure_cookie_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::And {
+                    left: Box::new(Predicate::Comparison {
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("call".to_string())),
+                            property: "callee".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        right: Expression::String(r"\.SetCookie$".to_string()),
+                    }),
+                    right: Box::new(Predicate::Comparison {
+                        // Match SetCookie with false for secure flag (6th parameter)
+                        // Pattern: SetCookie("name", value, 3600, "/", "", false, ...
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("call".to_string())),
+                            property: "text".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        right: Expression::String(r"SetCookie\s*\([^)]*,\s*[^,]*,\s*[^,]*,\s*[^,]*,\s*[^,]*,\s*false".to_string()),
+                    }),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Cookie with secure=false - use true for the secure parameter".to_string(),
+            }]),
+        )
+    }
+
+    /// Rust insecure cookie detection (Actix-web)
+    /// Detects Cookie::build without .secure(true)
+    /// Vulnerable: .cookie(Cookie::build("name", val).path("/").finish())
+    /// Safe: .cookie(Cookie::build("name", val).secure(true).http_only(true).finish())
+    fn rust_insecure_cookie_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::And {
+                    left: Box::new(Predicate::Comparison {
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("call".to_string())),
+                            property: "text".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        // Match Cookie::build that ends with .finish()
+                        right: Expression::String(r"Cookie::build\s*\([^)]+\)[^;]*\.finish\s*\(\s*\)".to_string()),
+                    }),
+                    right: Box::new(Predicate::Not {
+                        predicate: Box::new(Predicate::Comparison {
+                            // Does NOT have .secure(true) in the chain
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            right: Expression::String(r"\.secure\s*\(\s*true\s*\)".to_string()),
+                        }),
+                    }),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Cookie without secure flag - add .secure(true).http_only(true)".to_string(),
+            }]),
+        )
+    }
+
+    /// Ruby insecure cookie detection (Sinatra/Rails)
+    /// Detects set_cookie without secure: true
+    /// Vulnerable: response.set_cookie('name', value: val, path: '/')
+    /// Safe: response.set_cookie('name', value: val, secure: true, httponly: true)
+    fn ruby_insecure_cookie_query() -> Query {
+        Query::new(
+            FromClause::new(EntityType::CallExpression, "call".to_string()),
+            Some(WhereClause::new(vec![
+                Predicate::And {
+                    left: Box::new(Predicate::Comparison {
+                        left: Expression::PropertyAccess {
+                            object: Box::new(Expression::Variable("call".to_string())),
+                            property: "callee".to_string(),
+                        },
+                        operator: ComparisonOp::Matches,
+                        right: Expression::String(r"\.set_cookie$|^set_cookie$".to_string()),
+                    }),
+                    right: Box::new(Predicate::Not {
+                        predicate: Box::new(Predicate::Comparison {
+                            // Does NOT have secure: true in the options
+                            left: Expression::PropertyAccess {
+                                object: Box::new(Expression::Variable("call".to_string())),
+                                property: "text".to_string(),
+                            },
+                            operator: ComparisonOp::Matches,
+                            right: Expression::String(r"secure:\s*true".to_string()),
+                        }),
+                    }),
+                },
+            ])),
+            SelectClause::new(vec![SelectItem::Both {
+                variable: "call".to_string(),
+                message: "Cookie without secure flag - add secure: true, httponly: true".to_string(),
             }]),
         )
     }

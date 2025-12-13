@@ -383,6 +383,33 @@ sinks:
     description: "VM run in context - code execution"
     argument: 0
 
+  # LDAP Injection
+  - name: "ldapMock.search"
+    kind: LdapQuery
+    description: "LDAP search with filter"
+    argument: 1
+
+  - name: "ldap.search"
+    kind: LdapQuery
+    description: "LDAP search with filter"
+    argument: 1
+
+  - name: "client.search"
+    kind: LdapQuery
+    description: "LDAP client search"
+    argument: 1
+
+  # Open Redirect
+  - name: "res.redirect"
+    kind: Redirect
+    description: "Express redirect"
+    argument: 0
+
+  - name: "response.redirect"
+    kind: Redirect
+    description: "HTTP response redirect"
+    argument: 0
+
 sanitizers:
   # HTML sanitization
   - name: "escape"
