@@ -1,0 +1,474 @@
+# Scala / JVM Taint Configuration
+# Base sources, sinks, and sanitizers for Scala applications (Play Framework, Akka HTTP + Java APIs)
+
+sources:
+  # Play Framework - Request
+  - name: "body"
+    kind: UserInput
+    package: "play.api.mvc.Request"
+    description: "HTTP request body"
+
+  - name: "queryString"
+    kind: UserInput
+    package: "play.api.mvc.Request"
+    description: "HTTP query string"
+
+  - name: "getQueryString"
+    kind: UserInput
+    package: "play.api.mvc.Request"
+    description: "HTTP query string parameter"
+
+  - name: "headers"
+    kind: UserInput
+    package: "play.api.mvc.Request"
+    description: "HTTP headers"
+
+  - name: "cookies"
+    kind: UserInput
+    package: "play.api.mvc.Request"
+    description: "HTTP cookies"
+
+  - name: "path"
+    kind: UserInput
+    package: "play.api.mvc.Request"
+    description: "HTTP request path"
+
+  - name: "session"
+    kind: UserInput
+    package: "play.api.mvc.Request"
+    description: "Session data"
+
+  # Akka HTTP
+  - name: "entity"
+    kind: UserInput
+    package: "akka.http.scaladsl.model.HttpRequest"
+    description: "HTTP request entity"
+
+  - name: "uri"
+    kind: UserInput
+    package: "akka.http.scaladsl.model.HttpRequest"
+    description: "HTTP request URI"
+
+  - name: "headers"
+    kind: UserInput
+    package: "akka.http.scaladsl.model.HttpRequest"
+    description: "HTTP request headers"
+
+  # Java Servlet API (Scala can use Java directly)
+  - name: "getParameter"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request parameter"
+
+  - name: "getHeader"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request header"
+
+  - name: "getCookies"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP cookies"
+
+  - name: "getQueryString"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP query string"
+
+  - name: "getPathInfo"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP path info"
+
+  - name: "getInputStream"
+    kind: UserInput
+    package: "javax.servlet.http.HttpServletRequest"
+    description: "HTTP request body stream"
+
+  # Environment
+  - name: "getenv"
+    kind: Environment
+    package: "java.lang.System"
+    description: "Environment variable"
+
+  - name: "getProperty"
+    kind: Environment
+    package: "java.lang.System"
+    description: "System property"
+
+  # Scala specific environment
+  - name: "env"
+    kind: Environment
+    package: "sys"
+    description: "Scala sys.env"
+
+  # File I/O
+  - name: "getLines"
+    kind: File
+    package: "scala.io.Source"
+    description: "Read lines from source"
+
+  - name: "mkString"
+    kind: File
+    package: "scala.io.Source"
+    description: "Read source as string"
+
+  - name: "readLine"
+    kind: File
+    package: "java.io.BufferedReader"
+    description: "Read line from file/stream"
+
+sinks:
+  # SQL Injection - JDBC
+  - name: "executeQuery"
+    kind: SqlQuery
+    package: "java.sql.Statement"
+    description: "SQL query execution"
+    argument: 0
+
+  - name: "executeUpdate"
+    kind: SqlQuery
+    package: "java.sql.Statement"
+    description: "SQL update execution"
+    argument: 0
+
+  - name: "execute"
+    kind: SqlQuery
+    package: "java.sql.Statement"
+    description: "SQL execution"
+    argument: 0
+
+  - name: "prepareStatement"
+    kind: SqlQuery
+    package: "java.sql.Connection"
+    description: "Prepared statement creation"
+    argument: 0
+
+  # Slick (popular Scala SQL library)
+  - name: "sql"
+    kind: SqlQuery
+    package: "slick.jdbc.SQLInterpolation"
+    description: "Slick raw SQL interpolation"
+    argument: 0
+
+  # Doobie
+  - name: "sql"
+    kind: SqlQuery
+    package: "doobie.util.fragment"
+    description: "Doobie SQL fragment"
+    argument: 0
+
+  # Command Injection
+  - name: "exec"
+    kind: CommandExecution
+    package: "java.lang.Runtime"
+    description: "OS command execution"
+    argument: 0
+
+  - name: "start"
+    kind: CommandExecution
+    package: "java.lang.ProcessBuilder"
+    description: "Process start"
+
+  # Scala Process
+  - name: "!"
+    kind: CommandExecution
+    package: "scala.sys.process.ProcessBuilder"
+    description: "Scala process execution"
+
+  - name: "!!"
+    kind: CommandExecution
+    package: "scala.sys.process.ProcessBuilder"
+    description: "Scala process output execution"
+
+  - name: "run"
+    kind: CommandExecution
+    package: "scala.sys.process.ProcessBuilder"
+    description: "Scala process run"
+
+  # Path Traversal
+  - name: "FileInputStream"
+    kind: PathTraversal
+    package: "java.io"
+    description: "File input stream constructor"
+    argument: 0
+
+  - name: "FileOutputStream"
+    kind: PathTraversal
+    package: "java.io"
+    description: "File output stream constructor"
+    argument: 0
+
+  - name: "FileReader"
+    kind: PathTraversal
+    package: "java.io"
+    description: "File reader constructor"
+    argument: 0
+
+  - name: "FileWriter"
+    kind: PathTraversal
+    package: "java.io"
+    description: "File writer constructor"
+    argument: 0
+
+  - name: "fromFile"
+    kind: PathTraversal
+    package: "scala.io.Source"
+    description: "Scala Source.fromFile"
+    argument: 0
+
+  # XSS / HTML Output - Play
+  - name: "Ok"
+    kind: HtmlOutput
+    package: "play.api.mvc.Results"
+    description: "Play OK response"
+    argument: 0
+
+  - name: "Html"
+    kind: HtmlOutput
+    package: "play.twirl.api"
+    description: "Play raw HTML"
+    argument: 0
+
+  # Akka HTTP response
+  - name: "complete"
+    kind: HtmlOutput
+    package: "akka.http.scaladsl.server.Directives"
+    description: "Akka HTTP complete"
+    argument: 0
+
+  # LDAP Injection
+  - name: "search"
+    kind: LdapQuery
+    package: "javax.naming.directory.DirContext"
+    description: "LDAP search"
+    argument: 1
+
+  - name: "lookup"
+    kind: LdapQuery
+    package: "javax.naming.Context"
+    description: "JNDI/LDAP lookup"
+    argument: 0
+
+  # XPath Injection
+  - name: "evaluate"
+    kind: XPathQuery
+    package: "javax.xml.xpath.XPath"
+    description: "XPath evaluation"
+    argument: 0
+
+  - name: "\\"
+    kind: XPathQuery
+    package: "scala.xml.Node"
+    description: "Scala XML path expression"
+    argument: 0
+
+  # XXE / XML Parsing
+  - name: "parse"
+    kind: XmlParse
+    package: "javax.xml.parsers.DocumentBuilder"
+    description: "XML document parsing"
+    argument: 0
+
+  - name: "loadString"
+    kind: XmlParse
+    package: "scala.xml.XML"
+    description: "Scala XML loadString"
+    argument: 0
+
+  # Deserialization
+  - name: "readObject"
+    kind: Deserialization
+    package: "java.io.ObjectInputStream"
+    description: "Object deserialization"
+
+  # Code Injection
+  - name: "eval"
+    kind: CodeEval
+    package: "javax.script.ScriptEngine"
+    description: "Script evaluation"
+    argument: 0
+
+  # Trust Boundary
+  - name: "setAttribute"
+    kind: TrustBoundary
+    package: "javax.servlet.http.HttpSession"
+    description: "Session attribute setting"
+    argument: 1
+
+  # Play Session
+  - name: "withSession"
+    kind: TrustBoundary
+    package: "play.api.mvc.Result"
+    description: "Play session setting"
+
+  # Open Redirect - Play
+  - name: "Redirect"
+    kind: Redirect
+    package: "play.api.mvc.Results"
+    description: "Play redirect"
+    argument: 0
+
+  # Akka HTTP redirect
+  - name: "redirect"
+    kind: Redirect
+    package: "akka.http.scaladsl.server.Directives"
+    description: "Akka HTTP redirect"
+    argument: 0
+
+sanitizers:
+  # HTML Encoding
+  - name: "escapeHtml"
+    sanitizes: [Html]
+    package: "org.apache.commons.text.StringEscapeUtils"
+    description: "HTML escape"
+
+  - name: "HtmlFormat.escape"
+    sanitizes: [Html]
+    package: "play.twirl.api"
+    description: "Play HTML escape"
+
+  # URL Encoding
+  - name: "encode"
+    sanitizes: [All]
+    package: "java.net.URLEncoder"
+    description: "URL encode"
+
+  # General Validation - Scala
+  - name: "toInt"
+    sanitizes: [All]
+    package: "scala.StringOps"
+    description: "Scala string to int"
+
+  - name: "toLong"
+    sanitizes: [All]
+    package: "scala.StringOps"
+    description: "Scala string to long"
+
+  - name: "toIntOption"
+    sanitizes: [All]
+    package: "scala.StringOps"
+    description: "Scala safe string to int"
+
+  - name: "parseInt"
+    sanitizes: [All]
+    package: "java.lang.Integer"
+    description: "Parse to integer"
+
+  # Path Sanitization
+  - name: "getCanonicalPath"
+    sanitizes: [Path]
+    package: "java.io.File"
+    description: "Canonicalize path"
+
+  - name: "normalize"
+    sanitizes: [Path]
+    package: "java.nio.file.Path"
+    description: "Normalize path"
+
+summaries:
+  # Scala String operations
+  - name: "+"
+    package: "scala.Predef.String"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "concat"
+    package: "java.lang.String"
+    input: "Argument[0]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "substring"
+    package: "java.lang.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "toLowerCase"
+    package: "java.lang.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "toUpperCase"
+    package: "java.lang.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "trim"
+    package: "java.lang.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "replace"
+    package: "java.lang.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "split"
+    package: "java.lang.String"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  # StringBuilder
+  - name: "append"
+    package: "java.lang.StringBuilder"
+    input: "Argument[0]"
+    output: "Argument[this]"
+    kind: taint
+
+  - name: "toString"
+    package: "java.lang.StringBuilder"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: value
+
+  # Scala Collections
+  - name: "apply"
+    package: "scala.collection.immutable.List"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "apply"
+    package: "scala.collection.immutable.Map"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "get"
+    package: "scala.collection.immutable.Map"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "head"
+    package: "scala.collection.immutable.List"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "mkString"
+    package: "scala.collection.TraversableOnce"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  # String interpolation (s"..." and f"...")
+  - name: "s"
+    package: "scala.StringContext"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint
+
+  - name: "f"
+    package: "scala.StringContext"
+    input: "Argument[this]"
+    output: "ReturnValue"
+    kind: taint

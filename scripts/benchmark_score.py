@@ -259,6 +259,20 @@ BENCHMARKS = {
         file_extension=".cs",
         category_mapping=PYTHON_CATEGORIES,
     ),
+    "kotlin": BenchmarkConfig(
+        language="kotlin",
+        source_path="../owasp/BenchmarkKotlin/testcode",
+        expected_results="../owasp/BenchmarkKotlin/expectedresults-0.1.csv",
+        file_extension=".kt",
+        category_mapping=PYTHON_CATEGORIES,
+    ),
+    "scala": BenchmarkConfig(
+        language="scala",
+        source_path="../owasp/BenchmarkScala/testcode",
+        expected_results="../owasp/BenchmarkScala/expectedresults-0.1.csv",
+        file_extension=".scala",
+        category_mapping=PYTHON_CATEGORIES,
+    ),
 }
 
 
@@ -650,7 +664,7 @@ def save_baseline(results: dict, baseline_file: str):
 def main():
     parser = argparse.ArgumentParser(description="OWASP Benchmark Scoring")
     parser.add_argument("--language", "-l",
-                       choices=["java", "python", "javascript", "typescript", "golang", "rust", "ruby", "php", "csharp", "all"],
+                       choices=["java", "python", "javascript", "typescript", "golang", "rust", "ruby", "php", "csharp", "kotlin", "scala", "all"],
                        default="all", help="Language benchmark to run")
     parser.add_argument("--results", "-r", help="Pre-existing results JSON file")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed output")
